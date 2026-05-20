@@ -17,6 +17,7 @@ Create this structure:
 ```text
 backend/
   alembic.ini
+  environment.yml
   pyproject.toml
   app/
     __init__.py
@@ -106,6 +107,7 @@ Responsibilities:
 
 **Files:**
 - Create: `backend/pyproject.toml`
+- Create: `backend/environment.yml`
 - Create: `backend/app/__init__.py`
 - Create: `backend/app/main.py`
 - Create: `backend/app/core/__init__.py`
@@ -144,7 +146,7 @@ def test_invalid_key_raises_clear_error() -> None:
         CryptoService("not-a-fernet-key")
 ```
 
-- [ ] **Step 2: Add backend dependencies and config skeleton**
+- [ ] **Step 2: Add backend dependencies, conda environment, and config skeleton**
 
 Create `backend/pyproject.toml`:
 
@@ -175,6 +177,19 @@ test = [
 pythonpath = ["."]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+```
+
+Create `backend/environment.yml`:
+
+```yaml
+name: daily-highlights
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - pip
+  - pip:
+      - -e ".[test]"
 ```
 
 Create `backend/app/core/config.py`:
@@ -1785,11 +1800,18 @@ Daily Highlights is a Python + React MVP for collecting Xueqiu stock content, ge
 
 ```bash
 cd backend
-python -m venv .venv
-source .venv/bin/activate
-pip install -e ".[test]"
+conda env create -f environment.yml
+conda activate daily-highlights
 alembic upgrade head
 uvicorn app.main:app --reload
+```
+
+For an existing environment, update it with:
+
+```bash
+cd backend
+conda env update -f environment.yml --prune
+conda activate daily-highlights
 ```
 
 ## Frontend
