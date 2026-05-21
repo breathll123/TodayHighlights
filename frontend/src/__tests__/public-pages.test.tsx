@@ -18,7 +18,7 @@ function Wrapper({ children }: { children: React.ReactNode }) {
 
 describe("SummaryPage", () => {
   it("renders highlight cards", async () => {
-    global.fetch = vi.fn().mockResolvedValue({
+    globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
       json: () =>
         Promise.resolve([
@@ -44,7 +44,7 @@ describe("SummaryPage", () => {
 
 describe("StockTopicPage", () => {
   it("renders highlight cards with symbols", async () => {
-    global.fetch = vi.fn().mockResolvedValue({
+    globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
       json: () =>
         Promise.resolve([

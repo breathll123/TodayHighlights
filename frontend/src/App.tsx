@@ -2,6 +2,10 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { SummaryPage } from "./pages/SummaryPage";
 import { StockTopicPage } from "./pages/StockTopicPage";
+import { AdminSourcesPage } from "./pages/AdminSourcesPage";
+import { AdminJobsPage } from "./pages/AdminJobsPage";
+import { AdminHighlightsPage } from "./pages/AdminHighlightsPage";
+import { AdminSettingsPage } from "./pages/AdminSettingsPage";
 
 const queryClient = new QueryClient();
 
@@ -22,6 +26,10 @@ export default function App() {
             <Routes>
               <Route path="/" element={<SummaryPage />} />
               <Route path="/topics/stocks" element={<StockTopicPage />} />
+              <Route path="/admin/sources" element={<AdminSourcesPage />} />
+              <Route path="/admin/jobs" element={<AdminJobsPage />} />
+              <Route path="/admin/highlights" element={<AdminHighlightsPage />} />
+              <Route path="/admin/settings" element={<AdminSettingsPage />} />
             </Routes>
           </main>
         </div>
