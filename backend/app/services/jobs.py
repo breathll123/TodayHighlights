@@ -1,3 +1,4 @@
+import asyncio
 from datetime import datetime, timezone
 
 from sqlalchemy import select
@@ -7,8 +8,13 @@ from app.core.config import settings
 from app.core.crypto import CryptoService
 from app.models.entities import CrawlJob, Highlight, Source
 from app.services.content import save_raw_items
-from app.services.summarizer import HighlightDraft
+from app.services.settings import get_plain_setting, get_secret_setting
+from app.services.summarizer import HighlightDraft, SummarizerClient
 from app.sources.xueqiu import XueqiuAdapter
+
+
+def _summarize_sync(base_url: str, api_key: str, model: str, title: str, body: str) -> HighlightDraft:
+    return asyncio.run(SummarizerClient(base_url, api_key, model).summarize(title, body))
 
 
 def run_crawl_job(session: Session, source_id: int, trigger_type: str) -> CrawlJob:
@@ -31,14 +37,36 @@ def run_crawl_job(session: Session, source_id: int, trigger_type: str) -> CrawlJ
         adapter = XueqiuAdapter()
         drafts = adapter.fetch(source.entry_url, cookie)
         raw_items = save_raw_items(session, source.id, drafts)
+
+        model_name = get_plain_setting(session, "llm.model")
+        base_url = get_plain_setting(session, "llm.base_url")
+        api_key = get_secret_setting(session, "llm.api_key")
+        use_ai = bool(model_name and base_url and api_key)
+
         for raw_item in raw_items:
-            summary = HighlightDraft(
-                title=raw_item.title or "雪球看点",
-                summary=raw_item.body[:200],
-                related_symbols=[],
-                tags=["雪球"],
-                score=int(raw_item.metrics_json.get("fav_count", 0)),
-            )
+            if use_ai:
+                try:
+                    summary = _summarize_sync(base_url, api_key, model_name, raw_item.title, raw_item.body)
+                    generated_by = model_name
+                except Exception:
+                    summary = HighlightDraft(
+                        title=raw_item.title or "雪球看点",
+                        summary=raw_item.body[:200],
+                        related_symbols=[],
+                        tags=["雪球"],
+                        score=int(raw_item.metrics_json.get("fav_count", 0)),
+                    )
+                    generated_by = "fallback-ai-failed"
+            else:
+                summary = HighlightDraft(
+                    title=raw_item.title or "雪球看点",
+                    summary=raw_item.body[:200],
+                    related_symbols=[],
+                    tags=["雪球"],
+                    score=int(raw_item.metrics_json.get("fav_count", 0)),
+                )
+                generated_by = "fallback-sync"
+
             session.add(
                 Highlight(
                     topic_id=source.topic_id,
@@ -48,7 +76,7 @@ def run_crawl_job(session: Session, source_id: int, trigger_type: str) -> CrawlJ
                     related_symbols_json=summary.related_symbols,
                     tags_json=summary.tags,
                     score=summary.score,
-                    generated_by_model="fallback-sync",
+                    generated_by_model=generated_by,
                 )
             )
         job.status = "success"

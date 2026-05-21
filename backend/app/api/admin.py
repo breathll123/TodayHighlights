@@ -2,6 +2,8 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from pydantic import BaseModel
+
 from app.core.config import settings
 from app.core.crypto import CryptoService
 from app.core.database import get_session
@@ -9,6 +11,7 @@ from app.models.entities import CrawlJob, Highlight, Source
 from app.schemas.admin import HighlightUpdate, SourceCreate, SourceRead
 from app.services.content import update_highlight_review
 from app.services.jobs import run_crawl_job
+from app.services.settings import get_plain_setting, get_secret_setting, set_plain_setting, set_secret_setting
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
@@ -98,3 +101,28 @@ def update_highlight(highlight_id: int, payload: HighlightUpdate, session: Sessi
     )
     session.commit()
     return {"id": highlight.id, "review_status": highlight.review_status}
+
+
+class ModelSettingsWrite(BaseModel):
+    base_url: str
+    api_key: str = ""
+    model: str
+
+
+@router.get("/settings/model")
+def read_model_settings(session: Session = Depends(get_session)) -> dict:
+    return {
+        "base_url": get_plain_setting(session, "llm.base_url"),
+        "model": get_plain_setting(session, "llm.model"),
+        "has_api_key": bool(get_secret_setting(session, "llm.api_key")),
+    }
+
+
+@router.put("/settings/model")
+def write_model_settings(payload: ModelSettingsWrite, session: Session = Depends(get_session)) -> dict:
+    set_plain_setting(session, "llm.base_url", payload.base_url)
+    set_plain_setting(session, "llm.model", payload.model)
+    if payload.api_key:
+        set_secret_setting(session, "llm.api_key", payload.api_key)
+    session.commit()
+    return {"saved": True, "has_api_key": bool(payload.api_key)}
