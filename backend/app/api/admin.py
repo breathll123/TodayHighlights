@@ -8,6 +8,7 @@ from app.core.database import get_session
 from app.models.entities import CrawlJob, Highlight, Source
 from app.schemas.admin import HighlightUpdate, SourceCreate, SourceRead
 from app.services.content import update_highlight_review
+from app.services.jobs import run_crawl_job
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
@@ -57,6 +58,12 @@ def create_source(payload: SourceCreate, session: Session = Depends(get_session)
         "last_crawled_at": source.last_crawled_at,
         "has_cookie": bool(source.cookie_encrypted),
     }
+
+
+@router.post("/sources/{source_id}/crawl")
+def trigger_crawl(source_id: int, session: Session = Depends(get_session)) -> dict:
+    job = run_crawl_job(session, source_id, "manual")
+    return {"id": job.id, "status": job.status, "items_found": job.items_found, "items_saved": job.items_saved}
 
 
 @router.get("/jobs")
