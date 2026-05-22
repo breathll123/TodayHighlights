@@ -54,7 +54,7 @@ def run_crawl_job(session: Session, source_id: int, trigger_type: str) -> CrawlJ
                         summary=raw_item.body[:200],
                         related_symbols=[],
                         tags=["雪球"],
-                        score=int(raw_item.metrics_json.get("fav_count", 0)),
+                        score=int(raw_item.metrics_json.get("like_count", 0)) + int(raw_item.metrics_json.get("view_count", 0) // 1000),
                     )
                     generated_by = "fallback-ai-failed"
             else:
@@ -63,7 +63,7 @@ def run_crawl_job(session: Session, source_id: int, trigger_type: str) -> CrawlJ
                     summary=raw_item.body[:200],
                     related_symbols=[],
                     tags=["雪球"],
-                    score=int(raw_item.metrics_json.get("fav_count", 0)),
+                    score=int(raw_item.metrics_json.get("like_count", 0)) + int(raw_item.metrics_json.get("view_count", 0) // 1000),
                 )
                 generated_by = "fallback-sync"
 

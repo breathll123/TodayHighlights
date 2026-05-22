@@ -1,5 +1,6 @@
 import { usePageBlocks } from "@/hooks/use-page-blocks";
 import { BlockCard } from "@/components/layout/BlockCard";
+import { BlockListItem } from "@/components/layout/BlockListItem";
 import { Separator } from "@/components/ui/separator";
 
 export function StockTopicPage() {
@@ -21,26 +22,30 @@ export function StockTopicPage() {
 
   return (
     <div className="space-y-8">
-      {blocks.map((block) => (
-        <section key={block.id}>
-          <h2 className="text-lg font-bold mb-4">{block.title}</h2>
-          <div className="space-y-3">
+      {blocks.map((block) => {
+        const isList = block.display_style === "list";
+        return (
+          <section key={block.id}>
+            <h2 className="text-lg font-bold mb-4">{block.title}</h2>
             {block.data?.length === 0 && <p className="text-sm text-muted-foreground">暂无数据</p>}
-            {block.data?.map((item: any, i: number) => (
-              <BlockCard
-                key={item.id ?? i}
-                title={item.title ?? item.name ?? ""}
-                summary={item.summary ?? item.content ?? ""}
-                tags={item.tags_json ?? item.tags}
-                score={item.score ?? item.value}
-                isPinned={item.is_pinned}
-                symbols={item.related_symbols_json ?? (item.code ? [item.code] : undefined)}
-              />
-            ))}
-          </div>
-          <Separator className="mt-6" />
-        </section>
-      ))}
+            <div className={isList ? "border rounded-lg bg-card" : "space-y-3"}>
+              {block.data?.map((item: any, i: number) => {
+                const props = {
+                  key: item.id ?? i,
+                  title: item.title ?? item.name ?? "",
+                  summary: item.summary ?? item.content ?? "",
+                  tags: item.tags_json ?? item.tags,
+                  score: item.score ?? item.value,
+                  isPinned: item.is_pinned,
+                  symbols: item.related_symbols_json ?? item.symbols ?? (item.code ? [item.code] : undefined),
+                };
+                return isList ? <BlockListItem {...props} /> : <BlockCard {...props} />;
+              })}
+            </div>
+            <Separator className="mt-6" />
+          </section>
+        );
+      })}
     </div>
   );
 }

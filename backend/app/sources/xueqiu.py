@@ -1,3 +1,4 @@
+import json
 from datetime import datetime, timezone
 from hashlib import sha256
 from typing import Any
@@ -31,20 +32,32 @@ class XueqiuAdapter:
         rows = payload.get("list", [])
         drafts: list[RawItemDraft] = []
         for row in rows:
-            external_id = str(row.get("id", ""))
-            target = str(row.get("target", ""))
+            raw_data = row.get("data", "")
+            if isinstance(raw_data, str):
+                try:
+                    inner = json.loads(raw_data)
+                except (json.JSONDecodeError, TypeError):
+                    continue
+            elif isinstance(raw_data, dict):
+                inner = raw_data
+            else:
+                continue
+
+            external_id = str(inner.get("id", row.get("id", "")))
+            target = str(inner.get("target", ""))
             url = target if target.startswith("http") else f"{cls.base_url}{target}"
-            author = str(row.get("user", {}).get("screen_name", ""))
-            title = str(row.get("title") or "").strip()
-            body = str(row.get("text") or "").strip()
-            created_at_ms = row.get("created_at")
+            author = str(inner.get("user", {}).get("screen_name", ""))
+            title = str(inner.get("title") or "").strip()
+            body = str(inner.get("description") or "").strip()
+            created_at_ms = inner.get("created_at")
             published_at = None
             if isinstance(created_at_ms, int):
                 published_at = datetime.fromtimestamp(created_at_ms / 1000, tz=timezone.utc).replace(tzinfo=None)
             metrics = {
-                "reply_count": int(row.get("reply_count") or 0),
-                "retweet_count": int(row.get("retweet_count") or 0),
-                "fav_count": int(row.get("fav_count") or 0),
+                "reply_count": int(inner.get("reply_count") or 0),
+                "retweet_count": int(inner.get("retweet_count") or 0),
+                "like_count": int(inner.get("like_count") or 0),
+                "view_count": int(inner.get("view_count") or 0),
             }
             digest = sha256(f"{external_id}|{url}|{title}|{body}".encode("utf-8")).hexdigest()
             drafts.append(
