@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 
@@ -23,3 +24,7 @@ class HighlightRead(BaseModel):
     score: int
     is_pinned: bool
     created_at: datetime
+
+
+class PageBlocksResponse(BaseModel):
+    blocks: list[dict[str, Any]]

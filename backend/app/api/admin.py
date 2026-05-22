@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -7,8 +7,8 @@ from pydantic import BaseModel
 from app.core.config import settings
 from app.core.crypto import CryptoService
 from app.core.database import get_session
-from app.models.entities import CrawlJob, Highlight, Source
-from app.schemas.admin import HighlightUpdate, SourceCreate, SourceRead
+from app.models.entities import CrawlJob, Highlight, PageBlock, Source
+from app.schemas.admin import BlockCreate, BlockRead, BlockUpdate, HighlightUpdate, ReorderRequest, SourceCreate, SourceRead
 from app.services.content import update_highlight_review
 from app.services.jobs import run_crawl_job
 from app.services.settings import get_plain_setting, get_secret_setting, set_plain_setting, set_secret_setting
@@ -126,3 +126,50 @@ def write_model_settings(payload: ModelSettingsWrite, session: Session = Depends
         set_secret_setting(session, "llm.api_key", payload.api_key)
     session.commit()
     return {"saved": True, "has_api_key": bool(payload.api_key)}
+
+
+@router.get("/blocks", response_model=list[BlockRead])
+def list_blocks(session: Session = Depends(get_session)) -> list[PageBlock]:
+    return list(session.scalars(select(PageBlock).order_by(PageBlock.page_route, PageBlock.sort_order)))
+
+
+@router.post("/blocks", response_model=BlockRead)
+def create_block(payload: BlockCreate, session: Session = Depends(get_session)) -> PageBlock:
+    block = PageBlock(**payload.model_dump())
+    session.add(block)
+    session.commit()
+    session.refresh(block)
+    return block
+
+
+@router.put("/blocks/{block_id}", response_model=BlockRead)
+def update_block(block_id: int, payload: BlockUpdate, session: Session = Depends(get_session)) -> PageBlock:
+    block = session.get(PageBlock, block_id)
+    if block is None:
+        raise HTTPException(status_code=404, detail="Block not found")
+    update_data = payload.model_dump(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(block, key, value)
+    session.commit()
+    session.refresh(block)
+    return block
+
+
+@router.delete("/blocks/{block_id}")
+def delete_block(block_id: int, session: Session = Depends(get_session)) -> dict:
+    block = session.get(PageBlock, block_id)
+    if block is None:
+        return {"deleted": False, "reason": "not found"}
+    session.delete(block)
+    session.commit()
+    return {"deleted": True}
+
+
+@router.patch("/blocks/reorder")
+def reorder_blocks(payload: ReorderRequest, session: Session = Depends(get_session)) -> dict:
+    for item in payload.items:
+        block = session.get(PageBlock, item["id"])
+        if block:
+            block.sort_order = item["sort_order"]
+    session.commit()
+    return {"updated": True}
