@@ -110,3 +110,18 @@ class AppSetting(TimestampMixin, Base):
     key: Mapped[str] = mapped_column(String(120), primary_key=True)
     value_json: Mapped[dict[str, Any] | None] = mapped_column(JSON)
     value_encrypted: Mapped[str] = mapped_column(Text, default="", nullable=False)
+
+
+class PageBlock(TimestampMixin, Base):
+    __tablename__ = "page_blocks"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    page_route: Mapped[str] = mapped_column(String(80), nullable=False)
+    title: Mapped[str] = mapped_column(String(120), nullable=False)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    source_type: Mapped[str] = mapped_column(String(40), nullable=False)
+    source_config: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+    display_style: Mapped[str] = mapped_column(String(40), default="card", nullable=False)
+    display_count: Mapped[int] = mapped_column(Integer, default=5, nullable=False)
+    sort_by: Mapped[str] = mapped_column(String(40), default="created_at", nullable=False)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
