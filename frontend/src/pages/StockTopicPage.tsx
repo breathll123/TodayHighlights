@@ -1,85 +1,46 @@
-import { useQuery } from "@tanstack/react-query";
-import { useState, useMemo } from "react";
-import { fetchHighlights } from "../api/client";
+import { usePageBlocks } from "@/hooks/use-page-blocks";
+import { BlockCard } from "@/components/layout/BlockCard";
+import { Separator } from "@/components/ui/separator";
 
 export function StockTopicPage() {
-  const { data: highlights, isLoading, error } = useQuery({
-    queryKey: ["highlights"],
-    queryFn: fetchHighlights,
-  });
+  const { data, isLoading, error } = usePageBlocks("/topics/stocks");
 
-  const [filterTag, setFilterTag] = useState("");
-  const [sortBy, setSortBy] = useState<"score" | "time">("score");
+  if (isLoading) return <div className="text-center py-12 text-muted-foreground">加载中...</div>;
+  if (error) return <div className="text-center py-12 text-destructive">加载失败</div>;
 
-  const filtered = useMemo(() => {
-    if (!highlights) return [];
-    let items = [...highlights];
-    if (filterTag) {
-      items = items.filter((h) => h.tags_json.includes(filterTag));
-    }
-    items.sort((a, b) => {
-      if (a.is_pinned !== b.is_pinned) return a.is_pinned ? -1 : 1;
-      if (sortBy === "score") return b.score - a.score;
-      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-    });
-    return items;
-  }, [highlights, filterTag, sortBy]);
+  const blocks = data?.blocks ?? [];
 
-  const allTags = useMemo(() => {
-    if (!highlights) return [];
-    const tags = new Set<string>();
-    highlights.forEach((h) => h.tags_json.forEach((t) => tags.add(t)));
-    return [...tags];
-  }, [highlights]);
-
-  if (isLoading) return <div className="page-message">加载中...</div>;
-  if (error) return <div className="page-message error">加载失败</div>;
+  if (blocks.length === 0) {
+    return (
+      <div className="text-center py-12 text-muted-foreground">
+        <p className="text-lg mb-2">暂无内容</p>
+        <p className="text-sm">请先在管理后台配置页面区块</p>
+      </div>
+    );
+  }
 
   return (
-    <div className="page">
-      <h1>股票看点</h1>
-      <div className="filters">
-        <select value={filterTag} onChange={(e) => setFilterTag(e.target.value)}>
-          <option value="">全部标签</option>
-          {allTags.map((tag) => (
-            <option key={tag} value={tag}>{tag}</option>
-          ))}
-        </select>
-        <select value={sortBy} onChange={(e) => setSortBy(e.target.value as "score" | "time")}>
-          <option value="score">按热度排序</option>
-          <option value="time">按时间排序</option>
-        </select>
-      </div>
-      {filtered.length === 0 ? (
-        <p className="empty">暂无匹配的看点</p>
-      ) : (
-        <div className="highlight-grid">
-          {filtered.map((h) => (
-            <article key={h.id} className={`highlight-card ${h.is_pinned ? "pinned" : ""}`}>
-              <div className="card-header">
-                <h2>{h.title}</h2>
-                {h.is_pinned && <span className="pin-badge">置顶</span>}
-              </div>
-              <p className="card-summary">{h.summary}</p>
-              {h.related_symbols_json.length > 0 && (
-                <div className="symbols">
-                  {h.related_symbols_json.map((s) => (
-                    <span key={s} className="symbol">{s}</span>
-                  ))}
-                </div>
-              )}
-              <div className="card-meta">
-                <div className="tags">
-                  {h.tags_json.map((tag) => (
-                    <span key={tag} className="tag">{tag}</span>
-                  ))}
-                </div>
-                <span className="score">热度: {h.score}</span>
-              </div>
-            </article>
-          ))}
-        </div>
-      )}
+    <div className="space-y-8">
+      {blocks.map((block) => (
+        <section key={block.id}>
+          <h2 className="text-lg font-bold mb-4">{block.title}</h2>
+          <div className="space-y-3">
+            {block.data?.length === 0 && <p className="text-sm text-muted-foreground">暂无数据</p>}
+            {block.data?.map((item: any, i: number) => (
+              <BlockCard
+                key={item.id ?? i}
+                title={item.title ?? item.name ?? ""}
+                summary={item.summary ?? item.content ?? ""}
+                tags={item.tags_json ?? item.tags}
+                score={item.score ?? item.value}
+                isPinned={item.is_pinned}
+                symbols={item.related_symbols_json ?? (item.code ? [item.code] : undefined)}
+              />
+            ))}
+          </div>
+          <Separator className="mt-6" />
+        </section>
+      ))}
     </div>
   );
 }

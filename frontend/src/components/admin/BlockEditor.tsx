@@ -27,14 +27,14 @@ interface Props {
   onClose: () => void;
 }
 
-const defaultForm = {
+const defaultForm: Omit<Block, "id" | "created_at" | "updated_at"> = {
   page_route: "/",
   title: "",
-  source_type: "topic" as const,
+  source_type: "topic",
   source_config: {} as Record<string, unknown>,
-  display_style: "card" as const,
+  display_style: "card",
   display_count: 5,
-  sort_by: "created_at" as const,
+  sort_by: "created_at",
   enabled: true,
   sort_order: 0,
 };
@@ -89,7 +89,7 @@ export function BlockEditor({ open, block, onSave, onClose }: Props) {
             </div>
             <div className="space-y-2">
               <Label>数据来源</Label>
-              <Select value={form.source_type} onValueChange={(v) => setForm({ ...form, source_type: v as typeof form.source_type })}>
+              <Select value={form.source_type} onValueChange={(v) => setForm({ ...form, source_type: v as Block["source_type"] })}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="topic">本地看点</SelectItem>
@@ -147,7 +147,7 @@ export function BlockEditor({ open, block, onSave, onClose }: Props) {
             </div>
             <div className="space-y-2">
               <Label>排序方式</Label>
-              <Select value={form.sort_by} onValueChange={(v) => setForm({ ...form, sort_by: v as typeof form.sort_by })}>
+              <Select value={form.sort_by} onValueChange={(v) => setForm({ ...form, sort_by: v as Block["sort_by"] })}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="score">热度</SelectItem>

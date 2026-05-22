@@ -27,7 +27,26 @@ vi.mock("../api/client", () => ({
   saveModelSettings: vi.fn(),
   updateHighlight: vi.fn(),
   deleteHighlight: vi.fn(),
-  fetchPageBlocks: vi.fn().mockResolvedValue({ blocks: [] }),
+  fetchPageBlocks: vi.fn().mockResolvedValue({
+    blocks: [
+      {
+        id: 1,
+        title: "今日看点",
+        source_type: "topic",
+        data: [
+          {
+            id: 1,
+            title: "资金关注新能源",
+            summary: "新能源板块热度上升。",
+            tags_json: ["资金"],
+            score: 82,
+            is_pinned: false,
+            created_at: "2026-05-20T10:00:00",
+          },
+        ],
+      },
+    ],
+  }),
   fetchBlocks: vi.fn().mockResolvedValue([]),
   createBlock: vi.fn(),
   updateBlock: vi.fn(),
@@ -50,16 +69,18 @@ function Wrapper({ children }: { children: React.ReactNode }) {
 }
 
 describe("SummaryPage", () => {
-  it("renders highlight cards", async () => {
+  it("renders block title and card content", async () => {
     render(<SummaryPage />, { wrapper: Wrapper });
-    expect(await screen.findByText("资金关注新能源")).toBeInTheDocument();
+    expect(await screen.findByText("今日看点")).toBeInTheDocument();
+    expect(screen.getByText("资金关注新能源")).toBeInTheDocument();
     expect(screen.getByText("新能源板块热度上升。")).toBeInTheDocument();
   });
 });
 
 describe("StockTopicPage", () => {
-  it("renders highlight cards with symbols", async () => {
+  it("renders block title and card content", async () => {
     render(<StockTopicPage />, { wrapper: Wrapper });
-    expect(await screen.findByText("资金关注新能源")).toBeInTheDocument();
+    expect(await screen.findByText("今日看点")).toBeInTheDocument();
+    expect(screen.getByText("资金关注新能源")).toBeInTheDocument();
   });
 });

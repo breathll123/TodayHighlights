@@ -1,6 +1,9 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { fetchModelSettings, saveModelSettings } from "../api/client";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
 
 export function AdminSettingsPage() {
   const queryClient = useQueryClient();
@@ -22,38 +25,45 @@ export function AdminSettingsPage() {
     },
   });
 
-  if (isLoading) return <div className="page-message">加载中...</div>;
+  if (isLoading) return <div className="text-center py-12 text-muted-foreground">加载中...</div>;
 
   return (
-    <div className="page">
-      <h1>模型设置</h1>
+    <div className="space-y-6">
+      <h1 className="text-2xl font-bold tracking-tight">模型设置</h1>
       <form
-        className="admin-form"
+        className="space-y-4 bg-card border rounded-xl p-6"
         onSubmit={(e) => {
           e.preventDefault();
           saveMut.mutate(form);
         }}
       >
-        <div className="form-row">
-          <label>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <label className="flex flex-col gap-1.5 text-sm font-medium">
             API Base URL
-            <input value={form.base_url} onChange={(e) => setForm({ ...form, base_url: e.target.value })} placeholder="https://api.openai.com/v1" required />
+            <Input value={form.base_url} onChange={(e) => setForm({ ...form, base_url: e.target.value })} placeholder="https://api.openai.com/v1" required />
           </label>
-          <label>
+          <label className="flex flex-col gap-1.5 text-sm font-medium">
             模型名称
-            <input value={form.model} onChange={(e) => setForm({ ...form, model: e.target.value })} placeholder="gpt-4o" required />
+            <Input value={form.model} onChange={(e) => setForm({ ...form, model: e.target.value })} placeholder="gpt-4o" required />
           </label>
         </div>
-        <div className="form-row">
-          <label>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <label className="flex flex-col gap-1.5 text-sm font-medium">
             API Key
-            <input type="password" value={form.api_key} onChange={(e) => setForm({ ...form, api_key: e.target.value })} placeholder={settings?.has_api_key ? "已配置，留空则不修改" : "输入 API Key"} />
+            <Input type="password" value={form.api_key} onChange={(e) => setForm({ ...form, api_key: e.target.value })} placeholder={settings?.has_api_key ? "已配置，留空则不修改" : "输入 API Key"} />
           </label>
         </div>
-        <p className="form-hint">API Key 状态: {settings?.has_api_key ? "已配置" : "未配置"}</p>
-        <button type="submit" disabled={saveMut.isPending}>
+        <div className="flex items-center gap-2 text-sm">
+          <span>API Key 状态:</span>
+          {settings?.has_api_key ? (
+            <Badge variant="default">已配置</Badge>
+          ) : (
+            <Badge variant="secondary">未配置</Badge>
+          )}
+        </div>
+        <Button type="submit" disabled={saveMut.isPending}>
           {saveMut.isPending ? "保存中..." : "保存设置"}
-        </button>
+        </Button>
       </form>
     </div>
   );
