@@ -47,3 +47,22 @@ export interface ModelSettings {
   model: string;
   has_api_key: boolean;
 }
+
+export interface Block {
+  id: number;
+  page_route: string;
+  title: string;
+  sort_order: number;
+  source_type: "topic" | "search" | "hot_stocks" | "hot_events" | "screener";
+  source_config: Record<string, unknown>;
+  display_style: "card" | "list";
+  display_count: number;
+  sort_by: "score" | "created_at";
+  enabled: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PageBlocksResponse {
+  blocks: (Block & { data: unknown[] })[];
+}
