@@ -53,6 +53,10 @@ export function triggerCrawl(sourceId: number): Promise<{ id: number; status: st
   return api.post(`/api/admin/sources/${sourceId}/crawl`, {}).then((r) => r.data);
 }
 
+export function deleteSource(sourceId: number): Promise<{ deleted: boolean }> {
+  return api.delete(`/api/admin/sources/${sourceId}`).then((r) => r.data);
+}
+
 export function fetchJobs(): Promise<CrawlJob[]> {
   return api.get<CrawlJob[]>("/api/admin/jobs").then((r) => r.data);
 }
@@ -74,6 +78,10 @@ export function updateHighlight(
   data: { title: string; summary: string; is_pinned: boolean; is_hidden: boolean }
 ): Promise<{ id: number; review_status: string }> {
   return api.patch(`/api/admin/highlights/${id}`, data).then((r) => r.data);
+}
+
+export function deleteHighlight(highlightId: number): Promise<{ deleted: boolean }> {
+  return api.delete(`/api/admin/highlights/${highlightId}`).then((r) => r.data);
 }
 
 // --- Block APIs ---
