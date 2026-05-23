@@ -37,6 +37,12 @@ const defaultForm: Omit<Block, "id" | "created_at" | "updated_at"> = {
   sort_by: "created_at",
   enabled: true,
   sort_order: 0,
+  block_key: "",
+  col_span: 1,
+  row_span: 1,
+  grid_x: 0,
+  grid_y: 0,
+  status: "draft",
 };
 
 export function BlockEditor({ open, block, onSave, onClose }: Props) {
@@ -54,6 +60,12 @@ export function BlockEditor({ open, block, onSave, onClose }: Props) {
         sort_by: block.sort_by,
         enabled: block.enabled,
         sort_order: block.sort_order,
+        block_key: block.block_key || "",
+        col_span: block.col_span || 1,
+        row_span: block.row_span || 1,
+        grid_x: block.grid_x || 0,
+        grid_y: block.grid_y || 0,
+        status: block.status || "draft",
       });
     } else {
       setForm(defaultForm);

@@ -121,3 +121,7 @@ export function updateTopic(id: number, data: { name: string; slug: string; sort
 export function deleteTopic(id: number): Promise<{ deleted: boolean }> {
   return api.delete(`/api/admin/topics/${id}`).then((r) => r.data);
 }
+
+export function publishPage(route: string): Promise<{ published: boolean; blocks: number }> {
+  return api.post(`/api/admin/pages/${route}/publish`).then((r) => r.data);
+}

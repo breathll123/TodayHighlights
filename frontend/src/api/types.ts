@@ -61,6 +61,12 @@ export interface Block {
   enabled: boolean;
   created_at: string;
   updated_at: string;
+  block_key: string;
+  col_span: number;
+  row_span: number;
+  grid_x: number;
+  grid_y: number;
+  status: "draft" | "published";
 }
 
 export interface PageBlocksResponse {
