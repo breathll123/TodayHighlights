@@ -45,6 +45,11 @@ class BlockCreate(BaseModel):
     display_count: int = 5
     sort_by: str = "created_at"
     enabled: bool = True
+    block_key: str = ""
+    col_span: int = 1
+    row_span: int = 1
+    grid_x: int = 0
+    grid_y: int = 0
 
 
 class BlockUpdate(BaseModel):
@@ -57,6 +62,12 @@ class BlockUpdate(BaseModel):
     display_count: int | None = None
     sort_by: str | None = None
     enabled: bool | None = None
+    block_key: str | None = None
+    col_span: int | None = None
+    row_span: int | None = None
+    grid_x: int | None = None
+    grid_y: int | None = None
+    status: str | None = None
 
 
 class BlockRead(BaseModel):
@@ -72,6 +83,12 @@ class BlockRead(BaseModel):
     display_count: int
     sort_by: str
     enabled: bool
+    block_key: str
+    col_span: int
+    row_span: int
+    grid_x: int
+    grid_y: int
+    status: str
     created_at: datetime
     updated_at: datetime
 
