@@ -42,6 +42,7 @@ export function GridRenderer({ blocks, isLoading }: { blocks: any[]; isLoading: 
                   title: item.title ?? item.name ?? "",
                   score: item.score ?? item.value,
                   percent: item.percent,
+                  url: item.url,
                 }))}
                 columns={[
                   { key: "title", label: "名称" },

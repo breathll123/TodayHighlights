@@ -58,6 +58,7 @@ def _fetch_hot_stocks(cookie: str, config: dict, limit: int) -> list[dict]:
                 "source": "hot_stocks",
                 "percent": item.get("percent", 0),
                 "current": item.get("current", 0),
+                "url": f"https://xueqiu.com/S/{item.get('symbol', item.get('code', ''))}",
             }
             for item in items
         ]
@@ -82,6 +83,8 @@ def _fetch_screener(cookie: str, config: dict, limit: int) -> list[dict]:
                 "symbols": [item.get("symbol", "")],
                 "score": int(item.get("percent", 0) * 100),
                 "source": "screener",
+                "percent": item.get("percent", 0),
+                "url": f"https://xueqiu.com/S/{item.get('symbol', '')}",
             }
             for item in items
         ]

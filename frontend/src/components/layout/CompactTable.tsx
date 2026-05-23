@@ -1,7 +1,7 @@
-import { TrendingUp } from "lucide-react";
+import { TrendingUp, ExternalLink } from "lucide-react";
 
 interface CompactTableProps {
-  data: any[];
+  data: { id: string | number; title: string; score?: number; percent?: number; url?: string }[];
   columns: { key: string; label: string; className?: string }[];
 }
 
@@ -18,7 +18,21 @@ export function CompactTable({ data, columns }: CompactTableProps) {
           key={item.id ?? i}
           className="grid grid-cols-[1fr_80px_100px] text-sm px-4 py-2.5 border-b last:border-0 hover:bg-muted/30 transition-colors items-center"
         >
-          <span className="font-medium truncate pr-2">{item.title}</span>
+          <span className="font-medium truncate pr-2 flex items-center gap-1.5 min-w-0">
+            {item.url ? (
+              <a
+                href={item.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="truncate hover:text-primary transition-colors flex items-center gap-1"
+              >
+                {item.title}
+                <ExternalLink className="w-3 h-3 shrink-0 text-muted-foreground/50" />
+              </a>
+            ) : (
+              <span className="truncate">{item.title}</span>
+            )}
+          </span>
           <span className={`text-xs font-semibold ${item.percent != null ? (item.percent > 0 ? "text-red-500" : "text-green-500") : "text-muted-foreground"}`}>
             {item.percent != null ? `${item.percent > 0 ? "+" : ""}${item.percent}%` : "-"}
           </span>
