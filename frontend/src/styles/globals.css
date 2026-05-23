@@ -49,3 +49,22 @@
   * { @apply border-border; }
   body { @apply bg-background text-foreground; }
 }
+
+/* Page Grid Layout */
+.page-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+}
+
+@media (max-width: 768px) {
+  .page-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .page-grid > * {
+    width: 100% !important;
+    grid-column: span 1 !important;
+  }
+}
