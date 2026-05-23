@@ -10,7 +10,7 @@ export function PublicNavbar() {
 
   return (
     <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur">
-      <div className="flex h-14 items-center justify-between px-6 max-w-3xl mx-auto">
+      <div className="flex h-14 items-center justify-between px-8">
         <div className="flex items-center gap-6">
           <Link to="/" className="text-lg font-bold tracking-tight">每日看点</Link>
           <nav className="flex items-center gap-1">
