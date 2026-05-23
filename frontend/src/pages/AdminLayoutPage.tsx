@@ -30,56 +30,50 @@ export function AdminLayoutPage() {
     .filter((b: Block) => b.page_route === activePage && b.status === "draft")
     .sort((a: Block, b: Block) => a.grid_y - b.grid_y || a.grid_x - b.grid_x);
 
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: ["blocks"] });
+
   const createMut = useMutation({
     mutationFn: createBlock,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["blocks"] }),
-    onError: (err: Error) => toast.error(err.message),
+    onSuccess: () => { invalidate(); toast.success("方块已添加"); },
+    onError: (err: Error) => toast.error(`添加失败: ${err.message}`),
   });
   const updateMut = useMutation({
     mutationFn: ({ id, data }: { id: number; data: Partial<Block> }) => updateBlock(id, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["blocks"] });
-      setConfigBlock(null);
-      toast.success("已保存");
-    },
-    onError: (err: Error) => toast.error(err.message),
+    onSuccess: () => { invalidate(); setConfigBlock(null); toast.success("已保存"); },
+    onError: (err: Error) => toast.error(`保存失败: ${err.message}`),
   });
   const deleteMut = useMutation({
     mutationFn: deleteBlock,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["blocks"] }),
+    onSuccess: () => { invalidate(); toast.success("已删除"); },
+    onError: (err: Error) => toast.error(`删除失败: ${err.message}`),
   });
   const publishMut = useMutation({
     mutationFn: publishPage,
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["blocks"] }); toast.success("已发布"); },
-    onError: (err: Error) => toast.error(err.message),
+    onSuccess: () => { invalidate(); toast.success("已发布"); },
+    onError: (err: Error) => toast.error(`发布失败: ${err.message}`),
   });
 
   const handleAddBlock = (col: number, row: number) => {
     const pos = findAvailablePosition(draftBlocks, col, row);
     createMut.mutate({
-      page_route: activePage,
-      title: "新方块",
-      source_type: "topic",
-      source_config: { topic_id: 1 },
-      block_key: crypto.randomUUID(),
-      col_span: col,
-      row_span: row,
-      grid_x: pos.x,
-      grid_y: pos.y,
-      display_style: "card",
-      display_count: 5,
-      sort_by: "created_at",
-      enabled: true,
-      sort_order: 0,
-      status: "draft",
+      page_route: activePage, title: "新方块", source_type: "topic",
+      source_config: { topic_id: 1 }, block_key: crypto.randomUUID(),
+      col_span: col, row_span: row, grid_x: pos.x, grid_y: pos.y,
+      display_style: "card", display_count: 5, sort_by: "created_at",
+      enabled: true, sort_order: 0, status: "draft",
     } as any);
   };
 
-  const handleLayoutChange = (blocks: Block[]) => {
-    blocks.forEach((b) => {
-      updateBlock(b.id, { grid_x: b.grid_x, grid_y: b.grid_y, col_span: b.col_span, row_span: b.row_span });
-    });
-    queryClient.invalidateQueries({ queryKey: ["blocks"] });
+  const handleLayoutChange = async (blocks: Block[]) => {
+    for (const b of blocks) {
+      try {
+        await updateBlock(b.id, { grid_x: b.grid_x, grid_y: b.grid_y, col_span: b.col_span, row_span: b.row_span });
+      } catch (err: any) {
+        toast.error(`保存位置失败: ${err.message}`);
+        return;
+      }
+    }
+    invalidate();
   };
 
   const handleEditBlock = (block: Block) => {
@@ -88,7 +82,7 @@ export function AdminLayoutPage() {
       page_route: block.page_route,
       title: block.title,
       source_type: block.source_type,
-      source_config: block.source_config || {},
+      source_config: { ...(block.source_config || {}) },
       display_style: block.display_style,
       display_count: block.display_count,
       sort_by: block.sort_by,
@@ -105,7 +99,7 @@ export function AdminLayoutPage() {
 
   const handleSaveConfig = () => {
     if (configBlock && configForm) {
-      updateMut.mutate({ id: configBlock.id, data: configForm });
+      updateMut.mutate({ id: configBlock.id, data: configForm as Partial<Block> });
     }
   };
 
@@ -113,9 +107,7 @@ export function AdminLayoutPage() {
 
   return (
     <div className="flex h-[calc(100vh-3.5rem)]">
-      {/* Main area */}
       <div className="flex-1 overflow-auto p-6">
-        {/* Toolbar */}
         <div className="flex items-center justify-between mb-6">
           <Tabs value={activePage} onValueChange={setActivePage}>
             <TabsList>
@@ -126,18 +118,10 @@ export function AdminLayoutPage() {
           </Tabs>
 
           <div className="flex items-center gap-2">
-            <Button
-              variant={mode === "edit" ? "default" : "outline"}
-              size="sm"
-              onClick={() => setMode("edit")}
-            >
+            <Button variant={mode === "edit" ? "default" : "outline"} size="sm" onClick={() => setMode("edit")}>
               <Pencil className="w-4 h-4 mr-1" />编辑
             </Button>
-            <Button
-              variant={mode === "preview" ? "default" : "outline"}
-              size="sm"
-              onClick={() => setMode("preview")}
-            >
+            <Button variant={mode === "preview" ? "default" : "outline"} size="sm" onClick={() => setMode("preview")}>
               <Eye className="w-4 h-4 mr-1" />预览
             </Button>
             <Button size="sm" onClick={() => publishMut.mutate(activePage)} disabled={publishMut.isPending}>
@@ -146,7 +130,6 @@ export function AdminLayoutPage() {
           </div>
         </div>
 
-        {/* Edit mode */}
         {mode === "edit" && (
           <div className="space-y-4">
             <CanvasEditor
@@ -166,7 +149,6 @@ export function AdminLayoutPage() {
           </div>
         )}
 
-        {/* Preview mode */}
         {mode === "preview" && (
           <div className="grid grid-cols-4 gap-3">
             {draftBlocks.map((b: Block) => (
@@ -182,13 +164,14 @@ export function AdminLayoutPage() {
               </div>
             ))}
             {draftBlocks.length === 0 && (
-              <div className="col-span-4 text-center py-12 text-muted-foreground text-sm">暂无方块，点击"添加方块"开始</div>
+              <div className="col-span-4 text-center py-12 text-muted-foreground text-sm">
+                暂无方块，点击"添加方块"开始
+              </div>
             )}
           </div>
         )}
       </div>
 
-      {/* Config panel */}
       {configBlock && configForm && (
         <BlockConfigPanel
           form={configForm}
