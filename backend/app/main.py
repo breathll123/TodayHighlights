@@ -25,7 +25,10 @@ def _seed_defaults() -> None:
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
-    _seed_defaults()
+    try:
+        _seed_defaults()
+    except Exception:
+        pass  # MySQL not available (e.g. during testing)
     if settings.scheduler_enabled:
         scheduler = create_scheduler()
         scheduler.start()
