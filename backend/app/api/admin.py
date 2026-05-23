@@ -4,6 +4,9 @@ from sqlalchemy.orm import Session
 
 from pydantic import BaseModel
 
+from fastapi import Request
+
+from app.core.auth import create_admin_token, verify_admin
 from app.core.config import settings
 from app.core.crypto import CryptoService
 from app.core.database import get_session
@@ -13,7 +16,8 @@ from app.services.content import update_highlight_review
 from app.services.jobs import run_crawl_job
 from app.services.settings import get_plain_setting, get_secret_setting, set_plain_setting, set_secret_setting
 
-router = APIRouter(prefix="/api/admin", tags=["admin"])
+router = APIRouter(prefix="/api/admin", tags=["admin"], dependencies=[Depends(verify_admin)])
+auth_router = APIRouter(prefix="/api/admin", tags=["auth"])
 
 
 @router.get("/sources", response_model=list[SourceRead])
@@ -219,3 +223,13 @@ def delete_topic(topic_id: int, session: Session = Depends(get_session)) -> dict
     session.delete(t)
     session.commit()
     return {"deleted": True}
+
+
+class LoginRequest(BaseModel):
+    password: str
+
+
+@auth_router.post("/login")
+def login(payload: LoginRequest, session: Session = Depends(get_session)) -> dict:
+    token = create_admin_token(payload.password, session)
+    return {"token": token}

@@ -6,6 +6,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from app.core.auth import verify_admin
 from app.core.database import Base, get_session
 from app.main import app
 
@@ -26,7 +27,11 @@ def client() -> Generator[TestClient, None, None]:
         finally:
             session.close()
 
+    def override_verify_admin():
+        return True
+
     app.dependency_overrides[get_session] = override_get_session
+    app.dependency_overrides[verify_admin] = override_verify_admin
 
     with TestClient(app) as c:
         yield c
