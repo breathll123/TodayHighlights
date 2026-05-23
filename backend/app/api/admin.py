@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from app.core.config import settings
 from app.core.crypto import CryptoService
 from app.core.database import get_session
-from app.models.entities import CrawlJob, Highlight, PageBlock, Source
+from app.models.entities import CrawlJob, Highlight, PageBlock, Source, Topic
 from app.schemas.admin import BlockCreate, BlockRead, BlockUpdate, HighlightUpdate, ReorderRequest, SourceCreate, SourceRead
 from app.services.content import update_highlight_review
 from app.services.jobs import run_crawl_job
@@ -173,3 +173,49 @@ def reorder_blocks(payload: ReorderRequest, session: Session = Depends(get_sessi
             block.sort_order = item["sort_order"]
     session.commit()
     return {"updated": True}
+
+
+class TopicWrite(BaseModel):
+    name: str
+    slug: str
+    sort_order: int = 0
+    enabled: bool = True
+
+
+@router.get("/topics")
+def list_admin_topics(session: Session = Depends(get_session)) -> list[dict]:
+    topics = session.scalars(select(Topic).order_by(Topic.sort_order)).all()
+    return [{"id": t.id, "name": t.name, "slug": t.slug, "sort_order": t.sort_order, "enabled": t.enabled} for t in topics]
+
+
+@router.post("/topics")
+def create_topic(payload: TopicWrite, session: Session = Depends(get_session)) -> dict:
+    t = Topic(name=payload.name, slug=payload.slug, sort_order=payload.sort_order, enabled=payload.enabled)
+    session.add(t)
+    session.commit()
+    session.refresh(t)
+    return {"id": t.id, "name": t.name, "slug": t.slug, "sort_order": t.sort_order, "enabled": t.enabled}
+
+
+@router.put("/topics/{topic_id}")
+def update_topic(topic_id: int, payload: TopicWrite, session: Session = Depends(get_session)) -> dict:
+    t = session.get(Topic, topic_id)
+    if t is None:
+        raise HTTPException(status_code=404, detail="Topic not found")
+    t.name = payload.name
+    t.slug = payload.slug
+    t.sort_order = payload.sort_order
+    t.enabled = payload.enabled
+    session.commit()
+    session.refresh(t)
+    return {"id": t.id, "name": t.name, "slug": t.slug, "sort_order": t.sort_order, "enabled": t.enabled}
+
+
+@router.delete("/topics/{topic_id}")
+def delete_topic(topic_id: int, session: Session = Depends(get_session)) -> dict:
+    t = session.get(Topic, topic_id)
+    if t is None:
+        return {"deleted": False, "reason": "not found"}
+    session.delete(t)
+    session.commit()
+    return {"deleted": True}

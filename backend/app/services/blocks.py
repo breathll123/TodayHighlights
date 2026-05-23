@@ -2,6 +2,8 @@ import httpx
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from sqlalchemy.orm import joinedload
+
 from app.core.config import settings
 from app.core.crypto import CryptoService
 from app.models.entities import Highlight, PageBlock, Source
@@ -120,16 +122,18 @@ def resolve_block_data(session: Session, block: PageBlock) -> list[dict]:
         topic_id = config.get("topic_id", 1)
         stmt = (
             select(Highlight)
+            .options(joinedload(Highlight.raw_item))
             .where(Highlight.topic_id == topic_id, Highlight.is_hidden.is_(False))
             .order_by(Highlight.is_pinned.desc(), Highlight.score.desc(), Highlight.created_at.desc())
             .limit(limit)
         )
-        highlights = session.scalars(stmt).all()
+        highlights = session.scalars(stmt).unique().all()
         return [
             {
                 "id": h.id,
                 "title": h.title,
                 "summary": h.summary,
+                "url": h.raw_item.url if h.raw_item else None,
                 "related_symbols_json": h.related_symbols_json,
                 "tags_json": h.tags_json,
                 "score": h.score,

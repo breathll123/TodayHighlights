@@ -8,6 +8,7 @@ import { AdminJobsPage } from "./pages/AdminJobsPage";
 import { AdminHighlightsPage } from "./pages/AdminHighlightsPage";
 import { AdminSettingsPage } from "./pages/AdminSettingsPage";
 import { AdminLayoutPage } from "./pages/AdminLayoutPage";
+import { AdminTopicsPage } from "./pages/AdminTopicsPage";
 
 const queryClient = new QueryClient();
 
@@ -26,6 +27,7 @@ export default function App() {
               <Route path="/admin/highlights" element={<AdminHighlightsPage />} />
               <Route path="/admin/settings" element={<AdminSettingsPage />} />
               <Route path="/admin/layout" element={<AdminLayoutPage />} />
+              <Route path="/admin/topics" element={<AdminTopicsPage />} />
             </Routes>
           </main>
         </div>

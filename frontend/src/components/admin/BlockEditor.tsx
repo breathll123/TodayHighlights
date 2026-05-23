@@ -140,7 +140,7 @@ export function BlockEditor({ open, block, onSave, onClose }: Props) {
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-3 gap-4">
             <div className="space-y-2">
               <Label>展示条数 ({form.display_count})</Label>
               <Slider value={[form.display_count]} onValueChange={([v]) => setForm({ ...form, display_count: v })} min={1} max={20} step={1} />
@@ -152,6 +152,16 @@ export function BlockEditor({ open, block, onSave, onClose }: Props) {
                 <SelectContent>
                   <SelectItem value="score">热度</SelectItem>
                   <SelectItem value="created_at">时间</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>展示形式</Label>
+              <Select value={form.display_style} onValueChange={(v) => setForm({ ...form, display_style: v as Block["display_style"] })}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="card">卡片</SelectItem>
+                  <SelectItem value="list">列表</SelectItem>
                 </SelectContent>
               </Select>
             </div>

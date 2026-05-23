@@ -38,6 +38,7 @@ export function SummaryPage() {
                   score: item.score ?? item.value,
                   isPinned: item.is_pinned,
                   symbols: item.related_symbols_json ?? item.symbols ?? (item.code ? [item.code] : undefined),
+                  url: item.url,
                 };
                 return isList ? <BlockListItem {...props} /> : <BlockCard {...props} />;
               })}

@@ -105,3 +105,19 @@ export function deleteBlock(id: number): Promise<void> {
 export function reorderBlocks(items: { id: number; sort_order: number }[]): Promise<void> {
   return api.patch("/api/admin/blocks/reorder", { items }).then((r) => r.data);
 }
+
+export function fetchAdminTopics(): Promise<Topic[]> {
+  return api.get<Topic[]>("/api/admin/topics").then((r) => r.data);
+}
+
+export function createTopic(data: { name: string; slug: string; sort_order?: number; enabled?: boolean }): Promise<Topic> {
+  return api.post<Topic>("/api/admin/topics", data).then((r) => r.data);
+}
+
+export function updateTopic(id: number, data: { name: string; slug: string; sort_order?: number; enabled?: boolean }): Promise<Topic> {
+  return api.put<Topic>(`/api/admin/topics/${id}`, data).then((r) => r.data);
+}
+
+export function deleteTopic(id: number): Promise<{ deleted: boolean }> {
+  return api.delete(`/api/admin/topics/${id}`).then((r) => r.data);
+}

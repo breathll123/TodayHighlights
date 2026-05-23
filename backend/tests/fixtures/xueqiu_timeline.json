@@ -1,15 +1,9 @@
 {
   "list": [
     {
-      "id": 12345,
-      "target": "/12345",
-      "user": { "screen_name": "投资者A" },
-      "title": "新能源板块午后走强",
-      "text": "新能源板块午后走强，资金关注度明显提升。",
-      "created_at": 1779255600000,
-      "reply_count": 8,
-      "retweet_count": 3,
-      "fav_count": 21
+      "id": 20395756,
+      "category": 0,
+      "data": "{\"id\":390032536,\"title\":\"新能源板块午后走强\",\"description\":\"新能源板块午后走强，资金关注度明显提升。\",\"target\":\"/7297620365/390032536\",\"user\":{\"screen_name\":\"投资者A\"},\"created_at\":1779255600000,\"reply_count\":8,\"retweet_count\":3,\"like_count\":21,\"view_count\":104282}"
     }
   ]
 }
