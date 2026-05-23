@@ -50,6 +50,7 @@ class BlockCreate(BaseModel):
     row_span: int = 1
     grid_x: int = 0
     grid_y: int = 0
+    status: str = "draft"
 
 
 class BlockUpdate(BaseModel):

@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from pydantic import BaseModel
@@ -227,6 +227,50 @@ def delete_topic(topic_id: int, session: Session = Depends(get_session)) -> dict
 
 class LoginRequest(BaseModel):
     password: str
+
+
+@router.post("/pages/{route:path}/publish")
+def publish_page(route: str, session: Session = Depends(get_session)) -> dict:
+    route = "/" + route if not route.startswith("/") else route
+
+    session.execute(
+        delete(PageBlock).where(
+            PageBlock.page_route == route,
+            PageBlock.status == "published"
+        )
+    )
+
+    drafts = session.scalars(
+        select(PageBlock).where(
+            PageBlock.page_route == route,
+            PageBlock.status == "draft"
+        )
+    ).all()
+
+    count = 0
+    for d in drafts:
+        published = PageBlock(
+            block_key=d.block_key,
+            page_route=d.page_route,
+            title=d.title,
+            sort_order=d.sort_order,
+            source_type=d.source_type,
+            source_config=d.source_config,
+            display_style=d.display_style,
+            display_count=d.display_count,
+            sort_by=d.sort_by,
+            col_span=d.col_span,
+            row_span=d.row_span,
+            grid_x=d.grid_x,
+            grid_y=d.grid_y,
+            status="published",
+            enabled=True,
+        )
+        session.add(published)
+        count += 1
+
+    session.commit()
+    return {"published": True, "blocks": count}
 
 
 @auth_router.post("/login")

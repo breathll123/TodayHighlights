@@ -163,8 +163,12 @@ def resolve_block_data(session: Session, block: PageBlock) -> list[dict]:
 def get_page_blocks(session: Session, route: str) -> list[dict]:
     stmt = (
         select(PageBlock)
-        .where(PageBlock.page_route == route, PageBlock.enabled.is_(True))
-        .order_by(PageBlock.sort_order)
+        .where(
+            PageBlock.page_route == route,
+            PageBlock.enabled.is_(True),
+            PageBlock.status == "published",
+        )
+        .order_by(PageBlock.grid_y, PageBlock.grid_x, PageBlock.sort_order)
     )
     blocks = session.scalars(stmt).all()
     result = []
@@ -176,6 +180,10 @@ def get_page_blocks(session: Session, route: str) -> list[dict]:
             "display_style": block.display_style,
             "display_count": block.display_count,
             "source_type": block.source_type,
+            "col_span": block.col_span,
+            "row_span": block.row_span,
+            "grid_x": block.grid_x,
+            "grid_y": block.grid_y,
             "data": resolve_block_data(session, block),
         }
         result.append(item)
