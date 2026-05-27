@@ -10,20 +10,26 @@ vi.mock("../api/client", () => ({
   createSource: vi.fn(),
   triggerCrawl: vi.fn(),
   deleteSource: vi.fn(),
-  fetchJobs: vi.fn().mockResolvedValue([
-    {
-      id: 1,
-      source_id: 1,
-      trigger_type: "manual",
-      status: "success",
-      items_found: 5,
-      items_saved: 5,
-      error_message: "",
-      log_excerpt: "",
-      started_at: "2026-05-20T10:00:00",
-      finished_at: "2026-05-20T10:01:00",
-    },
-  ]),
+  fetchJobs: vi.fn().mockResolvedValue({
+    total: 1,
+    page: 1,
+    page_size: 20,
+    items: [
+      {
+        id: 1,
+        source_id: 3,
+        source_name: "雪球自选",
+        trigger_type: "manual",
+        status: "success",
+        items_found: 5,
+        items_saved: 5,
+        error_message: "",
+        log_excerpt: "",
+        started_at: "2026-05-20T10:00:00",
+        finished_at: "2026-05-20T10:01:00",
+      },
+    ],
+  }),
   fetchModelSettings: vi.fn(),
   saveModelSettings: vi.fn(),
   updateHighlight: vi.fn(),
@@ -61,6 +67,7 @@ describe("AdminJobsPage", () => {
   it("renders job log page with success status", async () => {
     render(<AdminJobsPage />, { wrapper: Wrapper });
     expect(await screen.findByText("任务日志")).toBeInTheDocument();
-    expect(screen.getByText("success")).toBeInTheDocument();
+    expect(screen.getByText("成功")).toBeInTheDocument();
+    expect(screen.getByText("雪球自选")).toBeInTheDocument();
   });
 });

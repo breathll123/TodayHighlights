@@ -1,10 +1,11 @@
 import json
-from datetime import datetime, timezone
+from datetime import datetime
 from hashlib import sha256
 from typing import Any
 
 import httpx
 
+from app.core.config import SH_TZ
 from app.sources.base import RawItemDraft
 
 
@@ -52,7 +53,7 @@ class XueqiuAdapter:
             created_at_ms = inner.get("created_at")
             published_at = None
             if isinstance(created_at_ms, int):
-                published_at = datetime.fromtimestamp(created_at_ms / 1000, tz=timezone.utc).replace(tzinfo=None)
+                published_at = datetime.fromtimestamp(created_at_ms / 1000, tz=SH_TZ).replace(tzinfo=None)
             metrics = {
                 "reply_count": int(inner.get("reply_count") or 0),
                 "retweet_count": int(inner.get("retweet_count") or 0),

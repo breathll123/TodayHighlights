@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import delete, select
-from sqlalchemy.orm import Session
+from sqlalchemy import delete, func, select
+from sqlalchemy.orm import Session, joinedload
 
 from pydantic import BaseModel
 
@@ -20,8 +20,14 @@ router = APIRouter(prefix="/api/admin", tags=["admin"], dependencies=[Depends(ve
 auth_router = APIRouter(prefix="/api/admin", tags=["auth"])
 
 
-@router.get("/sources", response_model=list[SourceRead])
-def list_sources(session: Session = Depends(get_session)) -> list[dict]:
+@router.get("/sources")
+def list_sources(type: str | None = None, session: Session = Depends(get_session)) -> list[dict]:
+    if type == "raw":
+        sources = session.scalars(
+            select(Source).where(Source.site.in_(["xueqiu", "eastmoney", "tonghuashun"])).order_by(Source.id)
+        ).all()
+        return [{"id": s.id, "name": f"[{s.site}] {s.name}"} for s in sources]
+
     sources = session.scalars(select(Source).order_by(Source.id.desc())).all()
     return [
         {
@@ -74,23 +80,33 @@ def trigger_crawl(source_id: int, session: Session = Depends(get_session)) -> di
 
 
 @router.get("/jobs")
-def list_jobs(session: Session = Depends(get_session)) -> list[dict]:
-    jobs = session.scalars(select(CrawlJob).order_by(CrawlJob.created_at.desc()).limit(50)).all()
-    return [
-        {
-            "id": job.id,
-            "source_id": job.source_id,
-            "trigger_type": job.trigger_type,
-            "status": job.status,
-            "items_found": job.items_found,
-            "items_saved": job.items_saved,
-            "error_message": job.error_message,
-            "log_excerpt": job.log_excerpt,
-            "started_at": job.started_at,
-            "finished_at": job.finished_at,
-        }
-        for job in jobs
-    ]
+def list_jobs(page: int = 1, page_size: int = 20, session: Session = Depends(get_session)) -> dict:
+    total = session.scalar(select(func.count()).select_from(CrawlJob))
+    jobs = session.scalars(
+        select(CrawlJob).options(joinedload(CrawlJob.source)).order_by(CrawlJob.created_at.desc())
+        .limit(page_size).offset((page - 1) * page_size)
+    ).all()
+    return {
+        "total": total or 0,
+        "page": page,
+        "page_size": page_size,
+        "items": [
+            {
+                "id": job.id,
+                "source_id": job.source_id,
+                "source_name": job.source.name if job.source else str(job.source_id),
+                "trigger_type": job.trigger_type,
+                "status": job.status,
+                "items_found": job.items_found,
+                "items_saved": job.items_saved,
+                "error_message": job.error_message,
+                "log_excerpt": job.log_excerpt,
+                "started_at": job.started_at,
+                "finished_at": job.finished_at,
+            }
+            for job in jobs
+        ],
+    }
 
 
 @router.patch("/highlights/{highlight_id}")

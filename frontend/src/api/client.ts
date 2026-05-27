@@ -1,5 +1,5 @@
 import axios from "axios";
-import type { Highlight, Topic, Source, CrawlJob, ModelSettings, Block, PageBlocksResponse } from "./types";
+import type { Highlight, Topic, Source, CrawlJob, JobListResponse, ModelSettings, Block, PageBlocksResponse } from "./types";
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE ?? "http://localhost:8000",
@@ -33,6 +33,12 @@ export function fetchPageBlocks(route: string): Promise<PageBlocksResponse> {
 
 // --- Admin APIs ---
 
+export interface RawSourceOption { id: number; name: string }
+
+export function fetchRawSources(): Promise<RawSourceOption[]> {
+  return api.get<RawSourceOption[]>("/api/admin/sources?type=raw").then((r) => r.data);
+}
+
 export function fetchSources(): Promise<Source[]> {
   return api.get<Source[]>("/api/admin/sources").then((r) => r.data);
 }
@@ -57,8 +63,8 @@ export function deleteSource(sourceId: number): Promise<{ deleted: boolean }> {
   return api.delete(`/api/admin/sources/${sourceId}`).then((r) => r.data);
 }
 
-export function fetchJobs(): Promise<CrawlJob[]> {
-  return api.get<CrawlJob[]>("/api/admin/jobs").then((r) => r.data);
+export function fetchJobs(page = 1, pageSize = 20): Promise<JobListResponse> {
+  return api.get<JobListResponse>("/api/admin/jobs", { params: { page, page_size: pageSize } }).then((r) => r.data);
 }
 
 export function fetchModelSettings(): Promise<ModelSettings> {

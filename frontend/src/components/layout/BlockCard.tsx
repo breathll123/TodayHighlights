@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { TrendingUp, Pin, ChevronDown, ChevronUp, ExternalLink } from "lucide-react";
+import { TrendingUp, Pin, ExternalLink } from "lucide-react";
+import { motion } from "framer-motion";
 
 interface BlockCardProps {
   title: string;
@@ -13,14 +13,18 @@ interface BlockCardProps {
 }
 
 export function BlockCard({ title, summary, tags, score, isPinned, symbols, url, className }: BlockCardProps) {
-  const [expanded, setExpanded] = useState(false);
+  const isClickable = !!url;
+  const Tag = isClickable ? "a" : "div";
 
-  return (
-    <div
-      className={`group bg-card rounded-xl border shadow-sm hover:shadow-md transition-all duration-200 cursor-pointer ${isPinned ? "border-l-2 border-l-orange-500 shadow-orange-100" : ""} ${className ?? ""}`}
-      onClick={() => setExpanded(!expanded)}
+  const card = (
+    <Tag
+      {...(isClickable ? { href: url, target: "_blank", rel: "noopener noreferrer" } : {})}
+      className={`group block bg-card/70 backdrop-blur-md rounded-xl border border-white/20 shadow-sm transition-shadow duration-300 ${isClickable ? "cursor-pointer hover:border-primary/30 hover:shadow-lg" : ""} ${isPinned ? "ring-1 ring-orange-500/20" : ""} ${className ?? ""}`}
     >
-      <div className="p-5">
+      {isPinned && (
+        <div className="absolute inset-0 rounded-xl bg-gradient-to-br from-orange-500/10 via-amber-500/5 to-transparent pointer-events-none" />
+      )}
+      <div className="relative p-5">
         {/* Header */}
         <div className="flex items-start justify-between gap-3 mb-2">
           <div className="flex items-center gap-2 min-w-0">
@@ -39,39 +43,40 @@ export function BlockCard({ title, summary, tags, score, isPinned, symbols, url,
                 {score > 999 ? `${(score / 1000).toFixed(0)}k` : score}
               </span>
             )}
-            {expanded ? <ChevronUp className="w-4 h-4 text-muted-foreground/50" /> : <ChevronDown className="w-4 h-4 text-muted-foreground/50" />}
+            {isClickable && (
+              <ExternalLink className="w-3.5 h-3.5 text-muted-foreground/40 group-hover:text-primary transition-colors shrink-0" />
+            )}
           </div>
         </div>
 
         {/* Summary */}
-        <p className={`text-[13px] text-muted-foreground/80 leading-relaxed ${expanded ? "" : "line-clamp-2"}`}>
+        <p className="text-[13px] text-muted-foreground/80 leading-relaxed line-clamp-2">
           {summary}
         </p>
 
-        {/* Expanded content */}
-        {expanded && (
-          <div className="mt-4 pt-4 border-t animate-in fade-in slide-in-from-top-2 duration-200">
-            {url && (
-              <a
-                href={url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline mb-3"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <ExternalLink className="w-3 h-3" />查看原文
-              </a>
-            )}
-            <div className="flex items-center gap-2 flex-wrap mt-2">
-              {tags?.map((t) => (
-                <span key={t} className="text-[11px] bg-muted/80 text-muted-foreground px-2 py-0.5 rounded-full">
-                  {t}
-                </span>
-              ))}
-            </div>
+        {/* Footer */}
+        {tags && tags.length > 0 && (
+          <div className="flex items-center gap-2 flex-wrap mt-3">
+            {tags.map((t) => (
+              <span key={t} className="text-[11px] bg-muted/80 text-muted-foreground px-2 py-0.5 rounded-full">
+                {t}
+              </span>
+            ))}
           </div>
         )}
       </div>
-    </div>
+    </Tag>
+  );
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3, ease: "easeOut" }}
+      whileHover={{ y: -3, scale: 1.01 }}
+      className="relative"
+    >
+      {card}
+    </motion.div>
   );
 }

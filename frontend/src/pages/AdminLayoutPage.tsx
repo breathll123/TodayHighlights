@@ -7,6 +7,7 @@ import { CanvasEditor } from "@/components/admin/CanvasEditor";
 import { SizePresetPicker } from "@/components/admin/SizePresetPicker";
 import { BlockConfigPanel } from "@/components/admin/BlockConfigPanel";
 import { findAvailablePosition } from "@/lib/grid-utils";
+import { safeUUID } from "@/lib/utils";
 import { fetchBlocks, createBlock, updateBlock, deleteBlock, publishPage } from "@/api/client";
 import type { Block } from "@/api/types";
 import { toast } from "sonner";
@@ -57,7 +58,7 @@ export function AdminLayoutPage() {
     const pos = findAvailablePosition(draftBlocks, col, row);
     createMut.mutate({
       page_route: activePage, title: "新方块", source_type: "topic",
-      source_config: { topic_id: 1 }, block_key: crypto.randomUUID(),
+      source_config: { topic_id: 1 }, block_key: safeUUID(),
       col_span: col, row_span: row, grid_x: pos.x, grid_y: pos.y,
       display_style: "card", display_count: 5, sort_by: "created_at",
       enabled: true, sort_order: 0, status: "draft",

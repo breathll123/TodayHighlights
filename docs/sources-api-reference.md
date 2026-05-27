@@ -220,15 +220,79 @@ GET https://stock.xueqiu.com/v5/stock/quote.json
 
 ---
 
-## 同花顺 (Tonghuashun / 10jqka)
+## 东方财富 (Eastmoney)
 
-> TODO: 待调研
-
-**可能入口：** `https://t.10jqka.com.cn/circle/index/` — 社区板块
+**Base URL:** `https://push2.eastmoney.com`
 
 ### 认证方式
 
-> TODO: 推测需要手机号登录 + Cookie
+无需认证。公开 API，只需 `User-Agent` 和 `Referer` 头。
+
+### 通用请求头
+
+```
+User-Agent: Mozilla/5.0 DailyHighlights/0.1
+Referer: https://quote.eastmoney.com/
+```
+
+### 端点 1：板块排行 (概念/行业/地域)
+
+```
+GET /api/qt/clist/get
+```
+
+| 参数 | 类型 | 说明 | 示例 |
+|------|------|------|------|
+| `pn` | int | 页码 | `1` |
+| `pz` | int | 每页条数 | `20` |
+| `po` | int | 排序方向 (0=升序, 1=降序) | `1` |
+| `fid` | str | 排序字段 | `f3` (涨跌幅) |
+| `fs` | str | 板块过滤 | `m:90+t:3` (概念), `m:90+t:2` (行业), `m:90+t:1` (地域) |
+| `fields` | str | 返回字段 | `f2,f3,f4,f12,f14` |
+
+**字段映射：**
+
+| 字段 | 说明 |
+|------|------|
+| `f2` | 板块指数 |
+| `f3` | 涨跌幅 % |
+| `f4` | 涨跌值 |
+| `f12` | 板块代码 (BK0890) |
+| `f14` | 板块名称 |
+
+**板块 URL：** `https://quote.eastmoney.com/bk/90.{f12}.html`
+
+---
+
+### 端点 2：A股涨幅榜
+
+```
+GET /api/qt/clist/get
+```
+
+| 参数 | 类型 | 说明 | 示例 |
+|------|------|------|------|
+| `fs` | str | 市场过滤 | `m:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23` (沪深A股) |
+| `fields` | str | 返回字段 | `f2,f3,f4,f12,f14,f20` |
+
+**字段映射：**
+
+| 字段 | 说明 |
+|------|------|
+| `f2` | 当前价 |
+| `f3` | 涨跌幅 % |
+| `f4` | 涨跌值 |
+| `f12` | 股票代码 (SH600519) |
+| `f14` | 股票名称 |
+| `f20` | 总市值 (需除 1e8) |
+
+**个股 URL：** `https://quote.eastmoney.com/{f12}.html`
+
+---
+
+## 同花顺 (Tonghuashun / 10jqka)
+
+> 反爬保护较强 (chameleon JS 挑战)，暂未适配。建议使用东方财富替代。
 
 ### 端点
 

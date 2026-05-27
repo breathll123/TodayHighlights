@@ -11,11 +11,22 @@ def save_raw_items(session: Session, source_id: int, drafts: list[RawItemDraft])
         existing = session.scalar(
             select(RawItem).where(
                 RawItem.source_id == source_id,
-                (RawItem.external_id == draft.external_id) | (RawItem.content_hash == draft.content_hash),
+                RawItem.external_id == draft.external_id,
             )
         )
         if existing is not None:
+            if existing.content_hash == draft.content_hash:
+                continue
+            existing.url = draft.url
+            existing.title = draft.title
+            existing.body = draft.body
+            existing.metrics_json = draft.metrics
+            existing.content_hash = draft.content_hash
+            existing.published_at = draft.published_at
+            existing.author = draft.author
+            saved.append(existing)
             continue
+
         item = RawItem(
             source_id=source_id,
             external_id=draft.external_id,

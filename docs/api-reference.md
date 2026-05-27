@@ -113,7 +113,8 @@ GET /api/public/pages/topics%2Fstocks/blocks  ← 股票页
 | `hot_stocks` | `title, summary, url, symbols[], score, percent, current` |
 | `hot_events` | `title, summary, tags[], score` |
 | `screener` | `title, summary, url, symbols[], score, percent` |
-| `search` | `title, summary, score` |
+| `eastmoney_sectors` | `title, summary, url, symbols[], score, percent` |
+| `eastmoney_gainers` | `title, summary, url, symbols[], score, percent, current` |
 
 ---
 

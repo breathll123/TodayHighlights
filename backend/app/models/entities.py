@@ -37,6 +37,8 @@ class Source(TimestampMixin, Base):
     enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     crawl_interval_minutes: Mapped[int] = mapped_column(Integer, default=60, nullable=False)
     last_crawled_at: Mapped[datetime | None] = mapped_column(DateTime)
+    next_crawl_at: Mapped[datetime | None] = mapped_column(DateTime)
+    enable_highlight: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     topic: Mapped[Topic] = relationship(back_populates="sources")
     jobs: Mapped[list["CrawlJob"]] = relationship(back_populates="source")

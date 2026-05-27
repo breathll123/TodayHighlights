@@ -1,11 +1,13 @@
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectSeparator, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { SIZE_PRESETS } from "@/lib/grid-utils";
 import type { Block } from "@/api/types";
+import { fetchRawSources, type RawSourceOption } from "@/api/client";
 import { cn } from "@/lib/utils";
 
 type BlockForm = Omit<Block, "id" | "created_at" | "updated_at">;
@@ -17,17 +19,35 @@ interface Props {
   onCancel: () => void;
 }
 
-const SOURCE_TYPE_OPTIONS: { value: Block["source_type"]; label: string }[] = [
-  { value: "topic", label: "话题" },
-  { value: "search", label: "搜索" },
+const SOURCE_TYPE_OPTIONS_DB: { value: Block["source_type"]; label: string }[] = [
+  { value: "topic", label: "本地看点 (AI摘要)" },
+  { value: "raw", label: "原始数据" },
+];
+
+const SOURCE_TYPE_OPTIONS_XQ: { value: Block["source_type"]; label: string }[] = [
   { value: "hot_stocks", label: "热门股票" },
-  { value: "hot_events", label: "热门事件" },
-  { value: "screener", label: "筛选器" },
+  { value: "hot_events", label: "热门话题" },
+  { value: "screener", label: "涨跌幅榜" },
+];
+
+const SOURCE_TYPE_OPTIONS_THS: { value: Block["source_type"]; label: string }[] = [
+  { value: "tonghuashun_news", label: "财经快讯" },
+];
+
+const SOURCE_TYPE_OPTIONS_EM: { value: Block["source_type"]; label: string }[] = [
+  { value: "eastmoney_sectors", label: "概念板块" },
+  { value: "eastmoney_industry", label: "行业板块" },
+  { value: "eastmoney_indices", label: "指数行情" },
+  { value: "eastmoney_gainers", label: "A股涨幅榜" },
+  { value: "eastmoney_losers", label: "A股跌幅榜" },
+  { value: "eastmoney_capital_flow", label: "主力资金流入" },
+  { value: "eastmoney_announcements", label: "A股公告" },
 ];
 
 const DISPLAY_STYLE_OPTIONS: { value: Block["display_style"]; label: string }[] = [
   { value: "card", label: "卡片" },
   { value: "list", label: "列表" },
+  { value: "timeline", label: "时间线" },
 ];
 
 const SORT_OPTIONS: { value: Block["sort_by"]; label: string }[] = [
@@ -43,6 +63,13 @@ export function BlockConfigPanel({ form, onChange, onSave, onCancel }: Props) {
   const handlePresetSize = (col: number, row: number) => {
     onChange({ ...form, col_span: col, row_span: row });
   };
+
+  const [rawSources, setRawSources] = useState<RawSourceOption[]>([]);
+  useEffect(() => {
+    if (form.source_type === "raw") {
+      fetchRawSources().then(setRawSources).catch(() => {});
+    }
+  }, [form.source_type]);
 
   return (
     <div className="w-80 border-l bg-card h-full overflow-y-auto p-4 space-y-4">
@@ -77,14 +104,112 @@ export function BlockConfigPanel({ form, onChange, onSave, onCancel }: Props) {
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            {SOURCE_TYPE_OPTIONS.map((opt) => (
-              <SelectItem key={opt.value} value={opt.value} className="text-xs">
-                {opt.label}
-              </SelectItem>
-            ))}
+            <SelectGroup>
+              <SelectLabel className="text-[10px] text-muted-foreground">本地数据</SelectLabel>
+              {SOURCE_TYPE_OPTIONS_DB.map((opt) => (
+                <SelectItem key={opt.value} value={opt.value} className="text-xs">
+                  {opt.label}
+                </SelectItem>
+              ))}
+            </SelectGroup>
+            <SelectSeparator />
+            <SelectGroup>
+              <SelectLabel className="text-[10px] text-muted-foreground">雪球 (实时)</SelectLabel>
+              {SOURCE_TYPE_OPTIONS_XQ.map((opt) => (
+                <SelectItem key={opt.value} value={opt.value} className="text-xs">
+                  {opt.label}
+                </SelectItem>
+              ))}
+            </SelectGroup>
+            <SelectSeparator />
+            <SelectGroup>
+              <SelectLabel className="text-[10px] text-muted-foreground">东方财富 (实时)</SelectLabel>
+              {SOURCE_TYPE_OPTIONS_EM.map((opt) => (
+                <SelectItem key={opt.value} value={opt.value} className="text-xs">
+                  {opt.label}
+                </SelectItem>
+              ))}
+            </SelectGroup>
+            <SelectSeparator />
+            <SelectGroup>
+              <SelectLabel className="text-[10px] text-muted-foreground">同花顺 (实时)</SelectLabel>
+              {SOURCE_TYPE_OPTIONS_THS.map((opt) => (
+                <SelectItem key={opt.value} value={opt.value} className="text-xs">
+                  {opt.label}
+                </SelectItem>
+              ))}
+            </SelectGroup>
           </SelectContent>
         </Select>
       </div>
+
+      {/* Source-specific Config */}
+      {form.source_type === "topic" && (
+        <div className="space-y-1.5">
+          <Label className="text-xs">话题 ID</Label>
+          <Input
+            type="number"
+            value={String(form.source_config?.topic_id ?? 1)}
+            onChange={(e) => update("source_config", { topic_id: +e.target.value })}
+            className="h-8 text-xs"
+          />
+        </div>
+      )}
+      {form.source_type === "raw" && (
+        <div className="space-y-1.5">
+          <Label className="text-xs">数据源</Label>
+          <Select
+            value={String(form.source_config?.source_id ?? "")}
+            onValueChange={(v) => update("source_config", { source_id: +v })}
+          >
+            <SelectTrigger className="h-8 text-xs">
+              <SelectValue placeholder="选择数据源..." />
+            </SelectTrigger>
+            <SelectContent>
+              {rawSources.map((s) => (
+                <SelectItem key={s.id} value={String(s.id)} className="text-xs">
+                  {s.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+      {form.source_type === "hot_stocks" && (
+        <div className="space-y-1.5">
+          <Label className="text-xs">榜单类型</Label>
+          <Select
+            value={String(form.source_config?.type ?? 10)}
+            onValueChange={(v) => update("source_config", { type: +v })}
+          >
+            <SelectTrigger className="h-8 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="10" className="text-xs">A股热度榜</SelectItem>
+              <SelectItem value="11" className="text-xs">美股热度榜</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+      {form.source_type === "screener" && (
+        <div className="space-y-1.5">
+          <Label className="text-xs">排序字段</Label>
+          <Select
+            value={String(form.source_config?.order_by ?? "percent")}
+            onValueChange={(v) => update("source_config", { order_by: v })}
+          >
+            <SelectTrigger className="h-8 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="percent" className="text-xs">涨跌幅</SelectItem>
+              <SelectItem value="turnover_rate" className="text-xs">换手率</SelectItem>
+              <SelectItem value="volume" className="text-xs">成交量</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      )}
 
       {/* Display Count */}
       <div className="space-y-1.5">

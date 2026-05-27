@@ -6,5 +6,6 @@ export function usePageBlocks(route: string) {
   return useQuery<PageBlocksResponse>({
     queryKey: ["page-blocks", route],
     queryFn: () => fetchPageBlocks(route),
+    refetchInterval: 60_000,
   });
 }

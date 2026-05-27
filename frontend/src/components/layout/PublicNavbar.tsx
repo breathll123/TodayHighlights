@@ -9,7 +9,7 @@ export function PublicNavbar() {
   const location = useLocation();
 
   return (
-    <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur">
+    <header className="sticky top-0 z-50 border-b border-white/10 bg-background/70 backdrop-blur-xl">
       <div className="flex h-14 items-center justify-between px-8">
         <div className="flex items-center gap-6">
           <Link to="/" className="text-lg font-bold tracking-tight">每日看点</Link>

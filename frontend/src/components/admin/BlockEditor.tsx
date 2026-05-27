@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
+import { fetchRawSources, type RawSourceOption } from "@/api/client";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -7,7 +8,10 @@ import { Slider } from "@/components/ui/slider";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
+  SelectSeparator,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -72,6 +76,13 @@ export function BlockEditor({ open, block, onSave, onClose }: Props) {
     }
   }, [block, open]);
 
+  const [rawSources, setRawSources] = useState<RawSourceOption[]>([]);
+  useEffect(() => {
+    if (form.source_type === "raw") {
+      fetchRawSources().then(setRawSources).catch(() => {});
+    }
+  }, [form.source_type]);
+
   const handleSave = () => {
     onSave(form);
     onClose();
@@ -104,11 +115,34 @@ export function BlockEditor({ open, block, onSave, onClose }: Props) {
               <Select value={form.source_type} onValueChange={(v) => setForm({ ...form, source_type: v as Block["source_type"] })}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="topic">本地看点</SelectItem>
-                  <SelectItem value="hot_stocks">热股榜</SelectItem>
-                  <SelectItem value="hot_events">热门话题</SelectItem>
-                  <SelectItem value="screener">活跃股票</SelectItem>
-                  <SelectItem value="search">关键词搜索</SelectItem>
+                  <SelectGroup>
+                    <SelectLabel>本地数据</SelectLabel>
+                    <SelectItem value="topic">本地看点 (AI摘要)</SelectItem>
+                    <SelectItem value="raw">原始数据</SelectItem>
+                  </SelectGroup>
+                  <SelectSeparator />
+                  <SelectGroup>
+                    <SelectLabel>雪球 (实时)</SelectLabel>
+                    <SelectItem value="hot_stocks">热股榜</SelectItem>
+                    <SelectItem value="hot_events">热门话题</SelectItem>
+                    <SelectItem value="screener">涨跌幅榜</SelectItem>
+                  </SelectGroup>
+                  <SelectSeparator />
+                  <SelectGroup>
+                    <SelectLabel>东方财富 (实时)</SelectLabel>
+                    <SelectItem value="eastmoney_sectors">概念板块</SelectItem>
+                    <SelectItem value="eastmoney_industry">行业板块</SelectItem>
+                    <SelectItem value="eastmoney_indices">指数行情</SelectItem>
+                    <SelectItem value="eastmoney_gainers">A股涨幅榜</SelectItem>
+                    <SelectItem value="eastmoney_losers">A股跌幅榜</SelectItem>
+                    <SelectItem value="eastmoney_capital_flow">主力资金流入</SelectItem>
+                    <SelectItem value="eastmoney_announcements">A股公告</SelectItem>
+                  </SelectGroup>
+                  <SelectSeparator />
+                  <SelectGroup>
+                    <SelectLabel>同花顺 (实时)</SelectLabel>
+                    <SelectItem value="tonghuashun_news">财经快讯</SelectItem>
+                  </SelectGroup>
                 </SelectContent>
               </Select>
             </div>
@@ -118,6 +152,19 @@ export function BlockEditor({ open, block, onSave, onClose }: Props) {
             <div className="space-y-2">
               <Label>话题 ID</Label>
               <Input type="number" value={String(form.source_config?.topic_id ?? 1)} onChange={(e) => setForm({ ...form, source_config: { topic_id: +e.target.value } })} />
+            </div>
+          )}
+          {form.source_type === "raw" && (
+            <div className="space-y-2">
+              <Label>数据源</Label>
+              <Select value={String(form.source_config?.source_id ?? "")} onValueChange={(v) => setForm({ ...form, source_config: { source_id: +v } })}>
+                <SelectTrigger><SelectValue placeholder="选择数据源..." /></SelectTrigger>
+                <SelectContent>
+                  {rawSources.map((s: RawSourceOption) => (
+                    <SelectItem key={s.id} value={String(s.id)}>{s.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           )}
           {form.source_type === "hot_stocks" && (
@@ -132,12 +179,7 @@ export function BlockEditor({ open, block, onSave, onClose }: Props) {
               </Select>
             </div>
           )}
-          {form.source_type === "search" && (
-            <div className="space-y-2">
-              <Label>搜索关键词</Label>
-              <Input value={String(form.source_config?.query ?? "")} onChange={(e) => setForm({ ...form, source_config: { query: e.target.value, count: 20 } })} placeholder="芯片" />
-            </div>
-          )}
+
           {form.source_type === "screener" && (
             <div className="space-y-2">
               <Label>排序字段</Label>
@@ -174,6 +216,7 @@ export function BlockEditor({ open, block, onSave, onClose }: Props) {
                 <SelectContent>
                   <SelectItem value="card">卡片</SelectItem>
                   <SelectItem value="list">列表</SelectItem>
+                  <SelectItem value="timeline">时间线</SelectItem>
                 </SelectContent>
               </Select>
             </div>

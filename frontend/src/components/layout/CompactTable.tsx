@@ -7,7 +7,7 @@ interface CompactTableProps {
 
 export function CompactTable({ data, columns }: CompactTableProps) {
   return (
-    <div className="overflow-hidden">
+    <div className="overflow-hidden bg-card/70 backdrop-blur-md border border-white/20 rounded-lg">
       <div className="grid grid-cols-[1fr_80px_100px] text-[11px] font-medium text-muted-foreground px-4 py-2 border-b bg-muted/30">
         {columns.map((c) => (
           <span key={c.key} className={c.className}>{c.label}</span>

@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import GridLayout from "react-grid-layout";
 import type { Layout, LayoutItem } from "react-grid-layout";
 import { noCompactor } from "react-grid-layout";
@@ -16,6 +16,8 @@ interface Props {
 }
 
 export function CanvasEditor({ blocks, onLayoutChange, onEdit, onDelete }: Props) {
+  const [resetKey, setResetKey] = useState(0);
+
   const layout: Layout = blocks.map((b) => ({
     i: String(b.id),
     x: b.grid_x,
@@ -27,6 +29,11 @@ export function CanvasEditor({ blocks, onLayoutChange, onEdit, onDelete }: Props
     minH: 1,
     maxH: 6,
   }));
+
+  const handleCollision = useCallback(() => {
+    toast.error("该位置已有其他组件");
+    setResetKey((k) => k + 1);
+  }, []);
 
   const handleDragStop = useCallback(
     (_layout: Layout, _oldItem: LayoutItem | null, newItem: LayoutItem | null) => {
@@ -42,13 +49,13 @@ export function CanvasEditor({ blocks, onLayoutChange, onEdit, onDelete }: Props
       };
       const others = blocks.filter((b) => String(b.id) !== newItem.i);
       if (others.some((b) => hasCollision(candidate, b))) {
-        toast.error("该位置已有其他组件");
+        handleCollision();
         return;
       }
       const updated = blocks.map((b) => (String(b.id) === newItem.i ? candidate : b));
       onLayoutChange(updated);
     },
-    [blocks, onLayoutChange]
+    [blocks, onLayoutChange, handleCollision]
   );
 
   const handleResizeStop = useCallback(
@@ -57,20 +64,34 @@ export function CanvasEditor({ blocks, onLayoutChange, onEdit, onDelete }: Props
       const { col, row } = clampSize(newItem.w, newItem.h);
       if (newItem.x + col > 4) {
         toast.error("方块不能超出画布边界");
+        setResetKey((k) => k + 1);
+        return;
+      }
+      const resized = blocks.find((b) => String(b.id) === newItem.i);
+      if (!resized) return;
+      const candidate: Block = {
+        ...resized,
+        grid_x: newItem.x,
+        grid_y: newItem.y,
+        col_span: col,
+        row_span: row,
+      };
+      const others = blocks.filter((b) => String(b.id) !== newItem.i);
+      if (others.some((b) => hasCollision(candidate, b))) {
+        handleCollision();
         return;
       }
       const updated = blocks.map((b) =>
-        String(b.id) === newItem.i
-          ? { ...b, grid_x: newItem.x, grid_y: newItem.y, col_span: col, row_span: row }
-          : b
+        String(b.id) === newItem.i ? candidate : b
       );
       onLayoutChange(updated);
     },
-    [blocks, onLayoutChange]
+    [blocks, onLayoutChange, handleCollision]
   );
 
   return (
     <GridLayout
+      key={resetKey}
       className="layout"
       layout={layout}
       width={800}
