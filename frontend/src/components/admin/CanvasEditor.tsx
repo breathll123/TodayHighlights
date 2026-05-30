@@ -1,5 +1,5 @@
 import { useCallback } from "react";
-import GridLayout, { WidthProvider } from "react-grid-layout";
+import GridLayout, { useContainerWidth } from "react-grid-layout";
 import type { Layout, LayoutItem } from "react-grid-layout";
 import { noCompactor } from "react-grid-layout";
 import "react-grid-layout/css/styles.css";
@@ -7,8 +7,6 @@ import { CanvasBlock } from "./CanvasBlock";
 import { hasCollision, clampSize } from "@/lib/grid-utils";
 import type { Block } from "@/api/types";
 import { toast } from "sonner";
-
-const ResponsiveGridLayout = WidthProvider(GridLayout);
 
 interface Props {
   blocks: Block[];
@@ -18,6 +16,7 @@ interface Props {
 }
 
 export function CanvasEditor({ blocks, onLayoutChange, onEdit, onDelete }: Props) {
+  const { width, containerRef, mounted } = useContainerWidth();
   const layout: Layout = blocks.map((b) => ({
     i: String(b.id),
     x: b.grid_x,
@@ -73,9 +72,12 @@ export function CanvasEditor({ blocks, onLayoutChange, onEdit, onDelete }: Props
   );
 
   return (
-    <ResponsiveGridLayout
+    <div ref={containerRef}>
+    {mounted && width > 0 ? (
+    <GridLayout
       className="layout"
       layout={layout}
+      width={width}
       gridConfig={{ cols: 4, rowHeight: 140, margin: [12, 12] }}
       dragConfig={{ handle: ".drag-handle" }}
       resizeConfig={{ enabled: true }}
@@ -88,7 +90,11 @@ export function CanvasEditor({ blocks, onLayoutChange, onEdit, onDelete }: Props
           <CanvasBlock block={b} onEdit={() => onEdit(b)} onDelete={() => onDelete(b.id)} />
         </div>
       ))}
-    </ResponsiveGridLayout>
+    </GridLayout>
+    ) : (
+      <div className="h-40 flex items-center justify-center text-muted-foreground text-sm">加载编辑器中...</div>
+    )}
+    </div>
   );
 }
 
