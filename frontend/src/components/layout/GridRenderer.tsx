@@ -73,7 +73,7 @@ export function GridRenderer({ blocks, isLoading }: { blocks: any[]; isLoading: 
             className="space-y-2"
             style={{ gridColumn: `span ${block.col_span || 1}`, gridRow: `span ${block.row_span || 1}` }}
           >
-            <h2 className="text-xs font-bold text-muted-foreground tracking-wide uppercase">{block.title}</h2>
+            <h2 className="text-sm font-semibold text-muted-foreground tracking-wide">{block.title}</h2>
 
             {block.data?.length === 0 ? (
               <div className="bg-card border rounded-xl p-6 text-center text-sm text-muted-foreground">暂无数据</div>
