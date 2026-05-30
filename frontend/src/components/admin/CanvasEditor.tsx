@@ -1,5 +1,5 @@
 import { useCallback } from "react";
-import GridLayout from "react-grid-layout";
+import GridLayout, { WidthProvider } from "react-grid-layout";
 import type { Layout, LayoutItem } from "react-grid-layout";
 import { noCompactor } from "react-grid-layout";
 import "react-grid-layout/css/styles.css";
@@ -7,6 +7,8 @@ import { CanvasBlock } from "./CanvasBlock";
 import { hasCollision, clampSize } from "@/lib/grid-utils";
 import type { Block } from "@/api/types";
 import { toast } from "sonner";
+
+const ResponsiveGridLayout = WidthProvider(GridLayout);
 
 interface Props {
   blocks: Block[];
@@ -71,10 +73,9 @@ export function CanvasEditor({ blocks, onLayoutChange, onEdit, onDelete }: Props
   );
 
   return (
-    <GridLayout
+    <ResponsiveGridLayout
       className="layout"
       layout={layout}
-      width={800}
       gridConfig={{ cols: 4, rowHeight: 140, margin: [12, 12] }}
       dragConfig={{ handle: ".drag-handle" }}
       resizeConfig={{ enabled: true }}
@@ -87,7 +88,7 @@ export function CanvasEditor({ blocks, onLayoutChange, onEdit, onDelete }: Props
           <CanvasBlock block={b} onEdit={() => onEdit(b)} onDelete={() => onDelete(b.id)} />
         </div>
       ))}
-    </GridLayout>
+    </ResponsiveGridLayout>
   );
 }
 
