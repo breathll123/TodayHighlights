@@ -200,45 +200,13 @@ GET https://stock.xueqiu.com/v5/stock/quote.json
 | # | 端点 | 用途 | 格式 | 需Cookie | 已适配 |
 |---|------|------|------|----------|--------|
 | 1 | `v4/statuses/public_timeline_by_category.json` | 推荐 Feed | 嵌套JSON | 是 | ✅ |
-| 2 | `hot_event/list.json` | 热门话题 | 扁平JSON | 是 | ✅ |
-| 3 | `stock.xueqiu.com/v5/stock/hot_stock/list.json` | 热股榜 | 扁平JSON | 是 | ✅ |
-| 4 | `service/screener/quote/list` | 活跃股票 | 扁平JSON | 是 | ✅ |
-| 5 | `stock.xueqiu.com/v5/stock/quote.json` | 个股行情 | 扁平JSON | 是 | ❌ |
+| 2 | `statuses/search.json` | 关键词搜索 | 扁平JSON | 是 | ⚠️ 302 |
+| 3 | `hot_event/list.json` | 热门话题 | 扁平JSON | 是 | ✅ |
+| 4 | `stock.xueqiu.com/v5/stock/hot_stock/list.json` | 热股榜 | 扁平JSON | 是 | ✅ |
+| 5 | `service/screener/quote/list` | 活跃股票 | 扁平JSON | 是 | ✅ |
+| 6 | `stock.xueqiu.com/v5/stock/quote.json` | 个股行情 | 扁平JSON | 是 | ❌ |
 
----
-
-### 端点 6：龙虎榜 ✅
-
-```
-GET https://datacenter-web.eastmoney.com/api/data/v1/get
-```
-
-| 参数 | 类型 | 说明 |
-|------|------|------|
-| `reportName` | str | `RPT_ORGANIZATION_TRADE_DETAILSNEW` (个股汇总) 或 `RPT_DAILYBILLBOARD_PROFILE` (日榜单) |
-| `columns` | str | `ALL` |
-| `pageNumber` | int | 页码 |
-| `pageSize` | int | 每页条数 |
-| `sortTypes` | str | `-1`=降序, `1`=升序 |
-| `sortColumns` | str | `TRADE_DATE` (按日期) 或 `NET_BUY_AMT` (按净买额) |
-| `source` | str | `WEB` |
-| `client` | str | `WEB` |
-
-**认证方式:** Playwright 无头浏览器访问 `data.eastmoney.com/stock/lhb.html` 获取 Session Cookie（无需登录），Cookie 缓存 30 分钟。
-
-**关键字段（RPT_ORGANIZATION_TRADE_DETAILSNEW）：**
-
-| 字段 | 说明 |
-|------|------|
-| `SECURITY_CODE` | 股票代码 |
-| `SECURITY_NAME_ABBR` | 股票名称 |
-| `CHANGE_RATE` | 涨跌幅% |
-| `NET_BUY_AMT` | 净买额（元） |
-| `BUY_AMT` | 买入额（元） |
-| `SELL_AMT` | 卖出额（元） |
-| `EXPLANATION` | 上榜原因（如"日涨幅偏离值达到7%的前五只证券"） |
-| `TRADE_DATE` | 交易日期 |
-| `TURNOVERRATE` | 换手率% |
+> 热度榜（沪深 `type=10`、港股、美股）复用端点 4，仅 `type` 参数不同。
 
 ### 已废弃端点
 
@@ -254,11 +222,13 @@ GET https://datacenter-web.eastmoney.com/api/data/v1/get
 
 ## 东方财富 (Eastmoney)
 
-**Base URL:** `https://push2.eastmoney.com`
+**Base URL:** `https://push2.eastmoney.com`（主）/ `https://push2delay.eastmoney.com`（CDN 备用）
+
+> 适配器 `sources/eastmoney.py` 的 `_push2_get()` 会依次尝试主域名和备用 CDN，主域名被限流（返回空/000）时自动切到 `push2delay`。
 
 ### 认证方式
 
-无需认证。公开 API，只需 `User-Agent` 和 `Referer` 头。
+行情/资金/板块/公告 API 无需认证，只需 `User-Agent` 和 `Referer` 头。**龙虎榜**例外，需 Playwright 获取 Session Cookie（见端点 4）。
 
 ### 通用请求头
 
@@ -267,7 +237,23 @@ User-Agent: Mozilla/5.0 DailyHighlights/0.1
 Referer: https://quote.eastmoney.com/
 ```
 
-### 端点 1：板块排行 (概念/行业/地域)
+### 采集子类型（entry_url）
+
+`EastmoneyAdapter` 按 `entry_url` 的 `eastmoney://` 后缀分派到不同处理器：
+
+| entry_url | 处理器 | 外部 API |
+|-----------|--------|----------|
+| `eastmoney://sectors` | `_fetch_board` | push2 clist (概念板块) |
+| `eastmoney://industry` | `_fetch_board` | push2 clist (行业板块) |
+| `eastmoney://capital_flow` | `_fetch_capital_flow` | push2 clist (主力资金) |
+| `eastmoney://indices` | `_fetch_indices` | 新浪 hq.sinajs.cn (指数) |
+| `eastmoney://longhu` | `_fetch_longhu_datacenter` | datacenter-web (龙虎榜) |
+
+> 概念/行业/资金/指数 还有一套展示期直连的实现 `services/adapters/eastmoney.py`（`fetch_sectors` 等），由看板直接调用并走 30s TTL 缓存；龙虎榜只走采集落库 → 看板读 `raw_items`。
+
+---
+
+### 端点 1：板块排行 (概念/行业)
 
 ```
 GET /api/qt/clist/get
@@ -278,11 +264,14 @@ GET /api/qt/clist/get
 | `pn` | int | 页码 | `1` |
 | `pz` | int | 每页条数 | `20` |
 | `po` | int | 排序方向 (0=升序, 1=降序) | `1` |
+| `np` | int | `1` | `1` |
+| `fltt` | int | `2`（小数格式） | `2` |
+| `invt` | int | `2` | `2` |
 | `fid` | str | 排序字段 | `f3` (涨跌幅) |
 | `fs` | str | 板块过滤 | `m:90+t:3` (概念), `m:90+t:2` (行业), `m:90+t:1` (地域) |
 | `fields` | str | 返回字段 | `f2,f3,f4,f12,f14` |
 
-**字段映射：**
+**字段映射（`data.diff[]`）：**
 
 | 字段 | 说明 |
 |------|------|
@@ -294,9 +283,11 @@ GET /api/qt/clist/get
 
 **板块 URL：** `https://quote.eastmoney.com/bk/90.{f12}.html`
 
+> 行业板块在展示期还会对每个板块发 `fs=b:{code}` 子请求取领涨股（N+1），拼进 summary。
+
 ---
 
-### 端点 2：A股涨幅榜
+### 端点 2：主力资金流向
 
 ```
 GET /api/qt/clist/get
@@ -304,8 +295,9 @@ GET /api/qt/clist/get
 
 | 参数 | 类型 | 说明 | 示例 |
 |------|------|------|------|
+| `fid` | str | 排序字段 | `f62` (主力净流入) |
 | `fs` | str | 市场过滤 | `m:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23` (沪深A股) |
-| `fields` | str | 返回字段 | `f2,f3,f4,f12,f14,f20` |
+| `fields` | str | 返回字段 | `f2,f3,f12,f14,f62,f64,f66` |
 
 **字段映射：**
 
@@ -313,41 +305,168 @@ GET /api/qt/clist/get
 |------|------|
 | `f2` | 当前价 |
 | `f3` | 涨跌幅 % |
-| `f4` | 涨跌值 |
-| `f12` | 股票代码 (SH600519) |
+| `f12` | 股票代码 |
 | `f14` | 股票名称 |
-| `f20` | 总市值 (需除 1e8) |
+| `f62` | 主力净流入（元） |
+| `f64` | 超大单净流入（元） |
+| `f66` | 大单净流入（元） |
 
 **个股 URL：** `https://quote.eastmoney.com/{f12}.html`
 
 ---
 
-## 同花顺 (Tonghuashun / 10jqka)
+### 端点 3：指数行情（经新浪）✅
 
-> 反爬保护较强 (chameleon JS 挑战)，暂未适配。建议使用东方财富替代。
+push2 的指数接口不稳定且易封 IP，改用新浪财经行情 API。
 
-### 端点
+```
+GET https://hq.sinajs.cn/list={codes}
+```
 
-> TODO
+| 参数 | 说明 |
+|------|------|
+| `list` | 逗号分隔的新浪代码，如 `s_sh000001,s_sz399001` |
+
+**请求头：** `Referer: https://finance.sina.com.cn/`（必须，否则 403）
+**编码：** 响应为 **GBK**，需 `.decode("gbk")`
+
+**已采集的指数：**
+
+| 新浪代码 | 东财代码 | 指数 |
+|----------|----------|------|
+| `s_sh000001` | `000001` | 上证指数 |
+| `s_sz399001` | `399001` | 深证成指 |
+| `s_sz399006` | `399006` | 创业板指 |
+| `s_sh000688` | `000688` | 科创50 |
+| `s_sz399673` | `399673` | 创业板50 |
+| `s_sh000300` | `000300` | 沪深300 |
+
+**响应格式：** `var hq_str_s_sh000001="上证指数,3200.12,12.34,0.39,..."`，逗号分隔，`[0]`=名称 `[1]`=当前点位 `[3]`=涨跌幅%。
+
+**指数 URL：** `https://quote.eastmoney.com/zs{code}.html`
 
 ---
 
-## 东方财富 (Eastmoney)
+### 端点 4：龙虎榜（datacenter-web）✅
 
-> TODO: 待调研
+```
+GET https://datacenter-web.eastmoney.com/api/data/v1/get
+```
 
-**可能入口：**
-- `https://np-anotice-stock.eastmoney.com/` — 公告 API（公开）
-- `https://push2.eastmoney.com/` — 行情推送（公开）
-- 股吧社区 API
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `reportName` | str | `RPT_ORGANIZATION_TRADE_DETAILSNEW` (个股汇总) 或 `RPT_DAILYBILLBOARD_PROFILE` (日榜单) |
+| `columns` | str | `ALL` |
+| `pageNumber` | int | 页码 |
+| `pageSize` | int | 每页条数（取 100 后端再筛最新交易日） |
+| `sortTypes` | str | `-1`=降序, `1`=升序 |
+| `sortColumns` | str | `TRADE_DATE` (按日期) 或 `NET_BUY_AMT` (按净买额) |
+| `source` | str | `WEB` |
+| `client` | str | `WEB` |
+
+**认证方式：** Playwright 无头浏览器访问 `data.eastmoney.com/stock/lhb.html`（`wait_until="domcontentloaded"` + 3s 等待）获取 Session Cookie（无需登录），Cookie 进程内缓存 30 分钟。注意 `datacenter-web.eastmoney.com` 与被限流的 `data.eastmoney.com` 是不同域名，前者带 Cookie 即可直连。
+
+**关键字段（`result.data[]`，reportName=RPT_ORGANIZATION_TRADE_DETAILSNEW）：**
+
+| 字段 | 说明 |
+|------|------|
+| `SECURITY_CODE` | 股票代码 |
+| `SECURITY_NAME_ABBR` | 股票名称 |
+| `CHANGE_RATE` | 涨跌幅% |
+| `NET_BUY_AMT` | 净买额（元） |
+| `BUY_AMT` | 买入额（元） |
+| `SELL_AMT` | 卖出额（元，负值） |
+| `EXPLANATION` | 上榜原因（如"日涨幅偏离值达到7%的前五只证券"） |
+| `TRADE_DATE` | 交易日期 |
+| `TURNOVERRATE` | 换手率% |
+
+**注意：** API 返回历史全量数据（含多年前），采集时取 `TRADE_DATE` 最大值为"最新交易日"，仅保留当日记录并按 `NET_BUY_AMT` 绝对值降序，最多 20 条。
+
+---
+
+### 端点 5：A股公告
+
+```
+GET https://np-anotice-stock.eastmoney.com/api/security/ann
+```
+
+| 参数 | 类型 | 说明 | 示例 |
+|------|------|------|------|
+| `page_index` | int | 页码 | `1` |
+| `page_size` | int | 每页条数 | `20` |
+| `ann_type` | str | 公告类型 | `A` (A股) |
+| `sort_name` | str | 排序字段 | `notice_date` |
+| `sort_type` | str | 排序方向 | `desc` |
+
+**字段映射（`data.list[]`）：**
+
+| 字段 | 说明 |
+|------|------|
+| `title` | 公告标题 |
+| `notice_date` | 公告日期 |
+| `codes[].stock_code` | 关联股票代码 |
+| `art_code` | 文章 ID |
+
+**公告 URL：** `https://data.eastmoney.com/notices/detail/{art_code}.html`
+
+---
+
+### 已废弃端点
+
+| 端点 | 状态 |
+|------|------|
+| A股涨幅榜 `clist/get` (`fs=沪深A股` 排序) | 已删除——用户反馈不实用，改用雪球热度榜 |
+| 龙虎榜 push2 `clist/get` (`f152/f174/f176/f178`) | 误用——这些不是龙虎榜字段，已换 datacenter-web API |
+| 指数 `ulist.np/get` | 接口下线，已换新浪 API |
+
+---
+
+## 同花顺 (Tonghuashun / 10jqka)
+
+**Base URL:** `https://news.10jqka.com.cn`
+
+> 同花顺多数数据（龙虎榜、行情）有较强反爬（chameleon JS 挑战），无公开 JSON API。**仅财经快讯**走移动端推送接口，可直连。其余数据建议用东方财富替代。
 
 ### 认证方式
 
-> TODO: 行情和公告 API 可能是公开的，社区需要登录
+无需认证、无需 Cookie。使用移动端 `User-Agent` 直连。
 
-### 端点
+### 端点 1：财经快讯（移动端推送）✅
 
-> TODO
+```
+GET https://news.10jqka.com.cn/tapp/news/push/stock?page=1
+```
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `page` | int | 页码 |
+
+**请求头：**
+
+```
+User-Agent: Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X)
+```
+
+> 必须用移动端 UA，桌面 UA 会触发反爬挑战。
+
+**字段映射（`data.list[]`）：**
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `id` | int/str | 快讯 ID（external_id = `ths_news_{id}`） |
+| `title` | str | 标题 |
+| `digest` | str | 摘要正文 |
+| `url` | str | 原文链接 |
+| `ctime` | str | 秒级时间戳（字符串，需 `int()`） |
+
+**展示样式：** 时间线（`tonghuashun_news`），看板从 `raw_items` 读取，按 `published_at` 降序。
+
+### 已废弃/不可用
+
+| 端点 | 状态 |
+|------|------|
+| 龙虎榜 / 行情 网页接口 | chameleon JS 挑战，无法直连 |
+| 股吧/社区接口 | 需登录 + 反爬 |
 
 ---
 

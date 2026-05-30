@@ -29,6 +29,46 @@ DataFlow 目前是一个单垂类（股票）的实时信息看板。用户需�
 
 以上三条在 office hours 中已确认。
 
+## 股票垂类现状（已落地基线）
+
+新垂类的 adapter / source_type / 展示样式应参照股票垂类已跑通的形态。当前股票垂类（topic slug `stocks`）接入了三个平台，共 15 个 source_type，全部走"采集→`raw_items`/直连→看板"管道。
+
+### 三个平台的 adapter
+
+| 平台 | adapter (`app/sources/`) | site | 认证 | 已接数据 |
+|------|--------------------------|------|------|----------|
+| 雪球 | `XueqiuAdapter` | `xueqiu` | 手动 Cookie（后台填入） | 推荐 Feed、热门话题、热股榜（沪深/港/美）、活跃股筛选 |
+| 东方财富 | `EastmoneyAdapter` | `eastmoney` | 行情类免认证；龙虎榜走 Playwright Cookie | 概念/行业板块、主力资金、指数、龙虎榜、A股公告 |
+| 同花顺 | `TonghuashunAdapter` | `tonghuashun` | 免认证（移动端 UA） | 财经快讯 |
+
+> adapter 协议见 `app/sources/base.py`（`SourceAdapter.fetch(entry_url, cookie) -> list[RawItemDraft]`），注册在 `app/sources/__init__.py` 的 `ADAPTER_REGISTRY`。各平台的 API 地址、参数、字段映射见 [sources-api-reference.md](sources-api-reference.md)。
+
+### source_type → 数据来源映射
+
+看板方块的 `source_type` 决定数据如何解析（`services/blocks.py` 的 `resolve_block_data`）。两种取数路径：**采集落库**（看板读 `raw_items`）或**展示期直连**（`services/adapters/` 实时拉取 + 30s TTL 缓存）。
+
+| source_type | 平台 | 取数路径 | 展示样式 |
+|-------------|------|----------|----------|
+| `topic` | 本地 | DB `highlights` | 卡片 |
+| `raw` | 任意 | DB `raw_items` (按 source_id) | 列表/时间线 |
+| `hot_events` | 雪球 | 直连 | 卡片 |
+| `hot_stocks` | 雪球 | 直连 | 列表 |
+| `xueqiu_hot_cn` / `_hk` / `_us` | 雪球 | 直连 | 列表 |
+| `screener` | 雪球 | 直连 | 列表 |
+| `eastmoney_sectors` | 东方财富 | 直连 | 列表 |
+| `eastmoney_industry` | 东方财富 | 直连（N+1 取领涨股） | 列表 |
+| `eastmoney_indices` | 东方财富（新浪 API） | 直连 | 列表 |
+| `eastmoney_capital_flow` | 东方财富 | 直连 | 列表 |
+| `eastmoney_announcements` | 东方财富 | 直连 | 列表 |
+| `eastmoney_longhu` | 东方财富 | 采集落库（读 `raw_items`） | 列表 |
+| `tonghuashun_news` | 同花顺 | 采集落库（读 `raw_items`） | 时间线 |
+
+### 给新垂类的启示
+
+- **展示形态已被三种样式覆盖**：实时榜单→列表（动态列 + 数值字段排序）、深度内容→卡片、流式资讯→时间线。AI 垂类的论文/HN 头条天然适配卡片 + 时间线，无需新 display_style。
+- **两条取数路径按数据时效选择**：高频变化（行情、榜单）适合展示期直连 + TTL 缓存；低频或需要 AI 摘要的（资讯、公告）适合采集落库。新垂类的论文/比分若需历史留存或 AI 摘要，走采集落库。
+- **动态列已通用化**：`source_config.display_fields` + `lib/field-defs.ts` 让前端零改动支持新字段，新 source_type 只需在 `field-defs.ts` 补一行 `DEFAULT_FIELDS`。
+
 ## Approaches Considered
 
 ### Approach A: 先加数据源，后改 UI
