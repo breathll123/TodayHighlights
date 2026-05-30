@@ -17,10 +17,10 @@ export function CanvasBlock({ block, onEdit, onDelete }: Props) {
           <span className="text-xs font-medium truncate">{block.title}</span>
         </div>
         <div className="flex items-center gap-1 shrink-0">
-          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={(e) => { e.stopPropagation(); onEdit(); }}>
+          <Button variant="ghost" size="icon" className="h-6 w-6" aria-label={`编辑 ${block.title}`} onClick={(e) => { e.stopPropagation(); onEdit(); }}>
             <Pencil className="w-3 h-3" />
           </Button>
-          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={(e) => { e.stopPropagation(); onDelete(); }}>
+          <Button variant="ghost" size="icon" className="h-6 w-6" aria-label={`删除 ${block.title}`} onClick={(e) => { e.stopPropagation(); onDelete(); }}>
             <Trash2 className="w-3 h-3 text-destructive" />
           </Button>
         </div>
