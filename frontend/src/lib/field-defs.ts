@@ -61,7 +61,7 @@ export const FIELD_DEFS: Record<string, FieldDef[]> = {
 };
 
 const DEFAULT_STOCK = ["title", "percent", "score"];
-const DEFAULT_BOARD = ["title", "percent"];
+const DEFAULT_BOARD = ["title", "percent", "subtitle"];
 
 export const DEFAULT_FIELDS: Record<string, string[]> = {
   topic: ["title", "score"],
