@@ -28,7 +28,7 @@ function cell(key: string, item: Row) {
   switch (key) {
     case "title":
       return item.url ? (
-        <a href={item.url} target="_blank" rel="noopener noreferrer" className="truncate hover:text-primary transition-colors">
+        <a href={item.url} target="_blank" rel="noopener noreferrer" className="block truncate hover:text-primary transition-colors">
           {item.title}
         </a>
       ) : (
@@ -73,7 +73,7 @@ export function CompactTable({ data, fields }: Props) {
       {data.map((item, idx) => (
         <div
           key={item.id ?? idx}
-          className="grid text-sm px-4 py-3 border-b last:border-0 hover:bg-muted/30 transition-colors items-center gap-x-3"
+          className="grid text-sm px-4 py-3 min-h-[44px] border-b last:border-0 hover:bg-muted/30 transition-colors items-center gap-x-3"
           style={{ gridTemplateColumns: cols }}
         >
           {fields.map((f, i) => (

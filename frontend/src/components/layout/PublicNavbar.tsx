@@ -14,8 +14,8 @@ export function PublicNavbar() {
         <div className="flex items-center gap-6">
           <Link to="/" className="text-lg font-bold tracking-tight">每日看点</Link>
           <nav className="flex items-center gap-1">
-            <Link to="/" className={cn("px-3 py-1.5 text-sm rounded-md hover:bg-muted transition-colors", location.pathname === "/" && "bg-muted")}>摘要</Link>
-            <Link to="/topics/stocks" className={cn("px-3 py-1.5 text-sm rounded-md hover:bg-muted transition-colors", location.pathname === "/topics/stocks" && "bg-muted")}>股票</Link>
+            <Link to="/" className={cn("px-3 py-2.5 text-sm rounded-md hover:bg-muted transition-colors", location.pathname === "/" && "bg-muted")}>摘要</Link>
+            <Link to="/topics/stocks" className={cn("px-3 py-2.5 text-sm rounded-md hover:bg-muted transition-colors", location.pathname === "/topics/stocks" && "bg-muted")}>股票</Link>
           </nav>
         </div>
         <Button variant="ghost" size="icon" onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>
