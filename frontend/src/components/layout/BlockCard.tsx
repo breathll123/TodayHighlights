@@ -7,16 +7,13 @@ interface BlockCardProps {
   tags?: string[];
   sourceName?: string;
   isPinned?: boolean;
-  symbols?: string[];
   url?: string;
   className?: string;
 }
 
-export function BlockCard({ title, summary, tags, sourceName, isPinned, symbols, url, className }: BlockCardProps) {
+export function BlockCard({ title, summary, tags, sourceName, isPinned, url, className }: BlockCardProps) {
   const isClickable = !!url;
   const Tag = isClickable ? "a" : "div";
-  const primarySymbol = symbols?.[0];
-
   const card = (
     <Tag
       {...(isClickable ? { href: url, target: "_blank", rel: "noopener noreferrer" } : {})}
@@ -37,11 +34,6 @@ export function BlockCard({ title, summary, tags, sourceName, isPinned, symbols,
             {sourceName && (
               <span className="truncate rounded-full border border-primary/20 bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
                 {sourceName}
-              </span>
-            )}
-            {primarySymbol && (
-              <span className="truncate rounded-full border border-border/70 bg-background/55 px-1.5 py-0.5 text-[10px] font-semibold text-foreground">
-                {primarySymbol}
               </span>
             )}
           </div>

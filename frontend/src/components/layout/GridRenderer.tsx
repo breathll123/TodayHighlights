@@ -100,9 +100,7 @@ export function GridRenderer({ blocks, isLoading }: { blocks: any[]; isLoading: 
                     title={fmtTitle(item)}
                     summary={item.summary ?? item.content ?? ""}
                     tags={item.tags_json ?? item.tags}
-                    score={item.score ?? item.value}
                     isPinned={item.is_pinned}
-                    symbols={item.related_symbols_json ?? item.symbols ?? (item.code ? [item.code] : undefined)}
                     url={item.url}
                   />
                 ))}
