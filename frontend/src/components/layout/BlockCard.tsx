@@ -1,64 +1,68 @@
-import { TrendingUp, Pin } from "lucide-react";
+import { ArrowUpRight, Pin, Tags } from "lucide-react";
 import { motion } from "framer-motion";
 
 interface BlockCardProps {
   title: string;
   summary: string;
   tags?: string[];
-  score?: number;
+  sourceName?: string;
   isPinned?: boolean;
   symbols?: string[];
   url?: string;
   className?: string;
 }
 
-export function BlockCard({ title, summary, tags, score, isPinned, symbols, url, className }: BlockCardProps) {
+export function BlockCard({ title, summary, tags, sourceName, isPinned, symbols, url, className }: BlockCardProps) {
   const isClickable = !!url;
   const Tag = isClickable ? "a" : "div";
+  const primarySymbol = symbols?.[0];
 
   const card = (
     <Tag
       {...(isClickable ? { href: url, target: "_blank", rel: "noopener noreferrer" } : {})}
-      className={`group block bg-card rounded-xl border border-muted-foreground/15 shadow-sm transition-all duration-300 ${isClickable ? "cursor-pointer hover:border-primary/50 hover:shadow-md" : ""} ${isPinned ? "ring-1 ring-orange-500/20" : ""} ${className ?? ""}`}
+      className={`group block overflow-hidden rounded-lg border border-border/75 bg-card/80 shadow-sm transition-all duration-200 ${isClickable ? "cursor-pointer hover:border-primary/45 hover:bg-card hover:shadow-md" : ""} ${isPinned ? "ring-1 ring-accent/35" : ""} ${className ?? ""}`}
     >
       {isPinned && (
-        <div className="absolute inset-0 rounded-xl bg-gradient-to-br from-orange-500/10 via-amber-500/5 to-transparent pointer-events-none" />
+        <div className="absolute inset-0 rounded-lg bg-accent/10 pointer-events-none" />
       )}
-      <div className="relative p-3.5">
-        {/* Header */}
-        <div className="flex items-start justify-between gap-2 mb-1">
-          <div className="flex items-center gap-1.5 min-w-0">
-            {isPinned && <Pin className="w-3 h-3 text-orange-500 shrink-0" />}
-            {symbols?.slice(0, 2).map((s) => (
-              <span key={s} className="text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded font-semibold shrink-0 tracking-tight">
-                {s}
+      <div className="relative p-3">
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <div className="flex min-w-0 items-center gap-1.5">
+            {isPinned && (
+              <span className="inline-flex h-5 items-center gap-1 rounded-full border border-accent/30 bg-accent/12 px-1.5 text-[10px] font-semibold text-accent">
+                <Pin className="h-2.5 w-2.5" aria-hidden="true" />
+                置顶
               </span>
-            ))}
-            <h3 className="font-semibold text-[14px] leading-snug text-foreground/90 truncate">{title}</h3>
-          </div>
-          <div className="flex items-center gap-1.5 shrink-0">
-            {score != null && score > 0 && (
-              <span className="text-[10px] text-muted-foreground flex items-center gap-1 bg-muted/50 px-1.5 py-0.5 rounded-full">
-                <TrendingUp className="w-3 h-3" />
-                {score > 999 ? `${(score / 1000).toFixed(0)}k` : score}
+            )}
+            {sourceName && (
+              <span className="truncate rounded-full border border-primary/20 bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
+                {sourceName}
+              </span>
+            )}
+            {primarySymbol && (
+              <span className="truncate rounded-full border border-border/70 bg-background/55 px-1.5 py-0.5 text-[10px] font-semibold text-foreground">
+                {primarySymbol}
               </span>
             )}
           </div>
+          {isClickable && <ArrowUpRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground transition-colors group-hover:text-primary" aria-hidden="true" />}
         </div>
 
-        {/* Summary */}
-        <p className="text-[12px] text-muted-foreground/80 leading-relaxed line-clamp-2">
+        <h3 className="mb-1.5 text-base font-semibold leading-snug text-foreground">{title}</h3>
+
+        <p className="text-sm leading-5 text-muted-foreground line-clamp-2">
           {summary}
         </p>
 
-        {/* Footer */}
         {tags && tags.length > 0 && (
-          <div className="flex items-center gap-1.5 flex-wrap mt-2">
-            {tags.map((t) => (
-              <span key={t} className="text-[10px] bg-muted/80 text-muted-foreground px-1.5 py-0.5 rounded-full">
+          <div className="mt-2 flex items-center gap-1 overflow-hidden">
+            <Tags className="h-3 w-3 shrink-0 text-muted-foreground" aria-hidden="true" />
+            {tags.slice(0, 2).map((t) => (
+              <span key={t} className="truncate rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
                 {t}
               </span>
             ))}
+            {tags.length > 2 && <span className="text-[10px] text-muted-foreground">+{tags.length - 2}</span>}
           </div>
         )}
       </div>
