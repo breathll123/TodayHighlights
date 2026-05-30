@@ -27,12 +27,19 @@ function fmtNum(n: string | number | undefined): string {
 function cell(key: string, item: Row) {
   switch (key) {
     case "title":
-      return item.url ? (
-        <a href={item.url} target="_blank" rel="noopener noreferrer" className="block truncate hover:text-primary transition-colors">
-          {item.title}
-        </a>
-      ) : (
-        <span className="truncate">{item.title}</span>
+      return (
+        <div className="min-w-0">
+          {item.url ? (
+            <a href={item.url} target="_blank" rel="noopener noreferrer" className="block truncate text-sm font-medium hover:text-primary transition-colors">
+              {item.title}
+            </a>
+          ) : (
+            <span className="block truncate text-sm font-medium">{item.title}</span>
+          )}
+          {item.subtitle && (
+            <span className="block truncate text-xs text-muted-foreground mt-0.5">{item.subtitle}</span>
+          )}
+        </div>
       );
     case "percent":
       return (
@@ -64,8 +71,8 @@ function colAlign(f: FieldDef, i: number): string {
 export function CompactTable({ data, fields }: Props) {
   const cols = gridCols(fields);
   return (
-    <div className="overflow-hidden bg-card/70 backdrop-blur-md border border-white/20 rounded-lg">
-      <div className="grid text-[11px] font-medium text-muted-foreground px-4 py-2.5 border-b bg-muted/30 items-center gap-x-3" style={{ gridTemplateColumns: cols }}>
+    <div className="overflow-hidden">
+      <div className="grid border-b border-border/70 bg-muted/35 px-4 py-2.5 text-[11px] font-semibold uppercase text-muted-foreground items-center gap-x-3" style={{ gridTemplateColumns: cols }}>
         {fields.map((f, i) => (
           <span key={f.key} className={colAlign(f, i)}>{f.label}</span>
         ))}
@@ -73,7 +80,7 @@ export function CompactTable({ data, fields }: Props) {
       {data.map((item, idx) => (
         <div
           key={item.id ?? idx}
-          className="grid text-sm px-4 py-3 min-h-[44px] border-b last:border-0 hover:bg-muted/30 transition-colors items-center gap-x-3"
+          className="grid min-h-[46px] border-b border-border/60 px-4 py-3 text-sm transition-colors last:border-0 hover:bg-muted/30 items-center gap-x-3"
           style={{ gridTemplateColumns: cols }}
         >
           {fields.map((f, i) => (
