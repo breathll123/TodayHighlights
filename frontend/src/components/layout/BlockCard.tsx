@@ -21,7 +21,7 @@ export function BlockCard({ title, summary, tags, sourceName, isPinned, url, cla
     >
       <div className="p-4">
         <div className="flex items-start justify-between gap-3">
-          <h3 className="text-base font-semibold leading-snug text-foreground min-w-0">
+          <h3 className="text-sm font-semibold leading-snug text-foreground min-w-0">
             {isPinned && (
               <Pin className="inline h-3.5 w-3.5 -mt-0.5 mr-1 text-amber-500" aria-hidden="true" />
             )}
@@ -32,7 +32,7 @@ export function BlockCard({ title, summary, tags, sourceName, isPinned, url, cla
           )}
         </div>
 
-        <p className="mt-2 text-sm leading-5 text-muted-foreground line-clamp-2">
+        <p className="mt-2 text-xs leading-5 text-muted-foreground line-clamp-2">
           {summary}
         </p>
 
