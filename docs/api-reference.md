@@ -111,10 +111,19 @@ GET /api/public/pages/topics%2Fstocks/blocks  ← 股票页
 |-------------|-----------|
 | `topic` | `id, title, summary, url, score, is_pinned, tags_json, related_symbols_json, created_at` |
 | `hot_stocks` | `title, summary, url, symbols[], score, percent, current` |
-| `hot_events` | `title, summary, tags[], score` |
+| `hot_events` | `title, summary, url, tags[], score` |
 | `screener` | `title, summary, url, symbols[], score, percent` |
-| `eastmoney_sectors` | `title, summary, url, symbols[], score, percent` |
-| `eastmoney_gainers` | `title, summary, url, symbols[], score, percent, current` |
+| `xueqiu_hot_cn` | `title, summary, url, symbols[], score, percent` (沪深热度) |
+| `xueqiu_hot_hk` | `title, summary, url, symbols[], score, percent` (港股热度) |
+| `xueqiu_hot_us` | `title, summary, url, symbols[], score, percent` (美股热度) |
+| `eastmoney_sectors` | `title, summary, url, symbols[], score, percent` (概念板块) |
+| `eastmoney_industry` | `title, summary, url, symbols[], score, percent` (行业板块，含领涨股) |
+| `eastmoney_indices` | `title, summary, url, symbols[], score, percent, current` (指数行情) |
+| `eastmoney_capital_flow` | `title, summary, url, symbols[], score, percent` (主力资金) |
+| `eastmoney_announcements` | `title, summary, url, symbols[], score` (A股公告) |
+| `eastmoney_longhu` | `title, summary, url, symbols[], score, percent` (龙虎榜，含上榜原因) |
+| `tonghuashun_news` | `title, summary, url, published_at` (同花顺快讯) |
+| `raw` | `id, title, summary, url, published_at, metrics` (原始数据源) |
 
 ---
 
@@ -415,10 +424,11 @@ app_settings (key-value, 独立)
 | GET | `/api/public/highlights` | 公开看点 | - |
 | GET | `/api/public/pages/{route}/blocks` | 页面区块+数据 | - |
 | POST | `/api/admin/login` | 管理员登录 | - |
-| GET | `/api/admin/sources` | 数据源列表 | Bearer |
+| GET | `/api/admin/sources` | 数据源列表 (支持 `?type=raw`) | Bearer |
 | POST | `/api/admin/sources` | 创建数据源 | Bearer |
+| PUT | `/api/admin/sources/{id}` | 编辑数据源 (名称/Cookie/间隔) | Bearer |
 | POST | `/api/admin/sources/{id}/crawl` | 触发爬取 | Bearer |
-| GET | `/api/admin/jobs` | 任务日志 | Bearer |
+| GET | `/api/admin/jobs` | 任务日志 (分页: `?page=1&page_size=20`) | Bearer |
 | PATCH | `/api/admin/highlights/{id}` | 编辑看点 | Bearer |
 | GET | `/api/admin/topics` | 话题列表 | Bearer |
 | POST | `/api/admin/topics` | 创建话题 | Bearer |

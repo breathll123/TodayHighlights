@@ -1,4 +1,3 @@
-import { ExternalLink } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 interface NewsItem {
@@ -59,7 +58,6 @@ export function NewsTimeline({ data }: { data: NewsItem[] }) {
                       className="text-[13px] leading-snug text-foreground/85 hover:text-primary transition-colors line-clamp-2 flex-1"
                     >
                       {item.title}
-                      <ExternalLink className="inline-block w-3 h-3 ml-1 text-muted-foreground/30 group-hover:text-primary/50 transition-colors" />
                     </a>
                   ) : (
                     <span className="text-[13px] leading-snug text-foreground/85 line-clamp-2 flex-1">

@@ -24,6 +24,24 @@ import {
 } from "@/components/ui/dialog";
 import type { Block } from "@/api/types";
 
+const SORT_OPTIONS_MAP: Record<string, { value: string; label: string }[]> = {
+  topic: [{ value: 'score', label: '热度' }, { value: 'created_at', label: '发布时间' }],
+  raw: [{ value: 'published_at', label: '发布时间' }, { value: 'created_at', label: '入库时间' }],
+  hot_stocks: [{ value: 'score', label: '热度' }, { value: 'percent', label: '涨跌幅' }],
+  hot_events: [{ value: 'score', label: '热度' }],
+  screener: [{ value: 'percent', label: '涨跌幅' }, { value: 'turnover_rate', label: '换手率' }],
+  eastmoney_sectors: [{ value: 'percent', label: '涨跌幅' }],
+  eastmoney_industry: [{ value: 'percent', label: '涨跌幅' }],
+  eastmoney_indices: [{ value: 'percent', label: '涨跌幅' }],
+  xueqiu_hot_cn: [{ value: 'score', label: '热度' }, { value: 'percent', label: '涨跌幅' }],
+  xueqiu_hot_hk: [{ value: 'score', label: '热度' }, { value: 'percent', label: '涨跌幅' }],
+  xueqiu_hot_us: [{ value: 'score', label: '热度' }, { value: 'percent', label: '涨跌幅' }],
+  eastmoney_longhu: [{ value: 'net_amount', label: '净买入额' }, { value: 'buy_amount', label: '总成交额' }],
+  eastmoney_capital_flow: [{ value: 'inflow', label: '主力净流入' }, { value: 'percent', label: '涨跌幅' }],
+  eastmoney_announcements: [{ value: 'notice_date', label: '公告日期' }],
+  tonghuashun_news: [{ value: 'published_at', label: '发布时间' }],
+};
+
 interface Props {
   open: boolean;
   block: Block | null;
@@ -126,6 +144,9 @@ export function BlockEditor({ open, block, onSave, onClose }: Props) {
                     <SelectItem value="hot_stocks">热股榜</SelectItem>
                     <SelectItem value="hot_events">热门话题</SelectItem>
                     <SelectItem value="screener">涨跌幅榜</SelectItem>
+                    <SelectItem value="xueqiu_hot_cn">沪深热度榜</SelectItem>
+                    <SelectItem value="xueqiu_hot_hk">港股热度榜</SelectItem>
+                    <SelectItem value="xueqiu_hot_us">美股热度榜</SelectItem>
                   </SelectGroup>
                   <SelectSeparator />
                   <SelectGroup>
@@ -133,8 +154,7 @@ export function BlockEditor({ open, block, onSave, onClose }: Props) {
                     <SelectItem value="eastmoney_sectors">概念板块</SelectItem>
                     <SelectItem value="eastmoney_industry">行业板块</SelectItem>
                     <SelectItem value="eastmoney_indices">指数行情</SelectItem>
-                    <SelectItem value="eastmoney_gainers">A股涨幅榜</SelectItem>
-                    <SelectItem value="eastmoney_losers">A股跌幅榜</SelectItem>
+                    <SelectItem value="eastmoney_longhu">龙虎榜</SelectItem>
                     <SelectItem value="eastmoney_capital_flow">主力资金流入</SelectItem>
                     <SelectItem value="eastmoney_announcements">A股公告</SelectItem>
                   </SelectGroup>
@@ -201,11 +221,12 @@ export function BlockEditor({ open, block, onSave, onClose }: Props) {
             </div>
             <div className="space-y-2">
               <Label>排序方式</Label>
-              <Select value={form.sort_by} onValueChange={(v) => setForm({ ...form, sort_by: v as Block["sort_by"] })}>
+              <Select value={form.sort_by} onValueChange={(v) => setForm({ ...form, sort_by: v })}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="score">热度</SelectItem>
-                  <SelectItem value="created_at">时间</SelectItem>
+                  {(SORT_OPTIONS_MAP[form.source_type] || SORT_OPTIONS_MAP.topic).map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>

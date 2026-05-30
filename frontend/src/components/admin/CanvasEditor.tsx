@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback } from "react";
 import GridLayout from "react-grid-layout";
 import type { Layout, LayoutItem } from "react-grid-layout";
 import { noCompactor } from "react-grid-layout";
@@ -16,8 +16,6 @@ interface Props {
 }
 
 export function CanvasEditor({ blocks, onLayoutChange, onEdit, onDelete }: Props) {
-  const [resetKey, setResetKey] = useState(0);
-
   const layout: Layout = blocks.map((b) => ({
     i: String(b.id),
     x: b.grid_x,
@@ -30,32 +28,22 @@ export function CanvasEditor({ blocks, onLayoutChange, onEdit, onDelete }: Props
     maxH: 6,
   }));
 
-  const handleCollision = useCallback(() => {
-    toast.error("该位置已有其他组件");
-    setResetKey((k) => k + 1);
-  }, []);
-
   const handleDragStop = useCallback(
     (_layout: Layout, _oldItem: LayoutItem | null, newItem: LayoutItem | null) => {
       if (!newItem) return;
       const moved = blocks.find((b) => String(b.id) === newItem.i);
       if (!moved) return;
-      const candidate: Block = {
-        ...moved,
-        grid_x: newItem.x,
-        grid_y: newItem.y,
-        col_span: newItem.w,
-        row_span: newItem.h,
-      };
+      const candidate: Block = { ...moved, grid_x: newItem.x, grid_y: newItem.y, col_span: newItem.w, row_span: newItem.h };
       const others = blocks.filter((b) => String(b.id) !== newItem.i);
       if (others.some((b) => hasCollision(candidate, b))) {
-        handleCollision();
+        toast.error("该位置已有其他组件");
+        onLayoutChange([...blocks]);
         return;
       }
       const updated = blocks.map((b) => (String(b.id) === newItem.i ? candidate : b));
       onLayoutChange(updated);
     },
-    [blocks, onLayoutChange, handleCollision]
+    [blocks, onLayoutChange],
   );
 
   const handleResizeStop = useCallback(
@@ -64,38 +52,30 @@ export function CanvasEditor({ blocks, onLayoutChange, onEdit, onDelete }: Props
       const { col, row } = clampSize(newItem.w, newItem.h);
       if (newItem.x + col > 4) {
         toast.error("方块不能超出画布边界");
-        setResetKey((k) => k + 1);
+        onLayoutChange([...blocks]);
         return;
       }
       const resized = blocks.find((b) => String(b.id) === newItem.i);
       if (!resized) return;
-      const candidate: Block = {
-        ...resized,
-        grid_x: newItem.x,
-        grid_y: newItem.y,
-        col_span: col,
-        row_span: row,
-      };
+      const candidate: Block = { ...resized, grid_x: newItem.x, grid_y: newItem.y, col_span: col, row_span: row };
       const others = blocks.filter((b) => String(b.id) !== newItem.i);
       if (others.some((b) => hasCollision(candidate, b))) {
-        handleCollision();
+        toast.error("该位置已有其他组件");
+        onLayoutChange([...blocks]);
         return;
       }
-      const updated = blocks.map((b) =>
-        String(b.id) === newItem.i ? candidate : b
-      );
+      const updated = blocks.map((b) => (String(b.id) === newItem.i ? candidate : b));
       onLayoutChange(updated);
     },
-    [blocks, onLayoutChange, handleCollision]
+    [blocks, onLayoutChange],
   );
 
   return (
     <GridLayout
-      key={resetKey}
       className="layout"
       layout={layout}
       width={800}
-      gridConfig={{ cols: 4, rowHeight: 160, margin: [12, 12] }}
+      gridConfig={{ cols: 4, rowHeight: 140, margin: [12, 12] }}
       dragConfig={{ handle: ".drag-handle" }}
       resizeConfig={{ enabled: true }}
       compactor={noCompactor}
@@ -110,3 +90,4 @@ export function CanvasEditor({ blocks, onLayoutChange, onEdit, onDelete }: Props
     </GridLayout>
   );
 }
+

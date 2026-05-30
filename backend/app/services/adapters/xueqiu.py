@@ -1,3 +1,5 @@
+import base64
+
 import httpx
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -29,8 +31,9 @@ def fetch_hot_events(cookie: str, limit: int) -> list[dict]:
             {
                 "title": item.get("tag", "").strip("#"),
                 "summary": item.get("content", ""),
+                "url": f"https://xueqiu.com/hashtag/{base64.urlsafe_b64encode(item.get('tag', '').encode()).decode().rstrip('=')}",
                 "tags": [item.get("tag", "").strip("#")],
-                "score": item.get("status_count", 0),
+                "score": item.get("status_count", 0) + (100 if item.get("hot") else 0),
                 "source": "hot_events",
             }
             for item in items
@@ -57,6 +60,47 @@ def fetch_hot_stocks(cookie: str, config: dict, limit: int) -> list[dict]:
                 "symbols": [item.get("code", "")],
                 "score": int(item.get("value", 0)),
                 "source": "hot_stocks",
+                "percent": item.get("percent", 0),
+                "current": item.get("current", 0),
+                "url": f"https://xueqiu.com/S/{item.get('symbol', item.get('code', ''))}",
+            }
+            for item in items
+        ]
+    except Exception:
+        return []
+
+
+@ttl_cache(30)
+def fetch_hot_stocks_cn(cookie: str, config: dict, limit: int) -> list[dict]:
+    return _fetch_hot_stocks_typed(cookie, 12, "xueqiu_hot_cn", limit)
+
+
+@ttl_cache(30)
+def fetch_hot_stocks_hk(cookie: str, config: dict, limit: int) -> list[dict]:
+    return _fetch_hot_stocks_typed(cookie, 13, "xueqiu_hot_hk", limit)
+
+
+@ttl_cache(30)
+def fetch_hot_stocks_us(cookie: str, config: dict, limit: int) -> list[dict]:
+    return _fetch_hot_stocks_typed(cookie, 11, "xueqiu_hot_us", limit)
+
+
+def _fetch_hot_stocks_typed(cookie: str, stock_type: int, source: str, limit: int) -> list[dict]:
+    try:
+        resp = httpx.get(
+            f"https://stock.xueqiu.com/v5/stock/hot_stock/list.json?type={stock_type}&size={limit}",
+            headers={"Cookie": cookie, "User-Agent": "Mozilla/5.0 DailyHighlights/0.1", "Accept": "application/json", "Referer": "https://xueqiu.com/"},
+            timeout=15,
+        )
+        resp.raise_for_status()
+        items = resp.json().get("data", {}).get("items", [])
+        return [
+            {
+                "title": f"{item.get('name', '')}",
+                "summary": f"{item.get('code', '')} 热度{int(item.get('value', 0))} 变动{item.get('increment', 0)}",
+                "symbols": [item.get("code", "")],
+                "score": int(item.get("value", 0)),
+                "source": source,
                 "percent": item.get("percent", 0),
                 "current": item.get("current", 0),
                 "url": f"https://xueqiu.com/S/{item.get('symbol', item.get('code', ''))}",

@@ -19,7 +19,7 @@ function PublicLayout() {
   return (
     <div className="min-h-screen bg-background">
       <PublicNavbar />
-      <main className="px-8 py-8">
+      <main className="px-8 py-8 max-w-full overflow-x-hidden">
         <Outlet />
       </main>
     </div>

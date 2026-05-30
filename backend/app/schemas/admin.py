@@ -14,6 +14,16 @@ class SourceCreate(BaseModel):
     crawl_interval_minutes: int = 60
 
 
+class SourceUpdate(BaseModel):
+    topic_id: int | None = None
+    site: str | None = None
+    name: str | None = None
+    entry_url: str | None = None
+    cookie: str | None = None
+    enabled: bool | None = None
+    crawl_interval_minutes: int | None = None
+
+
 class SourceRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

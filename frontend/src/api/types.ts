@@ -61,11 +61,11 @@ export interface Block {
   page_route: string;
   title: string;
   sort_order: number;
-  source_type: "topic" | "raw" | "hot_stocks" | "hot_events" | "screener" | "eastmoney_sectors" | "eastmoney_gainers" | "eastmoney_losers" | "eastmoney_industry" | "eastmoney_indices" | "eastmoney_capital_flow" | "eastmoney_announcements" | "tonghuashun_news";
+  source_type: "topic" | "raw" | "hot_stocks" | "hot_events" | "xueqiu_hot_cn" | "xueqiu_hot_hk" | "xueqiu_hot_us" | "screener" | "eastmoney_sectors" | "eastmoney_longhu" | "eastmoney_industry" | "eastmoney_indices" | "eastmoney_capital_flow" | "eastmoney_announcements" | "tonghuashun_news";
   source_config: Record<string, unknown>;
   display_style: "card" | "list" | "timeline";
   display_count: number;
-  sort_by: "score" | "created_at";
+  sort_by: string;
   enabled: boolean;
   created_at: string;
   updated_at: string;

@@ -107,8 +107,8 @@ export function AdminLayoutPage() {
   if (isLoading) return <div className="p-6 text-muted-foreground">加载中...</div>;
 
   return (
-    <div className="flex h-[calc(100vh-3.5rem)]">
-      <div className="flex-1 overflow-auto p-6">
+    <div className="flex h-[calc(100vh-3.5rem)] overflow-hidden">
+      <div className="flex-1 overflow-auto p-6 max-w-[calc(100vw-20rem)]">
         <div className="flex items-center justify-between mb-6">
           <Tabs value={activePage} onValueChange={setActivePage}>
             <TabsList>

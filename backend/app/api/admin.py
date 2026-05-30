@@ -11,7 +11,7 @@ from app.core.config import settings
 from app.core.crypto import CryptoService
 from app.core.database import get_session
 from app.models.entities import CrawlJob, Highlight, PageBlock, Source, Topic
-from app.schemas.admin import BlockCreate, BlockRead, BlockUpdate, HighlightUpdate, ReorderRequest, SourceCreate, SourceRead
+from app.schemas.admin import BlockCreate, BlockRead, BlockUpdate, HighlightUpdate, ReorderRequest, SourceCreate, SourceRead, SourceUpdate
 from app.services.content import update_highlight_review
 from app.services.jobs import run_crawl_job
 from app.services.settings import get_plain_setting, get_secret_setting, set_plain_setting, set_secret_setting
@@ -58,6 +58,37 @@ def create_source(payload: SourceCreate, session: Session = Depends(get_session)
         crawl_interval_minutes=payload.crawl_interval_minutes,
     )
     session.add(source)
+    session.commit()
+    session.refresh(source)
+    return {
+        "id": source.id,
+        "topic_id": source.topic_id,
+        "site": source.site,
+        "name": source.name,
+        "entry_url": source.entry_url,
+        "enabled": source.enabled,
+        "crawl_interval_minutes": source.crawl_interval_minutes,
+        "last_crawled_at": source.last_crawled_at,
+        "has_cookie": bool(source.cookie_encrypted),
+    }
+
+
+@router.put("/sources/{source_id}", response_model=SourceRead)
+def update_source(source_id: int, payload: SourceUpdate, session: Session = Depends(get_session)) -> dict:
+    source = session.get(Source, source_id)
+    if source is None:
+        raise HTTPException(status_code=404, detail="Source not found")
+    crypto = CryptoService(settings.app_secret_key)
+    if payload.name is not None:
+        source.name = payload.name
+    if payload.entry_url is not None:
+        source.entry_url = payload.entry_url
+    if payload.cookie is not None and payload.cookie != "":
+        source.cookie_encrypted = crypto.encrypt(payload.cookie)
+    if payload.enabled is not None:
+        source.enabled = payload.enabled
+    if payload.crawl_interval_minutes is not None:
+        source.crawl_interval_minutes = payload.crawl_interval_minutes
     session.commit()
     session.refresh(source)
     return {

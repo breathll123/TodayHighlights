@@ -1,35 +1,48 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { fetchSources, createSource, triggerCrawl } from "../api/client";
+import { fetchSources, createSource, updateSource, triggerCrawl } from "../api/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { toast } from "sonner";
+import { Pencil } from "lucide-react";
+
+const defaultForm = { topic_id: 1, site: "xueqiu", name: "", entry_url: "", cookie: "", enabled: true, crawl_interval_minutes: 60 };
 
 export function AdminSourcesPage() {
   const queryClient = useQueryClient();
   const { data: sources, isLoading } = useQuery({ queryKey: ["sources"], queryFn: fetchSources });
 
-  const [form, setForm] = useState({
-    topic_id: 1,
-    site: "xueqiu",
-    name: "",
-    entry_url: "",
-    cookie: "",
-    enabled: true,
-    crawl_interval_minutes: 60,
-  });
+  const [form, setForm] = useState(defaultForm);
+  const [editSource, setEditSource] = useState<{ id: number; name: string; entry_url: string; enabled: boolean; crawl_interval_minutes: number } | null>(null);
+  const [editCookie, setEditCookie] = useState("");
 
   const createMut = useMutation({
     mutationFn: createSource,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["sources"] }),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["sources"] }); setForm(defaultForm); toast.success("数据源已添加"); },
+    onError: (err: Error) => toast.error(`添加失败: ${err.message}`),
+  });
+
+  const updateMut = useMutation({
+    mutationFn: ({ id, data }: { id: number; data: Parameters<typeof updateSource>[1] }) => updateSource(id, data),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["sources"] }); setEditSource(null); toast.success("已更新"); },
+    onError: (err: Error) => toast.error(`更新失败: ${err.message}`),
   });
 
   const crawlMut = useMutation({
     mutationFn: triggerCrawl,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["jobs"] }),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["jobs"] }); toast.success("爬取已触发"); },
+    onError: (err: Error) => toast.error(`爬取失败: ${err.message}`),
   });
 
   if (isLoading) return <div className="text-center py-12 text-muted-foreground">加载中...</div>;
+
+  const openEdit = (s: { id: number; name: string; entry_url: string; enabled: boolean; crawl_interval_minutes: number }) => {
+    setEditSource(s);
+    setEditCookie("");
+  };
 
   return (
     <div className="space-y-6">
@@ -39,7 +52,7 @@ export function AdminSourcesPage() {
         className="space-y-4 bg-card border rounded-xl p-6"
         onSubmit={(e) => {
           e.preventDefault();
-          createMut.mutate(form, { onSuccess: () => setForm((f) => ({ ...f, name: "", entry_url: "", cookie: "" })) });
+          createMut.mutate(form);
         }}
       >
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -92,7 +105,10 @@ export function AdminSourcesPage() {
                     <td className="px-4 py-3">{s.has_cookie ? "已配置" : "未配置"}</td>
                     <td className="px-4 py-3">{s.enabled ? "启用" : "禁用"}</td>
                     <td className="px-4 py-3">{s.crawl_interval_minutes}分</td>
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-3 flex items-center gap-2">
+                      <Button size="sm" variant="outline" onClick={() => openEdit(s)}>
+                        <Pencil className="w-3 h-3 mr-1" />编辑
+                      </Button>
                       <Button size="sm" onClick={() => crawlMut.mutate(s.id)} disabled={crawlMut.isPending}>
                         立即爬取
                       </Button>
@@ -104,6 +120,58 @@ export function AdminSourcesPage() {
           </div>
         </CardContent>
       </Card>
+
+      <Dialog open={editSource !== null} onOpenChange={() => setEditSource(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>编辑数据源 — {editSource?.name}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label>Cookie（留空不修改）</Label>
+              <Input
+                value={editCookie}
+                onChange={(e) => setEditCookie(e.target.value)}
+                placeholder="粘贴新的 Cookie..."
+              />
+              <p className="text-xs text-muted-foreground">粘贴浏览器 Cookie 后点击保存即可更新</p>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>爬取间隔(分)</Label>
+                <Input
+                  type="number"
+                  value={editSource?.crawl_interval_minutes ?? 60}
+                  onChange={(e) => setEditSource((s) => s ? { ...s, crawl_interval_minutes: +e.target.value } : null)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>名称</Label>
+                <Input
+                  value={editSource?.name ?? ""}
+                  onChange={(e) => setEditSource((s) => s ? { ...s, name: e.target.value } : null)}
+                />
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditSource(null)}>取消</Button>
+            <Button
+              onClick={() => {
+                if (!editSource) return;
+                const data: Record<string, unknown> = {};
+                if (editCookie) data.cookie = editCookie;
+                if (editSource.name) data.name = editSource.name;
+                data.crawl_interval_minutes = editSource.crawl_interval_minutes;
+                updateMut.mutate({ id: editSource.id, data });
+              }}
+              disabled={updateMut.isPending}
+            >
+              {updateMut.isPending ? "保存中..." : "保存"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

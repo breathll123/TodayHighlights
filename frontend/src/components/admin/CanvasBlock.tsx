@@ -1,6 +1,5 @@
 import { GripHorizontal, Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import type { Block } from "@/api/types";
 
 interface Props {
@@ -18,7 +17,6 @@ export function CanvasBlock({ block, onEdit, onDelete }: Props) {
           <span className="text-xs font-medium truncate">{block.title}</span>
         </div>
         <div className="flex items-center gap-1 shrink-0">
-          <Badge variant="secondary" className="text-[10px] px-1.5">{block.source_type}</Badge>
           <Button variant="ghost" size="icon" className="h-6 w-6" onClick={(e) => { e.stopPropagation(); onEdit(); }}>
             <Pencil className="w-3 h-3" />
           </Button>

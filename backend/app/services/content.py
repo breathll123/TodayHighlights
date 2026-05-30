@@ -40,7 +40,7 @@ def save_raw_items(session: Session, source_id: int, drafts: list[RawItemDraft])
         )
         session.add(item)
         saved.append(item)
-    session.flush()
+        session.flush()
     return saved
 
 

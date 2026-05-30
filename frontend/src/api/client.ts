@@ -55,6 +55,10 @@ export function createSource(data: {
   return api.post<Source>("/api/admin/sources", data).then((r) => r.data);
 }
 
+export function updateSource(sourceId: number, data: { name?: string; entry_url?: string; cookie?: string; enabled?: boolean; crawl_interval_minutes?: number }): Promise<Source> {
+  return api.put<Source>(`/api/admin/sources/${sourceId}`, data).then((r) => r.data);
+}
+
 export function triggerCrawl(sourceId: number): Promise<{ id: number; status: string }> {
   return api.post(`/api/admin/sources/${sourceId}/crawl`, {}).then((r) => r.data);
 }

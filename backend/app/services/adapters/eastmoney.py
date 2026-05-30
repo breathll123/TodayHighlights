@@ -42,57 +42,36 @@ def fetch_sectors(config: dict, limit: int) -> list[dict]:
 
 
 @ttl_cache(30)
-def fetch_gainers(config: dict, limit: int) -> list[dict]:
+def fetch_longhu(config: dict, limit: int) -> list[dict]:
     try:
         resp = _http.get(
             "https://push2delay.eastmoney.com/api/qt/clist/get",
-            params={"pn": 1, "pz": limit, "po": 1, "np": 1, "fltt": 2, "invt": 2, "fid": "f3",
+            params={"pn": 1, "pz": limit, "po": 1, "np": 1, "fltt": 2, "invt": 2, "fid": "f178",
                     "fs": "m:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23",
-                    "fields": "f2,f3,f4,f12,f14,f20"},
+                    "fields": "f2,f3,f8,f12,f14,f152,f174,f175,f176,f177,f178,f179"},
         )
         resp.raise_for_status()
         items = resp.json().get("data", {}).get("diff", [])
-        return [
-            {
+        result = []
+        for item in items:
+            if item.get("f152") != 2:
+                continue
+            total_amt = abs(item.get("f178", 0) or 0) / 1e8
+            buy_amt = abs(item.get("f174", 0) or 0) / 1e8
+            sell_amt = abs(item.get("f176", 0) or 0) / 1e8
+            result.append({
                 "title": item.get("f14", ""),
-                "summary": f"{item.get('f12', '')} 价格 {item.get('f2', 0):.2f} 市值 {item.get('f20', 0) / 1e8:.0f}亿",
+                "summary": f"成交{total_amt:.1f}亿 买入{buy_amt:.1f}亿 卖出{sell_amt:.1f}亿",
                 "symbols": [item.get("f12", "")],
-                "score": int(abs(item.get("f3", 0)) * 100),
-                "source": "eastmoney_gainers",
+                "score": int(total_amt),
+                "source": "eastmoney_longhu",
                 "percent": item.get("f3", 0),
                 "current": item.get("f2", 0),
                 "url": f"https://quote.eastmoney.com/{item.get('f12', '')}.html",
-            }
-            for item in items
-        ]
-    except Exception:
-        return []
-
-
-@ttl_cache(30)
-def fetch_losers(config: dict, limit: int) -> list[dict]:
-    try:
-        resp = _http.get(
-            "https://push2delay.eastmoney.com/api/qt/clist/get",
-            params={"pn": 1, "pz": limit, "po": 0, "np": 1, "fltt": 2, "invt": 2, "fid": "f3",
-                    "fs": "m:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23",
-                    "fields": "f2,f3,f4,f12,f14,f20"},
-        )
-        resp.raise_for_status()
-        items = resp.json().get("data", {}).get("diff", [])
-        return [
-            {
-                "title": item.get("f14", ""),
-                "summary": f"{item.get('f12', '')} 价格 {item.get('f2', 0):.2f} 跌幅 {abs(item.get('f3', 0)):.2f}%",
-                "symbols": [item.get("f12", "")],
-                "score": int(abs(item.get("f3", 0)) * 100),
-                "source": "eastmoney_losers",
-                "percent": item.get("f3", 0),
-                "current": item.get("f2", 0),
-                "url": f"https://quote.eastmoney.com/{item.get('f12', '')}.html",
-            }
-            for item in items
-        ]
+            })
+            if len(result) >= limit:
+                break
+        return result
     except Exception:
         return []
 
@@ -106,19 +85,42 @@ def fetch_industry(config: dict, limit: int) -> list[dict]:
                     "fs": "m:90+t:2", "fields": "f2,f3,f4,f12,f14"},
         )
         resp.raise_for_status()
-        items = resp.json().get("data", {}).get("diff", [])
-        return [
-            {
+        boards = resp.json().get("data", {}).get("diff", [])
+
+        # Fetch top stock from each board
+        top_stocks: dict[str, dict] = {}
+        for b in boards[:limit]:
+            code = b.get("f12", "")
+            try:
+                sr = _http.get(
+                    "https://push2delay.eastmoney.com/api/qt/clist/get",
+                    params={"pn": 1, "pz": 1, "po": 1, "np": 1, "fltt": 2, "invt": 2, "fid": "f3",
+                            "fs": f"b:{code}", "fields": "f2,f3,f12,f14"},
+                )
+                sr.raise_for_status()
+                items = sr.json().get("data", {}).get("diff", [])
+                if items:
+                    top_stocks[code] = items[0]
+            except Exception:
+                pass
+
+        result = []
+        for item in boards:
+            code = item.get("f12", "")
+            ts = top_stocks.get(code)
+            summary = f"指数 {item.get('f2', 0):.2f} 涨跌幅 {item.get('f3', 0):.2f}%"
+            if ts:
+                summary += f"  |  {ts['f14']} {ts['f3']:+.2f}%"
+            result.append({
                 "title": item.get("f14", ""),
-                "summary": f"指数 {item.get('f2', 0):.2f} 涨跌幅 {item.get('f3', 0):.2f}%",
-                "symbols": [item.get("f12", "")],
+                "summary": summary,
+                "symbols": [code],
                 "score": int(abs(item.get("f3", 0)) * 100),
                 "source": "eastmoney_industry",
                 "percent": item.get("f3", 0),
-                "url": f"https://quote.eastmoney.com/bk/90.{item.get('f12', '')}.html",
-            }
-            for item in items
-        ]
+                "url": f"https://quote.eastmoney.com/bk/90.{code}.html",
+            })
+        return result
     except Exception:
         return []
 

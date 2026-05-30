@@ -2,10 +2,13 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
 from app.models.entities import Highlight, PageBlock, RawItem, Source
-from app.services.adapters.xueqiu import get_cookie, fetch_hot_events, fetch_hot_stocks, fetch_screener
+from app.services.adapters.xueqiu import (
+    fetch_hot_events, fetch_hot_stocks, fetch_hot_stocks_cn,
+    fetch_hot_stocks_hk, fetch_hot_stocks_us, fetch_screener, get_cookie,
+)
 from app.services.adapters.eastmoney import (
-    fetch_announcements, fetch_capital_flow, fetch_gainers,
-    fetch_indices, fetch_industry, fetch_losers, fetch_sectors,
+    fetch_announcements, fetch_capital_flow,
+    fetch_indices, fetch_industry, fetch_sectors,
 )
 def resolve_block_data(session: Session, block: PageBlock) -> list[dict]:
     source_type = block.source_type
@@ -14,11 +17,12 @@ def resolve_block_data(session: Session, block: PageBlock) -> list[dict]:
 
     if source_type == "topic":
         topic_id = config.get("topic_id", 1)
+        order_col = Highlight.score.desc() if block.sort_by != "created_at" else Highlight.created_at.desc()
         stmt = (
             select(Highlight)
             .options(joinedload(Highlight.raw_item))
             .where(Highlight.topic_id == topic_id, Highlight.is_hidden.is_(False))
-            .order_by(Highlight.is_pinned.desc(), Highlight.score.desc(), Highlight.created_at.desc())
+            .order_by(Highlight.is_pinned.desc(), order_col, Highlight.created_at.desc())
             .limit(limit)
         )
         highlights = session.scalars(stmt).unique().all()
@@ -41,10 +45,11 @@ def resolve_block_data(session: Session, block: PageBlock) -> list[dict]:
         source_id = config.get("source_id")
         if source_id is None:
             return []
+        order_col = RawItem.published_at.desc() if block.sort_by != "created_at" else RawItem.created_at.desc()
         stmt = (
             select(RawItem)
             .where(RawItem.source_id == source_id)
-            .order_by(RawItem.published_at.desc(), RawItem.created_at.desc())
+            .order_by(order_col, RawItem.created_at.desc())
             .limit(limit)
         )
         raw_items = session.scalars(stmt).all()
@@ -67,15 +72,41 @@ def resolve_block_data(session: Session, block: PageBlock) -> list[dict]:
         return fetch_hot_events(cookie, limit)
     if source_type == "hot_stocks":
         return fetch_hot_stocks(cookie, config, limit)
+    if source_type == "xueqiu_hot_cn":
+        return fetch_hot_stocks_cn(cookie, config, limit)
+    if source_type == "xueqiu_hot_hk":
+        return fetch_hot_stocks_hk(cookie, config, limit)
+    if source_type == "xueqiu_hot_us":
+        return fetch_hot_stocks_us(cookie, config, limit)
     if source_type == "screener":
         return fetch_screener(cookie, config, limit)
 
     if source_type == "eastmoney_sectors":
         return fetch_sectors(config, limit)
-    if source_type == "eastmoney_gainers":
-        return fetch_gainers(config, limit)
-    if source_type == "eastmoney_losers":
-        return fetch_losers(config, limit)
+    if source_type == "eastmoney_longhu":
+        longhu_source_id = session.scalar(select(Source.id).where(Source.entry_url == "eastmoney://longhu").limit(1))
+        if longhu_source_id is None:
+            return []
+        stmt = (
+            select(RawItem)
+            .where(RawItem.source_id == longhu_source_id)
+            .order_by(RawItem.published_at.desc(), RawItem.created_at.desc())
+            .limit(limit)
+        )
+        longhu_items = session.scalars(stmt).all()
+        return [
+            {
+                "id": ri.id,
+                "title": ri.title,
+                "summary": ri.body,
+                "url": ri.url,
+                "symbols": [ri.metrics_json.get("symbol", "")] if ri.metrics_json else [],
+                "score": int(abs(ri.metrics_json.get("net_buy", 0) or 0)) if ri.metrics_json else 0,
+                "source_type": "eastmoney_longhu",
+                "percent": ri.metrics_json.get("percent", 0) if ri.metrics_json else 0,
+            }
+            for ri in longhu_items
+        ]
     if source_type == "eastmoney_industry":
         return fetch_industry(config, limit)
     if source_type == "eastmoney_indices":
@@ -133,6 +164,7 @@ def get_page_blocks(session: Session, route: str) -> list[dict]:
             "display_style": block.display_style,
             "display_count": block.display_count,
             "source_type": block.source_type,
+            "source_config": block.source_config or {},
             "col_span": block.col_span,
             "row_span": block.row_span,
             "grid_x": block.grid_x,

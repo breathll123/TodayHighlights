@@ -200,21 +200,53 @@ GET https://stock.xueqiu.com/v5/stock/quote.json
 | # | 端点 | 用途 | 格式 | 需Cookie | 已适配 |
 |---|------|------|------|----------|--------|
 | 1 | `v4/statuses/public_timeline_by_category.json` | 推荐 Feed | 嵌套JSON | 是 | ✅ |
-| 2 | `statuses/search.json` | 关键词搜索 | 扁平JSON | 是 | ❌ |
-| 3 | `hot_event/list.json` | 热门话题 | 扁平JSON | 是 | ❌ |
-| 4 | `stock.xueqiu.com/v5/stock/hot_stock/list.json` | 热股榜 | 扁平JSON | 是 | ❌ |
-| 5 | `service/screener/quote/list` | 活跃股票 | 扁平JSON | 是 | ❌ |
-| 6 | `stock.xueqiu.com/v5/stock/quote.json` | 个股行情 | 扁平JSON | 是 | ❌ |
+| 2 | `hot_event/list.json` | 热门话题 | 扁平JSON | 是 | ✅ |
+| 3 | `stock.xueqiu.com/v5/stock/hot_stock/list.json` | 热股榜 | 扁平JSON | 是 | ✅ |
+| 4 | `service/screener/quote/list` | 活跃股票 | 扁平JSON | 是 | ✅ |
+| 5 | `stock.xueqiu.com/v5/stock/quote.json` | 个股行情 | 扁平JSON | 是 | ❌ |
+
+---
+
+### 端点 6：龙虎榜 ✅
+
+```
+GET https://datacenter-web.eastmoney.com/api/data/v1/get
+```
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `reportName` | str | `RPT_ORGANIZATION_TRADE_DETAILSNEW` (个股汇总) 或 `RPT_DAILYBILLBOARD_PROFILE` (日榜单) |
+| `columns` | str | `ALL` |
+| `pageNumber` | int | 页码 |
+| `pageSize` | int | 每页条数 |
+| `sortTypes` | str | `-1`=降序, `1`=升序 |
+| `sortColumns` | str | `TRADE_DATE` (按日期) 或 `NET_BUY_AMT` (按净买额) |
+| `source` | str | `WEB` |
+| `client` | str | `WEB` |
+
+**认证方式:** Playwright 无头浏览器访问 `data.eastmoney.com/stock/lhb.html` 获取 Session Cookie（无需登录），Cookie 缓存 30 分钟。
+
+**关键字段（RPT_ORGANIZATION_TRADE_DETAILSNEW）：**
+
+| 字段 | 说明 |
+|------|------|
+| `SECURITY_CODE` | 股票代码 |
+| `SECURITY_NAME_ABBR` | 股票名称 |
+| `CHANGE_RATE` | 涨跌幅% |
+| `NET_BUY_AMT` | 净买额（元） |
+| `BUY_AMT` | 买入额（元） |
+| `SELL_AMT` | 卖出额（元） |
+| `EXPLANATION` | 上榜原因（如"日涨幅偏离值达到7%的前五只证券"） |
+| `TRADE_DATE` | 交易日期 |
+| `TURNOVERRATE` | 换手率% |
 
 ### 已废弃端点
 
 | 端点 | 状态 |
 |------|------|
-| 热帖 `hot.json` / `hot/list/v2-v3.json` / `hot/page/1.json` | 404 |
+| `statuses/search.json` | 302 重定向（已废弃，可 follow_redirects） |
+| 热帖 `hot.json` / `hot/list/v2-v3.json` | 404 |
 | `friends_timeline.json` | 404 |
-| `topic/list.json` / `search/topic.json` / `topic/hot/list.json` | 404 |
-| `stock/hot_stock.json`（无 type 参数） | Tomcat 报错 |
-| `stock/portfolio/stocks.json` | 400（需额外认证） |
 | `v4/statuses/recommend.json` | 未测试 |
 | `industry/list` | 404 |
 
