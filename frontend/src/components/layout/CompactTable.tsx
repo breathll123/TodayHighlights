@@ -37,15 +37,15 @@ function cell(key: string, item: Row) {
     case "percent":
       return (
         <span className={`text-xs font-semibold tabular-nums ${item.percent != null ? (item.percent > 0 ? "text-red-500" : "text-green-500") : "text-muted-foreground"}`}>
-          {item.percent != null ? `${item.percent > 0 ? "+" : ""}${item.percent.toFixed(2)}%` : "-"}
+          {item.percent != null ? `${item.percent > 0 ? "+" : ""}${item.percent.toFixed(2)}%` : "—"}
         </span>
       );
     case "score":
       return <span className="text-xs text-muted-foreground tabular-nums">{fmtNum(item.score)}</span>;
     case "subtitle":
-      return <span className="text-xs text-muted-foreground truncate">{item.subtitle || "-"}</span>;
+      return <span className="text-xs text-muted-foreground truncate">{item.subtitle || "—"}</span>;
     default:
-      return <span className="text-xs text-muted-foreground truncate">-</span>;
+      return <span className="text-xs text-muted-foreground truncate">—</span>;
   }
 }
 
