@@ -47,8 +47,8 @@ const SOURCE_TYPE_OPTIONS_THS: { value: Block["source_type"]; label: string }[] 
   { value: "tonghuashun_news", label: "财经快讯" },
 ];
 
-const SOURCE_TYPE_OPTIONS_DQD: { value: Block["source_type"]; label: string }[] = [
-  { value: "dongqiudi_matches", label: "足球比赛" },
+const SOURCE_TYPE_OPTIONS_QMW: { value: Block["source_type"]; label: string }[] = [
+  { value: "qiumiwu_matches", label: "足球比赛" },
 ];
 
 const DISPLAY_STYLE_OPTIONS = [
@@ -120,8 +120,8 @@ export function BlockConfigPanel({ form, onChange, onSave, onCancel }: Props) {
             </SelectGroup>
             <SelectSeparator />
             <SelectGroup>
-              <SelectLabel className="text-[10px] text-muted-foreground">懂球帝 (采集)</SelectLabel>
-              {SOURCE_TYPE_OPTIONS_DQD.map((o) => <SelectItem key={o.value} value={o.value} className="text-xs">{o.label}</SelectItem>)}
+              <SelectLabel className="text-[10px] text-muted-foreground">球迷屋 (实时)</SelectLabel>
+              {SOURCE_TYPE_OPTIONS_QMW.map((o) => <SelectItem key={o.value} value={o.value} className="text-xs">{o.label}</SelectItem>)}
             </SelectGroup>
           </SelectContent>
         </Select>

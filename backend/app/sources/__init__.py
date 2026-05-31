@@ -3,12 +3,14 @@ from app.sources.xueqiu import XueqiuAdapter
 from app.sources.eastmoney import EastmoneyAdapter
 from app.sources.tonghuashun import TonghuashunAdapter
 from app.sources.dongqiudi import DongqiudiAdapter
+from app.sources.qiumiwu import QiumiwuAdapter
 
 ADAPTER_REGISTRY: dict[str, type] = {
     "xueqiu": XueqiuAdapter,
     "eastmoney": EastmoneyAdapter,
     "tonghuashun": TonghuashunAdapter,
     "dongqiudi": DongqiudiAdapter,
+    "qiumiwu": QiumiwuAdapter,
 }
 
 

@@ -470,25 +470,115 @@ User-Agent: Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X)
 
 ---
 
-## 足球 (Football)
+## 球迷屋 (Qiumiwu) ✅
 
-> TODO: 待调研
+**Base URL:** `https://api.qiumiwu.com`
 
-**可能数据源：**
-
-| 来源 | 说明 |
-|------|------|
-| 懂球帝 (dongqiudi.com) | 新闻、赛程、社区 |
-| 直播吧 (zhibo8.cc) | 新闻聚合 |
-| ESPN API | 英文，需 API Key |
-| openligadb | 开源足球数据 API |
+> 选型记录见下方 [懂球帝 (Dongqiudi) ❌ 已弃用](#懂球帝-dongqiudi--已弃用)。
 
 ### 认证方式
 
-> TODO
+**无需认证。** 完全公开 JSON API，只需 `User-Agent` 和 `Referer: https://www.qiumiwu.com/` 即可。
+
+### 通用请求头
+
+```
+User-Agent: Mozilla/5.0 DailyHighlights/0.1
+Accept: application/json
+Referer: https://www.qiumiwu.com/
+```
 
 ---
 
+### 端点 1：足球赛程 ✅
+
+```
+GET https://api.qiumiwu.com/v5/game/schedule/{ball_type}/{date_offset}/{status}/{?}/{?}
+```
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `ball_type` | int | `0`=全部 `1`=足球 `2`=篮球 |
+| `date_offset` | int | `1`=今天 `2`=明天 ... |
+| `status` | int | `0`=全部 `1`=进行中 ... |
+| `reqfrom` | str | 固定 `web` |
+
+**固定示例:** `GET /v5/game/schedule/0/1/0/0/0?reqfrom=web`
+
+**响应 `data.list[]` (50条)：**
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `id` | str | 比赛 ID |
+| `league.name` | str | 联赛名（欧冠杯、巴甲、中超等） |
+| `league.logo` | str | 联赛 logo URL |
+| `home/away.id` | int | 球队 ID |
+| `home/away.name` | str | 中文队名 |
+| `home/away.en_name` | str | 英文队名 |
+| `home/away.logo` | str | 队徽 URL |
+| `home/away.position` | str | 联赛排名（如"英超1"） |
+| `status` | int | 1=未开赛 2=上半场 8=下半场 15=完场 18=延期 19=取消 |
+| `status_name` | str | 中文状态名 |
+| `start_time` | int | Unix 时间戳 |
+| `scores` | list[list[int]] | 比分数组 `[[主队全场,客队全场,...], [主队,...]]` |
+| `note` | str | 比赛摘要（加时、点球等） |
+| `stage` | str | 赛段（决赛、第X轮） |
+| `result` | str | `home`/`away` 胜负 |
+| `video.has.live` | int | 是否有直播 |
+| `video.has.replay` | int | 是否有回放 |
+| `season` | int | 赛季（如 2025） |
+| `season_full` | str | 完整赛季名（如 "2025-2026"） |
+
+**scores 数组格式（9 个元素）：**
+`[全场主, 全场客, 半场主, 半场客, ?, ?, 角球主, 角球客, ?]`
+
+**已验证联赛 (2026-05-31)：** 欧冠杯、国际赛、巴甲、西乙、中超、日职联、瑞典超、韩K2联、芬超
+
+---
+
+### 端点 2：实时更新 ✅
+
+```
+GET https://api.qiumiwu.com/v5/game/schedule/update?reqfrom=web
+```
+
+返回进行中比赛的实时比分变化。
+
+---
+
+
+---
+
+---
+## 懂球帝 (Dongqiudi) ❌ 已弃用
+
+> **选型结论：弃用，改用球迷屋。** 理由：match_list 覆盖面以业余联赛为主（美乙2、德戊、巴丁），联赛名常为空；match_detail 等端点全部 404/空数据；新闻 API 被 WAF 保护 (403)。球迷屋数据覆盖欧冠/五大联赛/中超，字段更丰富（加时/点球/球队排名），同为零认证。
+
+### 探索过程 (2026-05-31)
+
+**1. 网站首页** — Nuxt.js SSR，`__INITIAL_STATE__` 含 newsListStore/matchListStore 但首次为空，唯一 XHR 是彩票二维码。
+
+**2. 比赛页 (/match)** — 发现 `/magicball/v1/list/match_list` 公开 JSON，700+ 场 200+ 联赛，无需认证。但当天以业余联赛为主。
+
+**3. 数据页 (/data)** — 纯 SSR 渲染积分榜，无对应 JSON API (`/magicball/v1/standings` → 404)。
+
+**4. 其他端点** — match_detail 空数据、match_events/stats/lineup 404、competition_list 404、api.dongqiudi.com WAF 403。
+
+**5. lottery-aggregator** — plansv2 15 条专家预测 + 比赛信息，量太少。
+
+### 已采集的端点（仅供参考）
+
+```
+GET https://www.dongqiudi.com/magicball/v1/list/match_list
+  ?language=zh-CN&cmp_type=soccer&tab_type=all
+
+GET https://lottery-aggregator.dongqiudi.com/mSite/plan/plansv2
+  ?tab=football&page=1
+```
+
+适配器代码保留在 `backend/app/sources/dongqiudi.py` 和 `backend/app/services/adapters/dongqiudi.py`，以备参考。
+
+---
 ## 模板：新增数据源
 
 ```markdown

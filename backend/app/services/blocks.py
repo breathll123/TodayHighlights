@@ -141,8 +141,8 @@ def resolve_block_data(session: Session, block: PageBlock) -> list[dict]:
             for ri in news_items
         ]
 
-    if source_type == "dongqiudi_matches":
-        from app.services.adapters.dongqiudi import fetch_matches
+    if source_type == "qiumiwu_matches":
+        from app.services.adapters.qiumiwu import fetch_matches
         return fetch_matches(config, limit)
 
     return []
