@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { Pencil } from "lucide-react";
+import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 
 const defaultForm = { topic_id: 1, site: "xueqiu", name: "", entry_url: "", cookie: "", enabled: true, crawl_interval_minutes: 60 };
 
@@ -46,10 +47,14 @@ export function AdminSourcesPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold tracking-tight">数据源管理</h1>
+      <AdminPageHeader
+        eyebrow="Sources"
+        title="数据源管理"
+        description="维护各主题的数据入口、采集周期和访问凭证。新增 AI、足球等垂类时，只需要继续扩展来源适配器。"
+      />
 
       <form
-        className="space-y-4 bg-card border rounded-xl p-6"
+        className="space-y-4 rounded-xl border border-border/75 bg-card/80 p-6 shadow-sm"
         onSubmit={(e) => {
           e.preventDefault();
           createMut.mutate(form);

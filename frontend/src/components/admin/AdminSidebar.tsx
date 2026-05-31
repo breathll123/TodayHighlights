@@ -1,5 +1,5 @@
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { FileText, Clock, Newspaper, LayoutDashboard, Settings, Tag, LogOut } from "lucide-react";
+import { Clock, FileText, LayoutDashboard, LogOut, Newspaper, RadioTower, Settings, Tag } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
 
@@ -18,34 +18,50 @@ export function AdminSidebar() {
   const navigate = useNavigate();
 
   return (
-    <aside className="w-52 min-h-screen border-r bg-card/50 shrink-0">
-      <div className="p-4">
-        <Link to="/" className="text-sm font-bold tracking-tight text-muted-foreground hover:text-foreground transition-colors">
-          ← 返回前台
+    <aside className="sticky top-0 h-screen w-16 shrink-0 border-r border-border/70 bg-card/75 md:w-60">
+      <div className="border-b border-border/70 p-4">
+        <Link to="/" className="flex items-center gap-3 rounded-lg p-1.5 transition-colors hover:bg-muted/50">
+          <span className="flex h-9 w-9 items-center justify-center rounded-lg border border-primary/25 bg-primary/10 text-primary">
+            <RadioTower className="h-4 w-4" aria-hidden="true" />
+          </span>
+          <span className="hidden md:block">
+            <span className="block text-sm font-semibold text-foreground">DataFlow</span>
+            <span className="block text-[11px] font-medium uppercase text-muted-foreground">Ops Console</span>
+          </span>
         </Link>
       </div>
-      <nav className="px-3 space-y-0.5">
+      <nav className="space-y-1 px-3 py-4" aria-label="后台导航">
         {links.map((l) => (
           <Link
             key={l.href}
             to={l.href}
+            title={l.label}
             className={cn(
-              "flex items-center gap-2.5 px-3 py-2 text-sm rounded-md transition-colors",
-              location.pathname === l.href ? "bg-primary/10 text-primary font-medium" : "text-muted-foreground hover:bg-muted hover:text-foreground"
+              "flex min-h-10 items-center justify-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:justify-start",
+              location.pathname === l.href
+                ? "bg-primary text-primary-foreground shadow-sm"
+                : "text-muted-foreground hover:bg-muted/70 hover:text-foreground"
             )}
           >
-            <l.icon className="w-4 h-4" />
-            {l.label}
+            <l.icon className="h-4 w-4" aria-hidden="true" />
+            <span className="hidden md:inline">{l.label}</span>
           </Link>
         ))}
       </nav>
-      <div className="absolute bottom-4 left-3 w-[184px]">
+      <div className="absolute bottom-4 left-3 right-3">
+        <Link
+          to="/"
+          className="mb-2 hidden min-h-10 items-center rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground md:flex"
+        >
+          返回前台
+        </Link>
         <button
           onClick={() => { logout(); navigate("/login"); }}
-          className="flex items-center gap-2.5 px-3 py-2 text-sm text-muted-foreground hover:text-foreground rounded-md w-full transition-colors"
+          title="退出登录"
+          className="flex min-h-10 w-full items-center justify-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:justify-start"
         >
-          <LogOut className="w-4 h-4" />
-          退出登录
+          <LogOut className="h-4 w-4" aria-hidden="true" />
+          <span className="hidden md:inline">退出登录</span>
         </button>
       </div>
     </aside>

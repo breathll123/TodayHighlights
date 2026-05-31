@@ -4,6 +4,7 @@ import { fetchModelSettings, saveModelSettings } from "../api/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 
 export function AdminSettingsPage() {
   const queryClient = useQueryClient();
@@ -29,9 +30,13 @@ export function AdminSettingsPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold tracking-tight">模型设置</h1>
+      <AdminPageHeader
+        eyebrow="Models"
+        title="模型设置"
+        description="配置 OpenAI 兼容模型服务，用于不同主题的摘要、标签和重点提取。"
+      />
       <form
-        className="space-y-4 bg-card border rounded-xl p-6"
+        className="space-y-4 rounded-xl border border-border/75 bg-card/80 p-6 shadow-sm"
         onSubmit={(e) => {
           e.preventDefault();
           saveMut.mutate(form);

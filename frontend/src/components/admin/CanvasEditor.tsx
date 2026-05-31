@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, type RefObject } from "react";
 import GridLayout, { useContainerWidth } from "react-grid-layout";
 import type { Layout, LayoutItem } from "react-grid-layout";
 import { noCompactor } from "react-grid-layout";
@@ -72,7 +72,7 @@ export function CanvasEditor({ blocks, onLayoutChange, onEdit, onDelete }: Props
   );
 
   return (
-    <div ref={containerRef}>
+    <div ref={containerRef as RefObject<HTMLDivElement>}>
     {mounted && width > 0 ? (
     <GridLayout
       className="layout"
@@ -97,4 +97,3 @@ export function CanvasEditor({ blocks, onLayoutChange, onEdit, onDelete }: Props
     </div>
   );
 }
-

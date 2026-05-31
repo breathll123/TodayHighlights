@@ -4,6 +4,7 @@ import { fetchHighlights, updateHighlight } from "../api/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 
 export function AdminHighlightsPage() {
   const queryClient = useQueryClient();
@@ -24,7 +25,11 @@ export function AdminHighlightsPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold tracking-tight">看点审核</h1>
+      <AdminPageHeader
+        eyebrow="Highlights"
+        title="看点审核"
+        description="审核 AI 生成的跨主题信息摘要，控制置顶、隐藏和前台展示质量。"
+      />
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {highlights?.map((h) =>
           editingId === h.id ? (

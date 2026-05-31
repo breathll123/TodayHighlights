@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ChevronDown, ChevronUp, ChevronLeft, ChevronRight, AlertCircle, CheckCircle2, Clock, RotateCw } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 
 const statusLabel: Record<string, string> = {
   success: "成功", failed: "失败", running: "运行中", pending: "等待中",
@@ -51,7 +52,11 @@ export function AdminJobsPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold tracking-tight">任务日志</h1>
+      <AdminPageHeader
+        eyebrow="Jobs"
+        title="任务日志"
+        description="观察采集任务的运行状态、保存数量和错误摘要，快速判断来源健康度。"
+      />
 
       {/* Summary */}
       <div className="grid grid-cols-4 gap-3">

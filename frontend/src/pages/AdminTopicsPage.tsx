@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { fetchAdminTopics, createTopic, updateTopic, deleteTopic } from "@/api/client";
 import type { Topic } from "@/api/types";
 import { toast } from "sonner";
+import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 
 export function AdminTopicsPage() {
   const queryClient = useQueryClient();
@@ -45,10 +46,12 @@ export function AdminTopicsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold tracking-tight">话题管理</h1>
-        <Button onClick={openCreate}><Plus className="w-4 h-4 mr-2" />添加话题</Button>
-      </div>
+      <AdminPageHeader
+        eyebrow="Topics"
+        title="话题管理"
+        description="管理平台顶层垂类。股票是当前样板，AI、足球等主题可以按相同方式加入导航和版面。"
+        action={<Button onClick={openCreate}><Plus className="w-4 h-4 mr-2" />添加话题</Button>}
+      />
 
       {topics.length === 0 ? (
         <p className="text-sm text-muted-foreground py-12 text-center">暂无话题</p>

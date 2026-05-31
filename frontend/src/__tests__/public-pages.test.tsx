@@ -74,6 +74,9 @@ describe("SummaryPage", () => {
     expect(await screen.findByText("今日看点")).toBeInTheDocument();
     expect(screen.getByText("资金关注新能源")).toBeInTheDocument();
     expect(screen.getByText("新能源板块热度上升。")).toBeInTheDocument();
+    expect(screen.getByText("主题看点")).toBeInTheDocument();
+    expect(screen.queryByText("Signal")).not.toBeInTheDocument();
+    expect(screen.queryByText("82")).not.toBeInTheDocument();
   });
 });
 
