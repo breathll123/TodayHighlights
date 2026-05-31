@@ -141,6 +141,40 @@ def resolve_block_data(session: Session, block: PageBlock) -> list[dict]:
             for ri in news_items
         ]
 
+    if source_type == "dongqiudi_matches":
+        dqd_source_id = session.scalar(
+            select(Source.id).where(Source.entry_url == "dongqiudi://matches").limit(1)
+        )
+        if dqd_source_id is None:
+            return []
+        stmt = (
+            select(RawItem)
+            .where(RawItem.source_id == dqd_source_id)
+            .order_by(RawItem.metrics_json["priority"].desc(), RawItem.published_at.desc())
+            .limit(limit)
+        )
+        items = session.scalars(stmt).all()
+        result = []
+        for ri in items:
+            m = ri.metrics_json or {}
+            result.append({
+                "id": ri.id,
+                "title": ri.title,
+                "summary": ri.body,
+                "url": ri.url,
+                "league": m.get("league", ""),
+                "status": m.get("status", ""),
+                "team_a": m.get("team_a", ""),
+                "team_b": m.get("team_b", ""),
+                "score_a": m.get("score_a", ""),
+                "score_b": m.get("score_b", ""),
+                "minute": m.get("minute", ""),
+                "start_time": m.get("start_time", ""),
+                "priority": m.get("priority", 0),
+                "source_type": "dongqiudi_matches",
+            })
+        return result
+
     return []
 
 

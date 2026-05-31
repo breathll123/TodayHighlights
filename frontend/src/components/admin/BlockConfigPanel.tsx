@@ -47,6 +47,10 @@ const SOURCE_TYPE_OPTIONS_THS: { value: Block["source_type"]; label: string }[] 
   { value: "tonghuashun_news", label: "财经快讯" },
 ];
 
+const SOURCE_TYPE_OPTIONS_DQD: { value: Block["source_type"]; label: string }[] = [
+  { value: "dongqiudi_matches", label: "足球比赛" },
+];
+
 const DISPLAY_STYLE_OPTIONS = [
   { value: "card", label: "卡片" },
   { value: "list", label: "列表" },
@@ -66,7 +70,10 @@ export function BlockConfigPanel({ form, onChange, onSave, onCancel }: Props) {
   }, [form.source_type]);
 
   const allFields = FIELD_DEFS[form.source_type] || [];
-  const selectedFields: string[] = form.source_config?.display_fields || DEFAULT_FIELDS[form.source_type] || allFields.map((f) => f.key);
+  const configuredFields = form.source_config?.display_fields;
+  const selectedFields: string[] = (
+    Array.isArray(configuredFields) ? configuredFields : DEFAULT_FIELDS[form.source_type]
+  ) || allFields.map((f) => f.key);
   const numericFields = allFields.filter((f) => f.type === "number");
 
   const toggleField = (key: string) => {
@@ -110,6 +117,11 @@ export function BlockConfigPanel({ form, onChange, onSave, onCancel }: Props) {
             <SelectGroup>
               <SelectLabel className="text-[10px] text-muted-foreground">同花顺 (实时)</SelectLabel>
               {SOURCE_TYPE_OPTIONS_THS.map((o) => <SelectItem key={o.value} value={o.value} className="text-xs">{o.label}</SelectItem>)}
+            </SelectGroup>
+            <SelectSeparator />
+            <SelectGroup>
+              <SelectLabel className="text-[10px] text-muted-foreground">懂球帝 (采集)</SelectLabel>
+              {SOURCE_TYPE_OPTIONS_DQD.map((o) => <SelectItem key={o.value} value={o.value} className="text-xs">{o.label}</SelectItem>)}
             </SelectGroup>
           </SelectContent>
         </Select>
