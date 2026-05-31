@@ -54,22 +54,29 @@ class QiumiwuAdapter:
             title = f"{home.get('name', '?')} vs {away.get('name', '?')}"
             body = f"{league.get('name','')} · {m.get('status_name','')} · {home.get('name','?')} {home_score}-{away_score} {away.get('name','?')}"
 
+            league_name = league.get("name", "")
+            home_name = home.get("name", "")
+            away_name = away.get("name", "")
             published_at = datetime.fromtimestamp(start_ts, tz=SH_TZ).replace(tzinfo=None) if start_ts else None
-            content_str = f"qmw|{match_id}|{status}|{home_score}-{away_score}|{start_ts}"
+
+            # external_id: time + league + matchup for stable dedup
+            ext_id = f"qmw_{start_ts}_{league_name}_{home_name}_{away_name}"
+            # content_hash: includes score + status so score changes trigger updates
+            content_str = f"qmw|{match_id}|{status}|{home_score}-{away_score}|{start_ts}|{league_name}|{home_name}|{away_name}"
 
             drafts.append(RawItemDraft(
-                external_id=f"qmw_{match_id}",
+                external_id=ext_id,
                 url=f"https://www.qiumiwu.com/game/{match_id}",
-                author=league.get("name", ""),
+                author=league_name,
                 title=title,
                 body=body,
                 published_at=published_at,
                 metrics={
-                    "league": league.get("name", ""),
+                    "league": league_name,
                     "status": status,
                     "status_name": m.get("status_name", ""),
-                    "team_a": home.get("name", ""),
-                    "team_b": away.get("name", ""),
+                    "team_a": home_name,
+                    "team_b": away_name,
                     "score_a": home_score,
                     "score_b": away_score,
                     "start_time": start_ts,
