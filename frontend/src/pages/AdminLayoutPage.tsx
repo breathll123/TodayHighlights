@@ -15,6 +15,7 @@ import { toast } from "sonner";
 const pages = [
   { route: "/", label: "摘要页" },
   { route: "/topics/stocks", label: "股票页" },
+  { route: "/topics/football", label: "足球页" },
 ];
 
 export function AdminLayoutPage() {

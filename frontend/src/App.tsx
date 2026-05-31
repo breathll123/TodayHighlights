@@ -19,7 +19,7 @@ function PublicLayout() {
   return (
     <div className="min-h-screen bg-background">
       <PublicNavbar />
-      <main className="px-8 py-8 max-w-full overflow-x-hidden">
+      <main id="main-content" className="mx-auto max-w-[1500px] px-4 py-6 sm:px-6 lg:px-8 lg:py-8 overflow-x-hidden">
         <Outlet />
       </main>
     </div>
@@ -31,7 +31,7 @@ function AdminLayout() {
     <div className="min-h-screen bg-background">
       <div className="flex">
         <AdminSidebar />
-        <main className="flex-1 px-8 py-8 max-w-5xl">
+        <main id="main-content" className="min-w-0 flex-1 px-4 py-5 sm:px-6 lg:px-8 lg:py-7">
           <Outlet />
         </main>
       </div>
@@ -55,6 +55,7 @@ export default function App() {
             <Route element={<PublicLayout />}>
               <Route path="/" element={<SummaryPage />} />
               <Route path="/topics/stocks" element={<StockTopicPage />} />
+              <Route path="/topics/football" element={<StockTopicPage />} />
             </Route>
 
             {/* Login */}
