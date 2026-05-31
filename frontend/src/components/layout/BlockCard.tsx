@@ -20,6 +20,12 @@ export function BlockCard({ title, summary, tags, sourceName, isPinned, url, cla
       className={`group block overflow-hidden rounded-lg border border-border/50 bg-card/80 shadow-sm transition-all duration-200 ${isClickable ? "cursor-pointer hover:border-primary/40 hover:bg-card hover:shadow-md" : ""} ${isPinned ? "ring-1 ring-amber-500/30" : ""} ${className ?? ""}`}
     >
       <div className="p-4">
+        {sourceName && (
+          <span className="mb-2 inline-flex rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+            {sourceName}
+          </span>
+        )}
+
         <div className="flex items-start justify-between gap-3">
           <h3 className="text-sm font-semibold leading-snug text-foreground min-w-0">
             {isPinned && (

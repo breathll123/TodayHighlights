@@ -56,6 +56,7 @@ vi.mock("../api/client", () => ({
 
 import { SummaryPage } from "../pages/SummaryPage";
 import { StockTopicPage } from "../pages/StockTopicPage";
+import { sourceNameFor } from "../components/layout/GridRenderer";
 
 function Wrapper({ children }: { children: React.ReactNode }) {
   const queryClient = new QueryClient({
@@ -85,5 +86,32 @@ describe("StockTopicPage", () => {
     render(<StockTopicPage />, { wrapper: Wrapper });
     expect(await screen.findByText("今日看点")).toBeInTheDocument();
     expect(screen.getByText("资金关注新能源")).toBeInTheDocument();
+  });
+});
+
+describe("sourceNameFor", () => {
+  it.each([
+    ["topic", "主题看点"],
+    ["raw", "来源内容"],
+    ["hot_stocks", "雪球热股"],
+    ["hot_events", "雪球话题"],
+    ["xueqiu_hot_cn", "雪球 A 股"],
+    ["xueqiu_hot_hk", "雪球港股"],
+    ["xueqiu_hot_us", "雪球美股"],
+    ["screener", "行情筛选"],
+    ["eastmoney_sectors", "东方财富"],
+    ["eastmoney_industry", "东方财富"],
+    ["eastmoney_longhu", "东方财富"],
+    ["eastmoney_capital_flow", "东方财富"],
+    ["eastmoney_announcements", "东方财富"],
+    ["eastmoney_indices", "指数行情"],
+    ["tonghuashun_news", "同花顺"],
+  ])("maps %s to %s", (sourceType, sourceName) => {
+    expect(sourceNameFor({}, sourceType)).toBe(sourceName);
+  });
+
+  it("uses item source before block source and falls back for unknown sources", () => {
+    expect(sourceNameFor({ source: "hot_events" }, "topic")).toBe("雪球话题");
+    expect(sourceNameFor({}, "unknown")).toBe("DataFlow");
   });
 });

@@ -5,6 +5,28 @@ import { MatchList } from "./MatchList";
 import { NewsTimeline } from "./NewsTimeline";
 import { FIELD_DEFS, DEFAULT_FIELDS } from "@/lib/field-defs";
 
+const SOURCE_NAMES: Record<string, string> = {
+  topic: "主题看点",
+  raw: "来源内容",
+  hot_stocks: "雪球热股",
+  hot_events: "雪球话题",
+  xueqiu_hot_cn: "雪球 A 股",
+  xueqiu_hot_hk: "雪球港股",
+  xueqiu_hot_us: "雪球美股",
+  screener: "行情筛选",
+  eastmoney_sectors: "东方财富",
+  eastmoney_industry: "东方财富",
+  eastmoney_longhu: "东方财富",
+  eastmoney_capital_flow: "东方财富",
+  eastmoney_announcements: "东方财富",
+  eastmoney_indices: "指数行情",
+  tonghuashun_news: "同花顺",
+};
+
+export function sourceNameFor(item: any, sourceType: string): string {
+  return SOURCE_NAMES[item.source ?? sourceType] ?? "DataFlow";
+}
+
 function fmtTitle(item: any): string {
   const name = item.title ?? item.name ?? "";
   const code = item.symbols?.[0] ?? item.related_symbols_json?.[0];
@@ -105,6 +127,7 @@ export function GridRenderer({ blocks, isLoading }: { blocks: any[]; isLoading: 
                     title={fmtTitle(item)}
                     summary={item.summary ?? item.content ?? ""}
                     tags={item.tags_json ?? item.tags}
+                    sourceName={sourceNameFor(item, st)}
                     isPinned={item.is_pinned}
                     url={item.url}
                   />
