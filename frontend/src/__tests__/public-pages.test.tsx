@@ -69,6 +69,17 @@ function Wrapper({ children }: { children: React.ReactNode }) {
   );
 }
 
+function FootballWrapper({ children }: { children: React.ReactNode }) {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return (
+    <QueryClientProvider client={queryClient}>
+      <MemoryRouter initialEntries={["/topics/football"]}>{children}</MemoryRouter>
+    </QueryClientProvider>
+  );
+}
+
 describe("SummaryPage", () => {
   it("renders block title and card content", async () => {
     render(<SummaryPage />, { wrapper: Wrapper });
@@ -86,6 +97,14 @@ describe("StockTopicPage", () => {
     render(<StockTopicPage />, { wrapper: Wrapper });
     expect(await screen.findByText("今日看点")).toBeInTheDocument();
     expect(screen.getByText("资金关注新能源")).toBeInTheDocument();
+  });
+});
+
+describe("FootballTopicPage", () => {
+  it("names the active football data source", async () => {
+    render(<StockTopicPage />, { wrapper: FootballWrapper });
+    expect(await screen.findByText("足球主题看板")).toBeInTheDocument();
+    expect(screen.getByText("全球足球联赛实时比分、赛程、积分榜，球迷屋数据源。")).toBeInTheDocument();
   });
 });
 

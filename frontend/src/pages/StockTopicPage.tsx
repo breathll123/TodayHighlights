@@ -10,7 +10,7 @@ const TOPIC_META: Record<string, { name: string; description: string }> = {
   },
   "/topics/football": {
     name: "足球",
-    description: "全球足球联赛实时比分、赛程、积分榜，懂球帝数据源。",
+    description: "全球足球联赛实时比分、赛程、积分榜，球迷屋数据源。",
   },
 };
 
