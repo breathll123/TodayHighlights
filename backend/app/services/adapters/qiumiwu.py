@@ -127,16 +127,12 @@ _STANDINGS_HEADERS = {
 
 
 @ttl_cache(300)
-def fetch_standings(config: dict, limit: int) -> list[dict]:
+def fetch_standings(_config: dict, limit: int) -> list[dict]:
     """Fetch league standings from qiumiwu mobile pages."""
     import re
 
-    selected_league = config.get("league", "") if config else ""
-
     result = []
     for league_name, slug in _STANDINGS_LEAGUES.items():
-        if selected_league and league_name != selected_league:
-            continue
         try:
             resp = httpx.get(
                 f"https://m.qiumiwu.com/league/{slug}/standings",
