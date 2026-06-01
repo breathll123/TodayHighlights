@@ -147,7 +147,7 @@ def resolve_block_data(session: Session, block: PageBlock) -> list[dict]:
 
     if source_type == "qiumiwu_standings":
         from app.services.adapters.qiumiwu import fetch_standings
-        return fetch_standings(config, limit)
+        return fetch_standings(config, max(limit, 500))
 
     return []
 

@@ -53,14 +53,17 @@ def proxy_image(url: str = Query(...)):
     try:
         resp = _IMAGE_CLIENT.get(url)
         resp.raise_for_status()
+        body = resp.content
+        if not body:
+            raise ValueError("empty body")
+        content_type = resp.headers.get("content-type", "image/png")
+        # Fix WebP served as PNG
+        if body[:4] == b"RIFF" and b"WEBP" in body[:12]:
+            content_type = "image/webp"
     except Exception:
-        raise HTTPException(status_code=502, detail="Failed to fetch image")
-
-    content_type = resp.headers.get("content-type", "image/png")
-    # Fix WebP served as PNG
-    body = resp.content
-    if body[:4] == b"RIFF" and b"WEBP" in body[:12]:
-        content_type = "image/webp"
+        # Return 1x1 transparent PNG
+        body = b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15\xc4\x89\x00\x00\x00\nIDATx\x9cc\x00\x01\x00\x00\x05\x00\x01\r\n-\xb4\x00\x00\x00\x00IEND\xaeB`\x82"
+        content_type = "image/png"
 
     return StreamingResponse(
         iter([body]),
