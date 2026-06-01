@@ -164,9 +164,9 @@ export function BlockConfigPanel({ form, onChange, onSave, onCancel }: Props) {
         <div className="flex items-center justify-between">
           <Label className="text-xs">展示条数</Label>
           <Input
-            type="number" min={1} max={50}
+            type="number" min={1} max={200}
             value={form.display_count}
-            onChange={(e) => { const v = Math.max(1, Math.min(50, +e.target.value || 5)); update("display_count", v); }}
+            onChange={(e) => { const v = Math.max(1, Math.min(200, +e.target.value || 5)); update("display_count", v); }}
             className="h-7 w-14 text-xs text-center"
           />
         </div>

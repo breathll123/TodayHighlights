@@ -54,9 +54,13 @@ function statusCode(status: MatchItem["status"]): number | undefined {
 }
 
 function formatClock(date: Date): string {
-  return [date.getHours(), date.getMinutes(), date.getSeconds()]
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  const hms = [date.getHours(), date.getMinutes(), date.getSeconds()]
     .map((part) => String(part).padStart(2, "0"))
     .join(":");
+  return `${y}-${m}-${d} ${hms}`;
 }
 
 function proxyImg(url?: string): string {
@@ -121,19 +125,26 @@ const STATUS_TONE_CLASS = {
 
 function MatchRowContent({ match, showAffordance = false }: { match: MatchItem; showAffordance?: boolean }) {
   const status = statusFor(match);
+  const startTime = formatStartTime(match.start_time);
+  const code = statusCode(match.status);
+  const showSecondaryTime = code !== 1 && startTime; // Fixture already shows time as primary
+
   return (
     <>
-      <span
-        className={`flex min-w-0 items-center gap-1 overflow-hidden text-[11px] font-medium tabular-nums ${STATUS_TONE_CLASS[status.tone]}`}
-      >
-        {status.tone === "live" && (
-          <span
-            data-testid="live-dot"
-            aria-hidden="true"
-            className="h-1.5 w-1.5 shrink-0 rounded-full bg-red-500 motion-safe:animate-pulse"
-          />
+      <span className="flex min-w-0 flex-col overflow-hidden text-[11px] font-medium tabular-nums leading-tight">
+        <span className={`flex items-center gap-1 ${STATUS_TONE_CLASS[status.tone]}`}>
+          {status.tone === "live" && (
+            <span
+              data-testid="live-dot"
+              aria-hidden="true"
+              className="h-1.5 w-1.5 shrink-0 rounded-full bg-red-500 motion-safe:animate-pulse"
+            />
+          )}
+          <span className="truncate">{status.label}</span>
+        </span>
+        {showSecondaryTime && (
+          <span className="text-[10px] text-muted-foreground/60">{startTime}</span>
         )}
-        <span className={`truncate ${STATUS_TONE_CLASS[status.tone]}`}>{status.label}</span>
       </span>
       <span className="flex min-w-0 items-center gap-1.5 font-medium">
         <TeamLogo url={match.logo_a} name={match.team_a} />
