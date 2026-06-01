@@ -18,7 +18,7 @@ export function StockTopicPage() {
   const location = useLocation();
   const meta = TOPIC_META[location.pathname] ?? { name: "主题", description: "" };
 
-  const { data, isLoading, error } = usePageBlocks(location.pathname);
+  const { data, dataUpdatedAt, isLoading, error } = usePageBlocks(location.pathname);
 
   return (
     <DashboardShell
@@ -34,7 +34,7 @@ export function StockTopicPage() {
           {meta.name}主题加载失败，请检查后端服务、数据源或发布状态。
         </div>
       ) : (
-        <GridRenderer blocks={data?.blocks ?? []} isLoading={isLoading} />
+        <GridRenderer blocks={data?.blocks ?? []} isLoading={isLoading} dataUpdatedAt={dataUpdatedAt} />
       )}
     </DashboardShell>
   );
