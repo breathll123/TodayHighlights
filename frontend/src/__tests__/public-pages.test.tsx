@@ -55,7 +55,7 @@ vi.mock("../api/client", () => ({
 }));
 
 import { SummaryPage } from "../pages/SummaryPage";
-import { StockTopicPage } from "../pages/StockTopicPage";
+import { TopicPage } from "../pages/TopicPage";
 import { sourceNameFor } from "../components/layout/GridRenderer";
 import { fetchPageBlocks } from "../api/client";
 
@@ -93,9 +93,9 @@ describe("SummaryPage", () => {
   });
 });
 
-describe("StockTopicPage", () => {
+describe("TopicPage", () => {
   it("renders block title and card content", async () => {
-    render(<StockTopicPage />, { wrapper: Wrapper });
+    render(<TopicPage />, { wrapper: Wrapper });
     expect(await screen.findByText("今日看点")).toBeInTheDocument();
     expect(screen.getByText("资金关注新能源")).toBeInTheDocument();
   });
@@ -138,7 +138,7 @@ describe("FootballTopicPage", () => {
       ],
     });
 
-    render(<StockTopicPage />, { wrapper: FootballWrapper });
+    render(<TopicPage />, { wrapper: FootballWrapper });
 
     expect(await within(screen.getByTestId("football-topic-overview")).findByText("1 场")).toBeInTheDocument();
     expect(screen.getByText("足球主题看板")).toBeInTheDocument();

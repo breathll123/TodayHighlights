@@ -4,7 +4,7 @@ import { AuthProvider, useAuth } from "@/hooks/use-auth";
 import { PublicNavbar } from "@/components/layout/PublicNavbar";
 import { AdminSidebar } from "@/components/admin/AdminSidebar";
 import { SummaryPage } from "./pages/SummaryPage";
-import { StockTopicPage } from "./pages/StockTopicPage";
+import { TopicPage } from "./pages/TopicPage";
 import { LoginPage } from "./pages/LoginPage";
 import { AdminSourcesPage } from "./pages/AdminSourcesPage";
 import { AdminJobsPage } from "./pages/AdminJobsPage";
@@ -54,8 +54,8 @@ export default function App() {
             {/* Public */}
             <Route element={<PublicLayout />}>
               <Route path="/" element={<SummaryPage />} />
-              <Route path="/topics/stocks" element={<StockTopicPage />} />
-              <Route path="/topics/football" element={<StockTopicPage />} />
+              <Route path="/topics/stocks" element={<TopicPage />} />
+              <Route path="/topics/football" element={<TopicPage />} />
             </Route>
 
             {/* Login */}
