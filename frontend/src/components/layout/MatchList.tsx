@@ -7,10 +7,13 @@ interface MatchItem {
   summary?: string;
   url?: string;
   league?: string;
+  logo_league?: string;
   status: string | number;
   status_name?: string;
   team_a?: string;
   team_b?: string;
+  logo_a?: string;
+  logo_b?: string;
   score_a?: string | number;
   score_b?: string | number;
   minute?: string | number;
@@ -103,10 +106,18 @@ function MatchRowContent({ match, showAffordance = false }: { match: MatchItem; 
         )}
         <span className={`truncate ${STATUS_TONE_CLASS[status.tone]}`}>{status.label}</span>
       </span>
-      <span className="min-w-0 truncate font-medium">{match.team_a || "待定"}</span>
+      <span className="flex min-w-0 items-center gap-1.5 font-medium">
+        {match.logo_a ? (
+          <img src={match.logo_a} alt="" className="h-5 w-5 shrink-0 rounded-full object-contain" loading="lazy" />
+        ) : null}
+        <span className="truncate">{match.team_a || "待定"}</span>
+      </span>
       <span className="truncate text-center font-bold tabular-nums text-foreground">{scoreFor(match)}</span>
-      <span className={`min-w-0 truncate text-right font-medium ${showAffordance ? "pr-3" : ""}`}>
-        {match.team_b || "待定"}
+      <span className={`flex min-w-0 items-center justify-end gap-1.5 font-medium ${showAffordance ? "pr-3" : ""}`}>
+        <span className="truncate">{match.team_b || "待定"}</span>
+        {match.logo_b ? (
+          <img src={match.logo_b} alt="" className="h-5 w-5 shrink-0 rounded-full object-contain" loading="lazy" />
+        ) : null}
       </span>
       {showAffordance && (
         <ChevronRight
@@ -141,7 +152,12 @@ export function MatchList({ data, dataUpdatedAt }: Props) {
       {Object.entries(groups).map(([league, matches]) => (
         <section key={league} className="min-w-0">
           <div className="flex items-center justify-between gap-2 border-b border-border/45 bg-muted/20 px-3 py-1.5 text-[11px] font-semibold text-muted-foreground">
-            <h4 className="min-w-0 truncate">{league}</h4>
+            <h4 className="flex min-w-0 items-center gap-1.5 truncate">
+              {matches[0]?.logo_league ? (
+                <img src={matches[0].logo_league} alt="" className="h-4 w-4 shrink-0 object-contain" loading="lazy" />
+              ) : null}
+              {league}
+            </h4>
             <span className="shrink-0 tabular-nums">{matches.length} 场</span>
           </div>
 
