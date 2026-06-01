@@ -118,7 +118,13 @@ def fetch_matches(_config: dict, limit: int) -> list[dict]:
 # League slug mapping for standings
 _STANDINGS_LEAGUES = {
     "英超": "yingchao", "西甲": "xijia", "意甲": "yijia", "德甲": "dejia",
-    "法甲": "fajia", "中超": "zhongchao", "欧冠": "ouguanbei",
+    "法甲": "fajia", "荷甲": "hejia", "葡超": "puchao", "瑞典超": "ruidianchao",
+    "英冠": "yingguan", "英甲": "yingjia",
+    "欧冠": "ouguanbei", "欧联杯": "oulianbei",
+    "中超": "zhongchao",
+    "亚冠精英": "yaguanjingying", "亚冠二级": "yaguanerji",
+    "巴甲": "bajia", "澳超": "aochao",
+    "欧洲杯": "ouzhoubei", "美洲杯": "meizhoubei", "非洲杯": "feizhoubei",
 }
 
 _STANDINGS_HEADERS = {
