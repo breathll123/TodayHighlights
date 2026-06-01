@@ -37,7 +37,7 @@ def page_blocks(route: str, session: Session = Depends(get_session)) -> dict:
 
 
 # Allowed image proxy domains
-_IMAGE_PROXY_DOMAINS = {"file.qiumiwu.com", "img.qiumiwu.com", "sd.qunliao.info", "bdimg.qunliao.info"}
+_IMAGE_PROXY_DOMAINS = {"file.qiumiwu.com", "img.qiumiwu.com", "sd.qunliao.info", "bdimg.qunliao.info", "spdc.jsty.com"}
 
 _IMAGE_CLIENT = httpx.Client(timeout=10, headers={"User-Agent": "Mozilla/5.0", "Referer": "https://www.qiumiwu.com/"})
 
