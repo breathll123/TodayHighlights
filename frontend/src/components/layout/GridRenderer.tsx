@@ -101,9 +101,7 @@ export function GridRenderer({ blocks, isLoading, dataUpdatedAt }: { blocks: any
             {block.data?.length === 0 ? (
               <div className="bg-card border rounded-xl p-6 text-center text-sm text-muted-foreground">暂无数据</div>
             ) : block.source_type === "qiumiwu_matches" ? (
-              <div className="rounded-xl border border-border/70 bg-card/75 shadow-sm p-3">
-                <MatchList data={block.data} dataUpdatedAt={dataUpdatedAt} />
-              </div>
+              <MatchList data={block.data} dataUpdatedAt={dataUpdatedAt} />
             ) : block.source_type === "tonghuashun_news" || block.display_style === "timeline" ? (
               <NewsTimeline data={block.data.map((item: any) => ({
                 id: item.id,

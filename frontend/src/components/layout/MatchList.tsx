@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { ChevronRight } from "lucide-react";
 
 interface MatchItem {
   id: string | number;
@@ -22,7 +23,7 @@ interface Props {
 }
 
 const ROW_CLASS_NAME =
-  "grid min-w-0 grid-cols-[3.75rem_minmax(0,1fr)_4.25rem_minmax(0,1fr)] items-center gap-2 overflow-hidden rounded-lg border border-border/50 bg-card/70 px-2 py-2.5 text-sm";
+  "relative grid min-w-0 grid-cols-[3.75rem_minmax(0,1fr)_4.25rem_minmax(0,1fr)] items-center gap-2 overflow-hidden border-b border-border/45 bg-transparent px-2.5 py-2.5 text-sm last:border-b-0";
 
 const LEGACY_STATUS_CODES: Record<string, number | undefined> = {
   Fixture: 1,
@@ -65,37 +66,55 @@ function scoreFor(match: MatchItem): string {
   return `${match.score_a} - ${match.score_b}`;
 }
 
-function statusFor(match: MatchItem): { label: string; isLive: boolean } {
+function statusFor(match: MatchItem): { label: string; tone: "default" | "live" | "muted" | "warm" } {
   const code = statusCode(match.status);
-  if (code === 1) return { label: formatStartTime(match.start_time), isLive: false };
+  if (code === 1) return { label: formatStartTime(match.start_time), tone: "default" };
   if (code === 2 || code === 8) {
     const rawMinute = match.minute === "" || match.minute == null ? "" : String(match.minute);
     const minute = rawMinute && !rawMinute.endsWith("'") ? `${rawMinute}'` : rawMinute;
-    return { label: minute || (code === 8 ? "下半场" : "上半场"), isLive: true };
+    return { label: minute || (code === 8 ? "下半场" : "上半场"), tone: "live" };
   }
-  if (code === 15) return { label: "完场", isLive: false };
-  if (code === 18) return { label: "延期", isLive: false };
-  if (code === 19) return { label: "取消", isLive: false };
-  return { label: match.status_name || "待定", isLive: false };
+  if (code === 15) return { label: "完场", tone: "muted" };
+  if (code === 18) return { label: "延期", tone: "warm" };
+  if (code === 19) return { label: "取消", tone: "warm" };
+  return { label: match.status_name || "待定", tone: "default" };
 }
 
-function MatchRowContent({ match }: { match: MatchItem }) {
+const STATUS_TONE_CLASS = {
+  default: "text-muted-foreground",
+  live: "text-red-500",
+  muted: "text-muted-foreground/75",
+  warm: "text-amber-500",
+};
+
+function MatchRowContent({ match, showAffordance = false }: { match: MatchItem; showAffordance?: boolean }) {
   const status = statusFor(match);
   return (
     <>
       <span
-        className={`flex min-w-0 items-center gap-1 overflow-hidden text-[11px] font-medium tabular-nums ${
-          status.isLive ? "text-red-500" : "text-muted-foreground"
-        }`}
+        className={`flex min-w-0 items-center gap-1 overflow-hidden text-[11px] font-medium tabular-nums ${STATUS_TONE_CLASS[status.tone]}`}
       >
-        {status.isLive && (
-          <span data-testid="live-dot" aria-hidden="true" className="h-1.5 w-1.5 shrink-0 rounded-full bg-red-500" />
+        {status.tone === "live" && (
+          <span
+            data-testid="live-dot"
+            aria-hidden="true"
+            className="h-1.5 w-1.5 shrink-0 rounded-full bg-red-500 motion-safe:animate-pulse"
+          />
         )}
-        <span className={`truncate ${status.isLive ? "text-red-500" : ""}`}>{status.label}</span>
+        <span className={`truncate ${STATUS_TONE_CLASS[status.tone]}`}>{status.label}</span>
       </span>
       <span className="min-w-0 truncate font-medium">{match.team_a || "待定"}</span>
-      <span className="truncate text-center font-semibold tabular-nums text-foreground">{scoreFor(match)}</span>
-      <span className="min-w-0 truncate text-right font-medium">{match.team_b || "待定"}</span>
+      <span className="truncate text-center font-bold tabular-nums text-foreground">{scoreFor(match)}</span>
+      <span className={`min-w-0 truncate text-right font-medium ${showAffordance ? "pr-3" : ""}`}>
+        {match.team_b || "待定"}
+      </span>
+      {showAffordance && (
+        <ChevronRight
+          data-testid="linked-row-affordance"
+          aria-hidden="true"
+          className="absolute right-1 h-3.5 w-3.5 text-muted-foreground/50 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
+        />
+      )}
     </>
   );
 }
@@ -111,8 +130,8 @@ export function MatchList({ data, dataUpdatedAt }: Props) {
   const updatedAt = formatClock(new Date(dataUpdatedAt ?? fallbackUpdatedAt));
 
   return (
-    <div className="min-w-0 space-y-4 overflow-hidden">
-      <header className="flex items-center justify-between gap-3 px-1">
+    <div className="min-w-0 overflow-hidden rounded-lg border border-border/70 bg-background/20">
+      <header className="flex items-center justify-between gap-3 border-b border-border/60 bg-card/55 px-3 py-2.5">
         <h3 className="min-w-0 truncate text-sm font-semibold text-foreground">今日赛程与比分</h3>
         <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">
           最近更新 {updatedAt}
@@ -120,8 +139,8 @@ export function MatchList({ data, dataUpdatedAt }: Props) {
       </header>
 
       {Object.entries(groups).map(([league, matches]) => (
-        <section key={league} className="min-w-0 space-y-1">
-          <div className="flex items-center justify-between gap-2 px-1 text-xs font-semibold tracking-wide text-muted-foreground">
+        <section key={league} className="min-w-0">
+          <div className="flex items-center justify-between gap-2 border-b border-border/45 bg-muted/20 px-3 py-1.5 text-[11px] font-semibold text-muted-foreground">
             <h4 className="min-w-0 truncate">{league}</h4>
             <span className="shrink-0 tabular-nums">{matches.length} 场</span>
           </div>
@@ -133,9 +152,9 @@ export function MatchList({ data, dataUpdatedAt }: Props) {
                 href={match.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className={`${ROW_CLASS_NAME} transition-colors hover:border-primary/40 hover:bg-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2`}
+                className={`${ROW_CLASS_NAME} group transition-colors hover:bg-primary/[0.06] focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring`}
               >
-                <MatchRowContent match={match} />
+                <MatchRowContent match={match} showAffordance />
               </a>
             ) : (
               <div key={match.id} data-testid="match-row" className={ROW_CLASS_NAME}>

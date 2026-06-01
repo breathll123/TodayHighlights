@@ -80,6 +80,7 @@ describe("MatchList", () => {
     expect(within(row).getByText("67'")).toBeInTheDocument();
     expect(within(row).getByText("67'").className).toContain("text-red");
     expect(within(row).getByTestId("live-dot")).toBeInTheDocument();
+    expect(within(row).getByTestId("live-dot").className).toContain("motion-safe:animate-pulse");
     expect(within(row).getByText("2 - 1")).toBeInTheDocument();
   });
 
@@ -109,6 +110,16 @@ describe("MatchList", () => {
     const row = screen.getByRole("link");
     expect(within(row).getByText("完场")).toBeInTheDocument();
     expect(within(row).getByText("3 - 2")).toBeInTheDocument();
+  });
+
+  it("uses warm semantic emphasis for postponed and cancelled matches", () => {
+    const { rerender } = render(<MatchList data={[match({ status: 18, score_a: "", score_b: "" })]} />);
+
+    expect(within(screen.getByRole("link")).getByText("延期").className).toContain("text-amber");
+
+    rerender(<MatchList data={[match({ status: 19, score_a: "", score_b: "" })]} />);
+
+    expect(within(screen.getByRole("link")).getByText("取消").className).toContain("text-amber");
   });
 
   it("supports legacy string statuses", () => {
@@ -147,6 +158,7 @@ describe("MatchList", () => {
 
     expect(screen.queryByRole("link")).not.toBeInTheDocument();
     expect(screen.getByTestId("match-row")).not.toHaveAttribute("href");
+    expect(screen.queryByTestId("linked-row-affordance")).not.toBeInTheDocument();
   });
 
   it("opens matches with a URL in a new tab", () => {
@@ -155,5 +167,6 @@ describe("MatchList", () => {
     expect(screen.getByRole("link")).toHaveAttribute("href", "https://example.com/match/1");
     expect(screen.getByRole("link")).toHaveAttribute("target", "_blank");
     expect(screen.getByRole("link")).toHaveAttribute("rel", "noopener noreferrer");
+    expect(within(screen.getByRole("link")).getByTestId("linked-row-affordance")).toBeInTheDocument();
   });
 });
