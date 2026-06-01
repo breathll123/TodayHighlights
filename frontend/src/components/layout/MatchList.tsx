@@ -59,6 +59,11 @@ function formatClock(date: Date): string {
     .join(":");
 }
 
+function proxyImg(url?: string): string {
+  if (!url) return "";
+  return `/api/public/proxy/image?url=${encodeURIComponent(url)}`;
+}
+
 function formatStartTime(startTime?: string): string {
   return startTime?.match(/[T ](\d{2}:\d{2})/)?.[1] ?? "待定";
 }
@@ -108,7 +113,7 @@ function MatchRowContent({ match, showAffordance = false }: { match: MatchItem; 
       </span>
       <span className="flex min-w-0 items-center gap-1.5 font-medium">
         {match.logo_a ? (
-          <img src={match.logo_a} alt="" className="h-5 w-5 shrink-0 rounded-full object-contain" loading="lazy" />
+          <img src={proxyImg(match.logo_a)} alt="" className="h-5 w-5 shrink-0 rounded-full object-contain" loading="lazy" />
         ) : null}
         <span className="truncate">{match.team_a || "待定"}</span>
       </span>
@@ -116,7 +121,7 @@ function MatchRowContent({ match, showAffordance = false }: { match: MatchItem; 
       <span className={`flex min-w-0 items-center justify-end gap-1.5 font-medium ${showAffordance ? "pr-3" : ""}`}>
         <span className="truncate">{match.team_b || "待定"}</span>
         {match.logo_b ? (
-          <img src={match.logo_b} alt="" className="h-5 w-5 shrink-0 rounded-full object-contain" loading="lazy" />
+          <img src={proxyImg(match.logo_b)} alt="" className="h-5 w-5 shrink-0 rounded-full object-contain" loading="lazy" />
         ) : null}
       </span>
       {showAffordance && (
@@ -154,7 +159,7 @@ export function MatchList({ data, dataUpdatedAt }: Props) {
           <div className="flex items-center justify-between gap-2 border-b border-border/45 bg-muted/20 px-3 py-1.5 text-[11px] font-semibold text-muted-foreground">
             <h4 className="flex min-w-0 items-center gap-1.5 truncate">
               {matches[0]?.logo_league ? (
-                <img src={matches[0].logo_league} alt="" className="h-4 w-4 shrink-0 object-contain" loading="lazy" />
+                <img src={proxyImg(matches[0].logo_league)} alt="" className="h-4 w-4 shrink-0 object-contain" loading="lazy" />
               ) : null}
               {league}
             </h4>
