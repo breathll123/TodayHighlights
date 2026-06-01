@@ -80,7 +80,7 @@ export function StandingsTable({ data }: Props) {
               <span className="text-center font-semibold">分</span>
             </div>
 
-            {items.map((item, i) => (
+            {data.map((item, i) => (
               <a
                 key={item.id}
                 href={item.url || "#"}
