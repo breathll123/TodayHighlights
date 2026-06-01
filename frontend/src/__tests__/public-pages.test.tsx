@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
 
@@ -57,6 +57,7 @@ vi.mock("../api/client", () => ({
 import { SummaryPage } from "../pages/SummaryPage";
 import { StockTopicPage } from "../pages/StockTopicPage";
 import { sourceNameFor } from "../components/layout/GridRenderer";
+import { fetchPageBlocks } from "../api/client";
 
 function Wrapper({ children }: { children: React.ReactNode }) {
   const queryClient = new QueryClient({
@@ -101,10 +102,38 @@ describe("StockTopicPage", () => {
 });
 
 describe("FootballTopicPage", () => {
-  it("names the active football data source", async () => {
+  it("renders a compact football overview with match metadata", async () => {
+    vi.mocked(fetchPageBlocks).mockResolvedValueOnce({
+      blocks: [
+        {
+          id: 2,
+          title: "今日赛程",
+          source_type: "qiumiwu_matches",
+          data: [
+            {
+              id: 1,
+              league: "英超",
+              status: 1,
+              team_a: "阿森纳",
+              team_b: "切尔西",
+              start_time: "2026-06-01T20:30:00",
+            },
+          ],
+        },
+      ],
+    });
+
     render(<StockTopicPage />, { wrapper: FootballWrapper });
-    expect(await screen.findByText("足球主题看板")).toBeInTheDocument();
-    expect(screen.getByText("全球足球联赛实时比分、赛程、积分榜，球迷屋数据源。")).toBeInTheDocument();
+
+    expect(await within(screen.getByTestId("football-topic-overview")).findByText("1 场")).toBeInTheDocument();
+    expect(screen.getByText("足球主题看板")).toBeInTheDocument();
+    expect(screen.getByText("全球足球联赛实时比分与赛程，球迷屋数据源")).toBeInTheDocument();
+    expect(screen.getByText("赛事数量")).toBeInTheDocument();
+    expect(screen.getByText("最近更新")).toBeInTheDocument();
+    expect(screen.getByText("运行中")).toBeInTheDocument();
+    expect(screen.queryByText("当前主题")).not.toBeInTheDocument();
+    expect(screen.queryByText("观测时间")).not.toBeInTheDocument();
+    expect(screen.queryByText("内容模块")).not.toBeInTheDocument();
   });
 });
 
