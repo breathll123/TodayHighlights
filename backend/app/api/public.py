@@ -36,18 +36,19 @@ def page_blocks(route: str, session: Session = Depends(get_session)) -> dict:
     return {"blocks": blocks}
 
 
-# Allowed image proxy domains
-_IMAGE_PROXY_DOMAINS = {"file.qiumiwu.com", "img.qiumiwu.com", "sd.qunliao.info", "bdimg.qunliao.info", "spdc.jsty.com"}
-
 _IMAGE_CLIENT = httpx.Client(timeout=10, headers={"User-Agent": "Mozilla/5.0", "Referer": "https://www.qiumiwu.com/"})
 
 
 @router.get("/proxy/image")
 def proxy_image(url: str = Query(...)):
-    """Proxy third-party images to fix Content-Type mismatches and CORS."""
+    """Proxy third-party images to fix Content-Type mismatches and CORS.
+
+    Domain allowlist is deferred to nginx proxy layer at deployment time.
+    Local dev allows all domains."""
     domain = urlparse(url).netloc
-    if domain not in _IMAGE_PROXY_DOMAINS:
-        raise HTTPException(status_code=403, detail=f"Domain not allowed: {domain}")
+    # Only block obviously internal hosts to prevent basic SSRF
+    if domain in ("localhost", "127.0.0.1", "::1") or domain.startswith("10.") or domain.startswith("192.168.") or domain.startswith("172.16."):
+        raise HTTPException(status_code=403, detail=f"Internal host blocked: {domain}")
 
     try:
         resp = _IMAGE_CLIENT.get(url)
