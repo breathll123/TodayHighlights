@@ -1,4 +1,5 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 
 interface StandingItem {
   id: string | number;
@@ -61,30 +62,78 @@ export function StandingsTable({ data }: Props) {
   const groups = useMemo(() => groupByLeague(data), [data]);
   const leagueNames = Object.keys(groups);
   const [activeLeague, setActiveLeague] = useState(leagueNames[0] || "");
+  const tabScrollRef = useRef<HTMLDivElement>(null);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(true);
 
   const items = groups[activeLeague] || [];
   const first = items[0];
   const season = first?.season || "";
   const updated = first?.updated || "";
 
+  const updateScrollState = () => {
+    const el = tabScrollRef.current;
+    if (!el) return;
+    setCanScrollLeft(el.scrollLeft > 2);
+    setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 2);
+  };
+
+  useEffect(() => {
+    updateScrollState();
+  }, [leagueNames]);
+
+  const scrollTabs = (dir: "left" | "right") => {
+    const el = tabScrollRef.current;
+    if (!el) return;
+    el.scrollBy({ left: dir === "left" ? -200 : 200, behavior: "smooth" });
+    setTimeout(updateScrollState, 300);
+  };
+
   return (
     <div className="min-w-0 overflow-hidden rounded-lg border border-border/70 bg-card/75 shadow-sm">
-      {/* League tabs */}
+      {/* League tabs — scrollable with arrows */}
       {leagueNames.length > 1 && (
-        <div className="flex items-center gap-0.5 overflow-x-auto border-b border-border/50 bg-muted/30 px-2 py-1.5">
-          {leagueNames.map((name) => (
-            <button
-              key={name}
-              onClick={() => setActiveLeague(name)}
-              className={`shrink-0 rounded px-2.5 py-1 text-xs font-medium transition-colors ${
-                activeLeague === name
-                  ? "bg-primary text-primary-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground hover:bg-muted"
-              }`}
-            >
-              {name}
-            </button>
-          ))}
+        <div className="flex items-center border-b border-border/40 bg-gradient-to-b from-muted/40 to-muted/10">
+          {/* Left arrow */}
+          <button
+            onClick={() => scrollTabs("left")}
+            disabled={!canScrollLeft}
+            className="shrink-0 h-10 w-8 flex items-center justify-center text-muted-foreground hover:text-foreground disabled:opacity-20 disabled:pointer-events-none transition-colors"
+            aria-label="向左滚动"
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </button>
+
+          {/* Tabs */}
+          <div
+            ref={tabScrollRef}
+            className="flex items-center gap-1 overflow-x-auto flex-1 py-2 px-1 scrollbar-none"
+            onScroll={updateScrollState}
+          >
+            {leagueNames.map((name) => (
+              <button
+                key={name}
+                onClick={() => setActiveLeague(name)}
+                className={`shrink-0 rounded-md px-3 py-1.5 text-xs font-semibold transition-all duration-200 ${
+                  activeLeague === name
+                    ? "bg-primary text-primary-foreground shadow-sm scale-105"
+                    : "text-muted-foreground hover:text-foreground hover:bg-muted/60 active:scale-95"
+                }`}
+              >
+                {name}
+              </button>
+            ))}
+          </div>
+
+          {/* Right arrow */}
+          <button
+            onClick={() => scrollTabs("right")}
+            disabled={!canScrollRight}
+            className="shrink-0 h-10 w-8 flex items-center justify-center text-muted-foreground hover:text-foreground disabled:opacity-20 disabled:pointer-events-none transition-colors"
+            aria-label="向右滚动"
+          >
+            <ChevronRight className="h-4 w-4" />
+          </button>
         </div>
       )}
 
