@@ -45,38 +45,28 @@ function TeamLogo({ url, name }: { url?: string; name?: string }) {
   );
 }
 
-function groupByLeague(items: StandingItem[]): Record<string, StandingItem[]> {
-  const groups: Record<string, StandingItem[]> = {};
-  for (const item of items) {
-    const league = item.league || "其他";
-    if (!groups[league]) groups[league] = [];
-    groups[league].push(item);
-  }
-  return groups;
-}
-
 export function StandingsTable({ data }: Props) {
-  const groups = groupByLeague(data);
+  const first = data[0];
+  const league = first?.league || "";
+  const season = first?.season || "";
+  const updated = first?.updated || "";
 
   return (
     <div className="min-w-0 overflow-hidden rounded-lg border border-border/70 bg-card/75 shadow-sm">
-      {Object.entries(groups).map(([league, items]) => {
-        const first = items[0];
-        return (
-          <section key={league} className="min-w-0">
-            <div className="flex items-center justify-between gap-2 border-b border-border/50 bg-muted/30 px-3 py-1.5">
-              <h4 className="flex min-w-0 items-center gap-1.5 text-xs font-semibold text-foreground/80">
-                {league}
-                {first?.season ? (
-                  <span className="font-normal text-muted-foreground">{first.season}</span>
-                ) : null}
-              </h4>
-              {first?.updated ? (
-                <span className="shrink-0 text-[10px] text-muted-foreground/60">
-                  更新 {first.updated}
-                </span>
-              ) : null}
-            </div>
+      <section className="min-w-0">
+        <div className="flex items-center justify-between gap-2 border-b border-border/50 bg-muted/30 px-3 py-1.5">
+          <h4 className="flex min-w-0 items-center gap-1.5 text-xs font-semibold text-foreground/80">
+            {league} 积分榜
+            {season ? (
+              <span className="font-normal text-muted-foreground">{season}</span>
+            ) : null}
+          </h4>
+          {updated ? (
+            <span className="shrink-0 text-[10px] text-muted-foreground/60">
+              更新 {updated}
+            </span>
+          ) : null}
+        </div>
 
             {/* Header row */}
             <div className="grid grid-cols-[2.5rem_minmax(0,1fr)_2.5rem_2.5rem_2.5rem_2.5rem_2.5rem_2.5rem] gap-1 border-b border-border/40 bg-muted/20 px-2.5 py-1 text-[10px] font-medium text-muted-foreground">
@@ -119,9 +109,7 @@ export function StandingsTable({ data }: Props) {
                 <span className="text-center tabular-nums font-bold text-foreground">{item.pts || "-"}</span>
               </a>
             ))}
-          </section>
-        );
-      })}
+      </section>
     </div>
   );
 }

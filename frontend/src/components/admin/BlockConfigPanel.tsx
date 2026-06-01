@@ -160,6 +160,24 @@ export function BlockConfigPanel({ form, onChange, onSave, onCancel }: Props) {
         </div>
       )}
 
+      {form.source_type === "qiumiwu_standings" && (
+        <div className="space-y-1.5">
+          <Label className="text-xs">选择联赛</Label>
+          <Select value={String(form.source_config?.league ?? "英超")} onValueChange={(v) => update("source_config", { ...form.source_config, league: v })}>
+            <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="英超" className="text-xs">英超</SelectItem>
+              <SelectItem value="西甲" className="text-xs">西甲</SelectItem>
+              <SelectItem value="意甲" className="text-xs">意甲</SelectItem>
+              <SelectItem value="德甲" className="text-xs">德甲</SelectItem>
+              <SelectItem value="法甲" className="text-xs">法甲</SelectItem>
+              <SelectItem value="中超" className="text-xs">中超</SelectItem>
+              <SelectItem value="欧冠" className="text-xs">欧冠</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+
       {/* Display Count */}
       <div className="space-y-1.5">
         <div className="flex items-center justify-between">
