@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, Shield } from "lucide-react";
 
 interface MatchItem {
   id: string | number;
@@ -64,6 +64,30 @@ function proxyImg(url?: string): string {
   return `/api/public/proxy/image?url=${encodeURIComponent(url)}`;
 }
 
+function TeamLogo({ url, name, size = "sm" }: { url?: string; name?: string; size?: "sm" | "xs" }) {
+  const [failed, setFailed] = useState(false);
+  const dims = size === "sm" ? "h-5 w-5" : "h-4 w-4";
+
+  if (!url || failed) {
+    const initial = (name || "?").charAt(0);
+    return (
+      <span className={`${dims} shrink-0 rounded-full bg-muted flex items-center justify-center text-[10px] font-bold text-muted-foreground`}>
+        {initial}
+      </span>
+    );
+  }
+
+  return (
+    <img
+      src={proxyImg(url)}
+      alt=""
+      className={`${dims} shrink-0 rounded-full object-contain`}
+      loading="lazy"
+      onError={() => setFailed(true)}
+    />
+  );
+}
+
 function formatStartTime(startTime?: string): string {
   return startTime?.match(/[T ](\d{2}:\d{2})/)?.[1] ?? "待定";
 }
@@ -112,17 +136,13 @@ function MatchRowContent({ match, showAffordance = false }: { match: MatchItem; 
         <span className={`truncate ${STATUS_TONE_CLASS[status.tone]}`}>{status.label}</span>
       </span>
       <span className="flex min-w-0 items-center gap-1.5 font-medium">
-        {match.logo_a ? (
-          <img src={proxyImg(match.logo_a)} alt="" className="h-5 w-5 shrink-0 rounded-full object-contain" loading="lazy" />
-        ) : null}
+        <TeamLogo url={match.logo_a} name={match.team_a} />
         <span className="truncate">{match.team_a || "待定"}</span>
       </span>
       <span className="truncate text-center font-bold tabular-nums text-foreground">{scoreFor(match)}</span>
       <span className={`flex min-w-0 items-center justify-end gap-1.5 font-medium ${showAffordance ? "pr-3" : ""}`}>
         <span className="truncate">{match.team_b || "待定"}</span>
-        {match.logo_b ? (
-          <img src={proxyImg(match.logo_b)} alt="" className="h-5 w-5 shrink-0 rounded-full object-contain" loading="lazy" />
-        ) : null}
+        <TeamLogo url={match.logo_b} name={match.team_b} />
       </span>
       {showAffordance && (
         <ChevronRight
@@ -158,9 +178,7 @@ export function MatchList({ data, dataUpdatedAt }: Props) {
         <section key={league} className="min-w-0">
           <div className="flex items-center justify-between gap-2 border-b border-border/45 bg-muted/20 px-3 py-1.5 text-[11px] font-semibold text-muted-foreground">
             <h4 className="flex min-w-0 items-center gap-1.5 truncate">
-              {matches[0]?.logo_league ? (
-                <img src={proxyImg(matches[0].logo_league)} alt="" className="h-4 w-4 shrink-0 object-contain" loading="lazy" />
-              ) : null}
+              <TeamLogo url={matches[0]?.logo_league} name={league} size="xs" />
               {league}
             </h4>
             <span className="shrink-0 tabular-nums">{matches.length} 场</span>
