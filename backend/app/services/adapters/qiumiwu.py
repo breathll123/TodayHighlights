@@ -113,3 +113,124 @@ def fetch_matches(_config: dict, limit: int) -> list[dict]:
 
     except Exception:
         return []
+
+
+# League slug mapping for standings
+_STANDINGS_LEAGUES = {
+    "英超": "yingchao", "西甲": "xijia", "意甲": "yijia", "德甲": "dejia",
+    "法甲": "fajia", "中超": "zhongchao", "欧冠": "ouguanbei",
+}
+
+_STANDINGS_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15",
+}
+
+
+@ttl_cache(300)
+def fetch_standings(_config: dict, limit: int) -> list[dict]:
+    """Fetch league standings from qiumiwu mobile pages."""
+    import re
+
+    result = []
+    for league_name, slug in _STANDINGS_LEAGUES.items():
+        try:
+            resp = httpx.get(
+                f"https://m.qiumiwu.com/league/{slug}/standings",
+                headers=_STANDINGS_HEADERS,
+                timeout=20,
+            )
+            resp.raise_for_status()
+            html = resp.text
+
+            # Season
+            year_m = re.search(r"(\d{4}-\d{4})", html)
+            season = year_m.group(1) if year_m else ""
+
+            # Update time
+            update_m = re.search(r"(\d{4}/\d{1,2}/\d{1,2}\s+\d{1,2}:\d{1,2})更新", html)
+            update_time = update_m.group(1) if update_m else ""
+
+            # Basic table — first 20 teams
+            teams = []
+            seen = set()
+            for m in re.finditer(
+                r'<a class="stats__table__list"\s+href="([^"]*)"(?:\s+pos="(\d+)")?[^>]*>\s*'
+                r"<span>(\d+)</span>\s*"
+                r'<img\s+alt="([^"]*)"\s+src="([^"]*)"[^>]*>\s*'
+                r"<span>([^<]*)</span>",
+                html,
+            ):
+                rank = int(m.group(3))
+                if rank <= 20 and rank not in seen:
+                    seen.add(rank)
+                    teams.append({
+                        "rank": rank,
+                        "name": m.group(6),
+                        "logo": m.group(5),
+                    })
+            teams.sort(key=lambda x: x["rank"])
+
+            # Stats — per-team rows in type="info" section
+            info_start = html.find('type="info"')
+            if info_start < 0:
+                continue
+
+            info_html = html[info_start:]
+            stat_rows = re.findall(
+                r'<div class="stats__table__list">((?:\s*<span[^>]*>[^<]*</span>\s*)+)</div>',
+                info_html,
+            )
+
+            stats_list = []
+            for row_html in stat_rows:
+                values = re.findall(r"<span[^>]*>\s*([0-9./\-]+[%]?)\s*</span>", row_html)
+                if len(values) == 10 and values[0].strip().isdigit():
+                    stats_list.append({
+                        "gp": values[0].strip(),
+                        "pts": values[1].strip(),
+                        "wdl": values[2].strip(),
+                        "gf": values[3].strip(),
+                        "ga": values[4].strip(),
+                        "gd": values[5].strip(),
+                        "avg_gf": values[6].strip(),
+                        "avg_ga": values[7].strip(),
+                        "avg_gd": values[8].strip(),
+                        "win_rate": values[9].strip(),
+                    })
+
+            # Match teams with stats (first 20 for 总榜)
+            for i, team in enumerate(teams):
+                if i < len(stats_list):
+                    s = stats_list[i]
+                    team["gp"] = s["gp"]
+                    team["pts"] = s["pts"]
+                    team["wdl"] = s["wdl"]
+                    team["gf"] = s["gf"]
+                    team["ga"] = s["ga"]
+                    team["gd"] = s["gd"]
+
+                result.append({
+                    "id": f"standings_{slug}_{team['rank']}",
+                    "title": f"#{team['rank']} {team['name']}",
+                    "summary": f"{league_name} · {season} · {team.get('pts','?')}分 {team.get('wdl','?')}",
+                    "url": f"https://m.qiumiwu.com/league/{slug}/standings",
+                    "league": league_name,
+                    "season": season,
+                    "updated": update_time,
+                    "rank": team["rank"],
+                    "team": team["name"],
+                    "logo": team["logo"],
+                    "gp": team.get("gp", ""),
+                    "pts": team.get("pts", ""),
+                    "wdl": team.get("wdl", ""),
+                    "gf": team.get("gf", ""),
+                    "ga": team.get("ga", ""),
+                    "gd": team.get("gd", ""),
+                    "score": int(team.get("pts", "0") or "0"),
+                    "source_type": "qiumiwu_standings",
+                })
+
+        except Exception:
+            continue
+
+    return result[:limit]

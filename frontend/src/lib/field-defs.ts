@@ -62,6 +62,11 @@ export const FIELD_DEFS: Record<string, FieldDef[]> = {
     { key: "title", label: "比赛", type: "text" },
     { key: "subtitle", label: "联赛", type: "text" },
   ],
+  qiumiwu_standings: [
+    { key: "title", label: "球队", type: "text" },
+    { key: "subtitle", label: "战绩", type: "text" },
+    { key: "score", label: "积分", type: "number" },
+  ],
 };
 
 const DEFAULT_STOCK = ["title", "percent", "score"];
@@ -84,4 +89,5 @@ export const DEFAULT_FIELDS: Record<string, string[]> = {
   eastmoney_announcements: ["title", "subtitle"],
   tonghuashun_news: ["title", "subtitle"],
   qiumiwu_matches: ["title", "subtitle"],
+  qiumiwu_standings: ["title", "subtitle", "score"],
 };
