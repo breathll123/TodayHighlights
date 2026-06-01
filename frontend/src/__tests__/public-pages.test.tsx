@@ -107,8 +107,23 @@ describe("FootballTopicPage", () => {
       blocks: [
         {
           id: 2,
+          page_route: "/topics/football",
           title: "今日赛程",
+          sort_order: 0,
           source_type: "qiumiwu_matches",
+          source_config: {},
+          display_style: "list",
+          display_count: 20,
+          sort_by: "default",
+          enabled: true,
+          created_at: "2026-06-01T10:00:00",
+          updated_at: "2026-06-01T10:00:00",
+          block_key: "football-matches",
+          col_span: 1,
+          row_span: 1,
+          grid_x: 0,
+          grid_y: 0,
+          status: "published",
           data: [
             {
               id: 1,
