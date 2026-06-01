@@ -177,13 +177,12 @@ export function MatchList({ data, dataUpdatedAt }: Props) {
   const updatedAt = formatClock(new Date(dataUpdatedAt ?? fallbackUpdatedAt));
 
   return (
-    <div className="min-w-0 overflow-hidden rounded-lg border border-border/70 bg-background/20">
-      <header className="flex items-center justify-between gap-3 border-b border-border/60 bg-card/55 px-3 py-2.5">
-        <h3 className="min-w-0 truncate text-sm font-semibold text-foreground">今日赛程与比分</h3>
-        <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">
+    <div className="min-w-0 overflow-hidden rounded-lg border border-border/70 bg-card/75 shadow-sm">
+      <div className="flex items-center justify-between gap-3 border-b border-border/50 bg-muted/30 px-3 py-1.5">
+        <span className="text-[10px] text-muted-foreground/60">
           最近更新 {updatedAt}
         </span>
-      </header>
+      </div>
 
       {Object.entries(groups).map(([league, matches]) => (
         <section key={league} className="min-w-0">
