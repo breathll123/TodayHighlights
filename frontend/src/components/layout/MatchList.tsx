@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { ChevronRight, Shield } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { ChevronRight } from "lucide-react";
 
 interface MatchItem {
   id: string | number;
@@ -25,6 +25,8 @@ interface Props {
   dataUpdatedAt?: number;
 }
 
+type StatusFilter = "all" | "live" | "fixture" | "played";
+
 const ROW_CLASS_NAME =
   "relative grid min-w-0 grid-cols-[3.75rem_minmax(0,1fr)_4.25rem_minmax(0,1fr)] items-center gap-2 overflow-hidden border-b border-border/45 bg-transparent px-2.5 py-2.5 text-sm last:border-b-0";
 
@@ -37,15 +39,7 @@ const LEGACY_STATUS_CODES: Record<string, number | undefined> = {
   Uncertain: undefined,
 };
 
-function groupByLeague(items: MatchItem[]): Record<string, MatchItem[]> {
-  const groups: Record<string, MatchItem[]> = {};
-  for (const item of items) {
-    const league = item.league || "其他";
-    if (!groups[league]) groups[league] = [];
-    groups[league].push(item);
-  }
-  return groups;
-}
+// ── helpers ──
 
 function statusCode(status: MatchItem["status"]): number | undefined {
   if (typeof status === "number") return status;
@@ -68,32 +62,31 @@ function proxyImg(url?: string): string {
   return `/api/public/proxy/image?url=${encodeURIComponent(url)}`;
 }
 
-function TeamLogo({ url, name, size = "sm" }: { url?: string; name?: string; size?: "sm" | "xs" }) {
-  const [failed, setFailed] = useState(false);
-  const dims = size === "sm" ? "h-5 w-5" : "h-4 w-4";
-
-  if (!url || failed) {
-    const initial = (name || "?").charAt(0);
-    return (
-      <span className={`${dims} shrink-0 rounded-full bg-muted flex items-center justify-center text-[10px] font-bold text-muted-foreground`}>
-        {initial}
-      </span>
-    );
-  }
-
-  return (
-    <img
-      src={proxyImg(url)}
-      alt=""
-      className={`${dims} shrink-0 rounded-full object-contain`}
-      loading="lazy"
-      onError={() => setFailed(true)}
-    />
-  );
-}
-
 function formatStartTime(startTime?: string): string {
   return startTime?.match(/[T ](\d{2}:\d{2})/)?.[1] ?? "待定";
+}
+
+function extractDate(startTime?: string): string {
+  if (!startTime) return "";
+  return startTime.split("T")[0] ?? startTime.split(" ")[0] ?? "";
+}
+
+function dateLabel(dateStr: string): string {
+  const d = new Date(dateStr + "T00:00:00");
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const target = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const diff = Math.round((target.getTime() - today.getTime()) / 86400000);
+
+  const weekdays = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"];
+  const wd = weekdays[d.getDay()];
+  const m = d.getMonth() + 1;
+  const day = d.getDate();
+
+  if (diff === 0) return `今天 ${m}月${day}日 ${wd}`;
+  if (diff === 1) return `明天 ${m}月${day}日 ${wd}`;
+  if (diff === 2) return `后天 ${m}月${day}日 ${wd}`;
+  return `${m}月${day}日 ${wd}`;
 }
 
 function scoreFor(match: MatchItem): string {
@@ -123,11 +116,44 @@ const STATUS_TONE_CLASS = {
   warm: "text-amber-500",
 };
 
+const FILTER_OPTIONS: { value: StatusFilter; label: string }[] = [
+  { value: "all", label: "全部" },
+  { value: "live", label: "进行中" },
+  { value: "fixture", label: "未开赛" },
+  { value: "played", label: "已结束" },
+];
+
+// ── components ──
+
+function TeamLogo({ url, name, size = "sm" }: { url?: string; name?: string; size?: "sm" | "xs" }) {
+  const [failed, setFailed] = useState(false);
+  const dims = size === "sm" ? "h-5 w-5" : "h-4 w-4";
+
+  if (!url || failed) {
+    const initial = (name || "?").charAt(0);
+    return (
+      <span className={`${dims} shrink-0 rounded-full bg-muted flex items-center justify-center text-[10px] font-bold text-muted-foreground`}>
+        {initial}
+      </span>
+    );
+  }
+
+  return (
+    <img
+      src={proxyImg(url)}
+      alt=""
+      className={`${dims} shrink-0 rounded-full object-contain`}
+      loading="lazy"
+      onError={() => setFailed(true)}
+    />
+  );
+}
+
 function MatchRowContent({ match, showAffordance = false }: { match: MatchItem; showAffordance?: boolean }) {
   const status = statusFor(match);
   const startTime = formatStartTime(match.start_time);
   const code = statusCode(match.status);
-  const showSecondaryTime = code !== 1 && startTime; // Fixture already shows time as primary
+  const showSecondaryTime = code !== 1 && startTime;
 
   return (
     <>
@@ -166,53 +192,126 @@ function MatchRowContent({ match, showAffordance = false }: { match: MatchItem; 
   );
 }
 
+function filterMatches(items: MatchItem[], f: StatusFilter): MatchItem[] {
+  if (f === "all") return items;
+  return items.filter((m) => {
+    const c = statusCode(m.status);
+    if (f === "live") return c === 2 || c === 8;
+    if (f === "fixture") return c === 1;
+    if (f === "played") return c === 15;
+    return true;
+  });
+}
+
+interface DateGroup {
+  date: string;
+  label: string;
+  leagues: Record<string, MatchItem[]>;
+}
+
+function groupMatches(items: MatchItem[]): DateGroup[] {
+  const dates: Record<string, Record<string, MatchItem[]>> = {};
+  for (const item of items) {
+    const d = extractDate(item.start_time) || "未知";
+    if (!dates[d]) dates[d] = {};
+    const league = item.league || "其他";
+    if (!dates[d][league]) dates[d][league] = [];
+    dates[d][league].push(item);
+  }
+  return Object.entries(dates)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([date, leagues]) => ({
+      date,
+      label: dateLabel(date),
+      leagues,
+    }));
+}
+
+// ── main ──
+
 export function MatchList({ data, dataUpdatedAt }: Props) {
   const [fallbackUpdatedAt, setFallbackUpdatedAt] = useState(() => Date.now());
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
 
   useEffect(() => {
     if (dataUpdatedAt == null) setFallbackUpdatedAt(Date.now());
   }, [data, dataUpdatedAt]);
 
-  const groups = groupByLeague(data);
+  const filtered = useMemo(() => filterMatches(data, statusFilter), [data, statusFilter]);
+  const dateGroups = useMemo(() => groupMatches(filtered), [filtered]);
   const updatedAt = formatClock(new Date(dataUpdatedAt ?? fallbackUpdatedAt));
 
   return (
     <div className="min-w-0 overflow-hidden rounded-lg border border-border/70 bg-card/75 shadow-sm">
+      {/* Top bar: update time + filters */}
       <div className="flex items-center justify-between gap-3 border-b border-border/50 bg-muted/30 px-3 py-1.5">
-        <span className="text-[10px] text-muted-foreground/60">
+        <span className="text-[10px] text-muted-foreground/60 shrink-0">
           最近更新 {updatedAt}
         </span>
+        <div className="flex items-center gap-0.5">
+          {FILTER_OPTIONS.map((opt) => (
+            <button
+              key={opt.value}
+              onClick={() => setStatusFilter(opt.value)}
+              className={`px-2 py-0.5 text-[10px] rounded transition-colors ${
+                statusFilter === opt.value
+                  ? "bg-primary text-primary-foreground font-medium"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
       </div>
 
-      {Object.entries(groups).map(([league, matches]) => (
-        <section key={league} className="min-w-0">
-          <div className="flex items-center justify-between gap-2 border-b border-border/45 bg-muted/20 px-3 py-1.5 text-[11px] font-semibold text-muted-foreground">
-            <h4 className="flex min-w-0 items-center gap-1.5 truncate">
-              <TeamLogo url={matches[0]?.logo_league} name={league} size="xs" />
-              {league}
-            </h4>
-            <span className="shrink-0 tabular-nums">{matches.length} 场</span>
+      {/* Date → League → Matches */}
+      {dateGroups.map((dg) => (
+        <div key={dg.date}>
+          <div className="border-b border-border/60 bg-accent/10 px-3 py-1.5 text-[11px] font-semibold text-foreground/80">
+            {dg.label}
+            <span className="ml-2 font-normal text-muted-foreground">
+              {Object.values(dg.leagues).flat().length} 场
+            </span>
           </div>
 
-          {matches.map((match) => {
-            return match.url ? (
-              <a
-                key={match.id}
-                href={match.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className={`${ROW_CLASS_NAME} group transition-colors hover:bg-primary/[0.06] focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring`}
-              >
-                <MatchRowContent match={match} showAffordance />
-              </a>
-            ) : (
-              <div key={match.id} data-testid="match-row" className={ROW_CLASS_NAME}>
-                <MatchRowContent match={match} />
+          {Object.entries(dg.leagues).map(([league, matches]) => (
+            <section key={`${dg.date}-${league}`} className="min-w-0">
+              <div className="flex items-center justify-between gap-2 border-b border-border/45 bg-muted/20 px-3 py-1 text-[10px] font-semibold text-muted-foreground">
+                <h4 className="flex min-w-0 items-center gap-1.5 truncate">
+                  <TeamLogo url={matches[0]?.logo_league} name={league} size="xs" />
+                  {league}
+                </h4>
+                <span className="shrink-0 tabular-nums">{matches.length} 场</span>
               </div>
-            );
-          })}
-        </section>
+
+              {matches.map((match) => {
+                return match.url ? (
+                  <a
+                    key={match.id}
+                    href={match.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={`${ROW_CLASS_NAME} group transition-colors hover:bg-primary/[0.06] focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring`}
+                  >
+                    <MatchRowContent match={match} showAffordance />
+                  </a>
+                ) : (
+                  <div key={match.id} data-testid="match-row" className={ROW_CLASS_NAME}>
+                    <MatchRowContent match={match} />
+                  </div>
+                );
+              })}
+            </section>
+          ))}
+        </div>
       ))}
+
+      {dateGroups.length === 0 && (
+        <div className="px-4 py-10 text-center text-sm text-muted-foreground">
+          暂无符合条件的比赛
+        </div>
+      )}
     </div>
   );
 }
