@@ -1,5 +1,7 @@
 import { useState, useMemo, useRef, useEffect } from "react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { motion } from "framer-motion";
+import { ChevronLeft, ChevronRight, Trophy } from "lucide-react";
+import { RankBadge, rankRowTone } from "./RankBadge";
 
 interface StandingItem {
   id: string | number;
@@ -114,10 +116,10 @@ export function StandingsTable({ data }: Props) {
               <button
                 key={name}
                 onClick={() => setActiveLeague(name)}
-                className={`shrink-0 rounded-md px-3 py-1.5 text-xs font-semibold transition-all duration-200 ${
+                className={`shrink-0 rounded-md px-3 py-1.5 text-xs font-semibold transition-all duration-200 active:scale-[0.98] ${
                   activeLeague === name
-                    ? "bg-primary text-primary-foreground shadow-sm scale-105"
-                    : "text-muted-foreground hover:text-foreground hover:bg-muted/60 active:scale-95"
+                    ? "bg-primary text-primary-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
                 }`}
               >
                 {name}
@@ -140,6 +142,7 @@ export function StandingsTable({ data }: Props) {
       {/* League header */}
       <div className="flex items-center justify-between gap-2 border-b border-border/50 bg-muted/20 px-3 py-1.5">
         <h4 className="flex min-w-0 items-center gap-1.5 text-xs font-semibold text-foreground/80">
+          <Trophy className="h-3.5 w-3.5 text-primary" aria-hidden="true" />
           {activeLeague} 积分榜
           {season ? (
             <span className="font-normal text-muted-foreground">{season}</span>
@@ -166,20 +169,18 @@ export function StandingsTable({ data }: Props) {
 
       {/* Rows */}
       {items.map((item, i) => (
-        <a
+        <motion.a
           key={item.id}
           href={item.url || "#"}
           target="_blank"
           rel="noopener noreferrer"
-          className={`grid grid-cols-[2.5rem_minmax(0,1fr)_2.5rem_2.5rem_2.5rem_2.5rem_2.5rem_2.5rem] gap-1 border-b border-border/40 px-2.5 py-2 text-xs last:border-b-0 transition-colors hover:bg-primary/[0.04] ${
-            i < 4 ? "bg-primary/[0.02]" : ""
-          }`}
+          data-rank-row={item.rank}
+          initial={{ opacity: 0, y: 4 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.22, delay: Math.min(i, 6) * 0.03, ease: "easeOut" }}
+          className={`grid min-h-10 grid-cols-[2.5rem_minmax(0,1fr)_2.5rem_2.5rem_2.5rem_2.5rem_2.5rem_2.5rem] items-center gap-1 border-b border-border/40 px-2.5 py-2 text-xs transition-[background-color,border-color,transform] last:border-b-0 hover:bg-primary/[0.06] active:scale-[0.99] ${rankRowTone(item.rank)}`}
         >
-          <span className={`text-center tabular-nums font-medium ${
-            item.rank && item.rank <= 4 ? "text-primary" : "text-muted-foreground"
-          }`}>
-            {item.rank}
-          </span>
+          <RankBadge rank={item.rank} className="justify-center" />
           <span className="flex items-center gap-1.5 truncate">
             <TeamLogo url={item.logo} name={item.team} />
             <span className="truncate font-medium">{item.team}</span>
@@ -192,7 +193,7 @@ export function StandingsTable({ data }: Props) {
             {item.gd || "-"}
           </span>
           <span className="text-center tabular-nums font-bold text-foreground">{item.pts || "-"}</span>
-        </a>
+        </motion.a>
       ))}
     </div>
   );

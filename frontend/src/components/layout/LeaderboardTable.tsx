@@ -1,3 +1,7 @@
+import { motion } from "framer-motion";
+import { BrainCircuit, ExternalLink } from "lucide-react";
+import { RankBadge, rankRowTone } from "./RankBadge";
+
 interface LeaderboardItem {
   id: string | number;
   title: string;
@@ -43,7 +47,10 @@ export function LeaderboardTable({ data }: Props) {
     <div className="min-w-0 overflow-hidden rounded-lg border border-border/70 bg-card/75 shadow-sm">
       {/* Header */}
       <div className="flex items-center justify-between gap-2 border-b border-border/50 bg-muted/30 px-3 py-2">
-        <h4 className="text-xs font-semibold text-foreground/80">AI 模型排行榜</h4>
+        <h4 className="flex items-center gap-1.5 text-xs font-semibold text-foreground/85">
+          <BrainCircuit className="h-3.5 w-3.5 text-primary" aria-hidden="true" />
+          AI 模型排行榜
+        </h4>
         <span className="shrink-0 text-[10px] text-muted-foreground/60">
           DataLearner · {data.length} 模型
         </span>
@@ -61,25 +68,24 @@ export function LeaderboardTable({ data }: Props) {
 
       {/* Rows */}
       {data.map((item, i) => (
-        <a
+        <motion.a
           key={item.id}
           href={item.url || "#"}
           target="_blank"
           rel="noopener noreferrer"
-          className={`${colClass} border-b border-border/40 px-2.5 py-2 text-xs last:border-b-0 transition-colors hover:bg-primary/[0.04] ${
-            i < 3 ? "bg-primary/[0.02]" : ""
-          }`}
+          data-rank-row={item.rank}
+          initial={{ opacity: 0, y: 4 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.22, delay: Math.min(i, 6) * 0.03, ease: "easeOut" }}
+          className={`${colClass} ${rankRowTone(item.rank)} group min-h-10 items-center border-b border-border/40 px-2.5 py-2 text-xs transition-[background-color,border-color,transform] last:border-b-0 hover:bg-primary/[0.06] active:scale-[0.99]`}
         >
-          <span className={`text-center tabular-nums font-semibold ${
-            item.rank && item.rank <= 3 ? "text-primary" : "text-muted-foreground"
-          }`}>
-            {item.rank || "—"}
-          </span>
+          <RankBadge rank={item.rank} className="justify-center" />
           <span className="flex items-center gap-1.5 truncate">
             <span className="truncate font-medium">{item.model || item.title}</span>
             {item.company ? (
               <span className="text-[10px] text-muted-foreground/60 shrink-0 hidden sm:inline">{item.company}</span>
             ) : null}
+            <ExternalLink className="ml-auto hidden h-3 w-3 shrink-0 text-muted-foreground/45 opacity-0 transition-opacity group-hover:opacity-100 sm:block" aria-hidden="true" />
           </span>
           {activeBenchmarks.map((b) => {
             const val = (item as any)[b] || "";
@@ -104,7 +110,7 @@ export function LeaderboardTable({ data }: Props) {
               item.license || "—"
             )}
           </span>
-        </a>
+        </motion.a>
       ))}
     </div>
   );
