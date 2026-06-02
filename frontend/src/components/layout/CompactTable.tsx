@@ -1,7 +1,10 @@
 import type { FieldDef } from "@/lib/field-defs";
+import { cn } from "@/lib/utils";
+import { RankBadge, rankRowTone } from "./RankBadge";
 
 interface Row {
   id?: string | number;
+  rank?: number;
   title: string;
   subtitle?: string;
   percent?: number;
@@ -12,6 +15,7 @@ interface Row {
 interface Props {
   data: Row[];
   fields: FieldDef[];
+  showRank?: boolean;
 }
 
 function fmtNum(n: string | number | undefined): string {
@@ -49,10 +53,10 @@ function cell(key: string, item: Row) {
   }
 }
 
-function gridCols(fields: FieldDef[]): string {
+function gridCols(fields: FieldDef[], showRank = false): string {
   // First field (title) gets 3fr, each subsequent gets 1fr
   const widths = fields.map((_, i) => (i === 0 ? "3fr" : "1fr"));
-  return widths.join(" ");
+  return showRank ? ["2.75rem", ...widths].join(" ") : widths.join(" ");
 }
 
 function colAlign(f: FieldDef, i: number): string {
@@ -61,11 +65,12 @@ function colAlign(f: FieldDef, i: number): string {
   return "text-left";
 }
 
-export function CompactTable({ data, fields }: Props) {
-  const cols = gridCols(fields);
+export function CompactTable({ data, fields, showRank = false }: Props) {
+  const cols = gridCols(fields, showRank);
   return (
     <div className="overflow-hidden bg-card/70 backdrop-blur-md border border-white/20 rounded-lg">
-      <div className="grid text-[11px] font-medium text-muted-foreground px-4 py-2.5 border-b bg-muted/30 items-center gap-x-3" style={{ gridTemplateColumns: cols }}>
+      <div className="grid items-center gap-x-3 border-b bg-muted/30 px-3 py-2 text-[11px] font-medium text-muted-foreground" style={{ gridTemplateColumns: cols }}>
+        {showRank ? <span className="text-center">排名</span> : null}
         {fields.map((f, i) => (
           <span key={f.key} className={colAlign(f, i)}>{f.label}</span>
         ))}
@@ -73,9 +78,14 @@ export function CompactTable({ data, fields }: Props) {
       {data.map((item, idx) => (
         <div
           key={item.id ?? idx}
-          className="grid text-sm px-4 py-3 min-h-[44px] border-b last:border-0 hover:bg-muted/30 transition-colors items-center gap-x-3"
+          data-rank-row={showRank ? item.rank : undefined}
+          className={cn(
+            "grid min-h-10 items-center gap-x-3 border-b px-3 py-2.5 text-sm transition-colors last:border-0 hover:bg-muted/30",
+            showRank && rankRowTone(item.rank),
+          )}
           style={{ gridTemplateColumns: cols }}
         >
+          {showRank ? <RankBadge rank={item.rank} className="justify-center" /> : null}
           {fields.map((f, i) => (
             <div key={f.key} className={colAlign(f, i)}>
               {cell(f.key, item)}

@@ -60,6 +60,7 @@ function mapItem(item: any, sourceType: string) {
   }
   return {
     id: item.id,
+    rank: item.rank,
     title: fmtTitle(item),
     subtitle,
     percent: item.percent,
@@ -108,6 +109,7 @@ function AAIndexBlock({ block, displayFields }: { block: any; displayFields: any
         </div>
       )}
       <CompactTable
+        showRank
         data={filtered.map((item: any) => mapItem(item, block.source_type))}
         fields={displayFields}
       />
