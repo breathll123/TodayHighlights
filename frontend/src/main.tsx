@@ -9,7 +9,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false}>
       <App />
-      <Toaster position="top-right" richColors />
+      <Toaster position="top-center" richColors />
     </ThemeProvider>
   </React.StrictMode>
 );
