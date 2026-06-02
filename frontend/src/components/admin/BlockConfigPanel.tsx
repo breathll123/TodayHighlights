@@ -53,7 +53,7 @@ const SOURCE_TYPE_OPTIONS_QMW: { value: Block["source_type"]; label: string }[] 
 ];
 
 const SOURCE_TYPE_OPTIONS_AI: { value: Block["source_type"]; label: string }[] = [
-  { value: "datalearner_leaderboard", label: "AI模型排行榜" },
+  { value: "datalearner_aa_index", label: "AI模型智能指数排行榜" },
 ];
 
 const DISPLAY_STYLE_OPTIONS = [
@@ -185,16 +185,18 @@ export function BlockConfigPanel({ form, onChange, onSave, onCancel }: Props) {
         </div>
       )}
 
-      {/* Display Style */}
-      <div className="space-y-1.5">
-        <Label className="text-xs">展示样式</Label>
-        <Select value={form.display_style} onValueChange={(v) => update("display_style", v as Block["display_style"])}>
-          <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            {DISPLAY_STYLE_OPTIONS.map((o) => <SelectItem key={o.value} value={o.value} className="text-xs">{o.label}</SelectItem>)}
-          </SelectContent>
-        </Select>
-      </div>
+      {/* Display Style — hidden for AA index (list only) */}
+      {form.source_type !== "datalearner_aa_index" && (
+        <div className="space-y-1.5">
+          <Label className="text-xs">展示样式</Label>
+          <Select value={form.display_style} onValueChange={(v) => update("display_style", v as Block["display_style"])}>
+            <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {DISPLAY_STYLE_OPTIONS.map((o) => <SelectItem key={o.value} value={o.value} className="text-xs">{o.label}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
 
       {/* Display Fields */}
       {allFields.length > 0 && (

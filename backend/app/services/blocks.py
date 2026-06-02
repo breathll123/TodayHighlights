@@ -153,6 +153,10 @@ def resolve_block_data(session: Session, block: PageBlock) -> list[dict]:
         from app.services.adapters.datalearner import fetch_leaderboard
         return fetch_leaderboard(config, limit)
 
+    if source_type == "datalearner_aa_index":
+        from app.services.adapters.datalearner import fetch_aa_index
+        return fetch_aa_index(config, limit)
+
     return []
 
 

@@ -118,3 +118,100 @@ def fetch_leaderboard(_config: dict, limit: int) -> list[dict]:
 
     except Exception:
         return []
+
+
+@ttl_cache(600)
+def fetch_aa_index(_config: dict, limit: int) -> list[dict]:
+    """Parse AA Intelligence Index leaderboard from datalearner.com."""
+    try:
+        resp = httpx.get(
+            "https://www.datalearner.com/leaderboards/external/aa-quality-index",
+            headers=_headers,
+            timeout=30,
+            follow_redirects=True,
+        )
+        resp.raise_for_status()
+        html = resp.text
+
+        table_m = re.search(r"<table[^>]*>(.*?)</table>", html, re.DOTALL)
+        if not table_m:
+            return []
+
+        rows = re.findall(r"<tr[^>]*>(.*?)</tr>", table_m.group(1), re.DOTALL)
+
+        # Known companies for splitting (English names from AA index)
+        _companies = [
+            "Google Deep Mind", "Moonshot AI", "Meta AI", "Facebook AI研究实验室",
+            "DeepSeek-AI", "xAI", "Alibaba", "Anthropic", "OpenAI",
+            "Google", "Microsoft", "Mistral AI", "Cohere", "AI21 Labs",
+            "01.AI", "智谱AI", "百川智能", "字节跳动", "腾讯", "百度",
+            "Apple", "Amazon", "NVIDIA", "Intel", "AMD", "IBM",
+            "Swiss AI", "Liquid AI", "Xiaomi", "Hugging Face",
+        ]
+
+        result = []
+        for row in rows[1:]:  # Skip header
+            cells = re.findall(r"<td[^>]*>(.*?)</td>", row, re.DOTALL)
+            vals = [re.sub(r"<[^>]+>", "", c).strip() for c in cells]
+            vals = [re.sub(r"\s+", " ", v).strip() for v in vals if v]
+            # vals: [rank, 'ModelName (reasoning)Company', 'score', 'company']
+
+            if len(vals) < 3:
+                continue
+
+            rank_str = vals[0]
+            model_str = vals[1]
+            score_str = vals[2]
+
+            try:
+                rank = int(rank_str)
+            except ValueError:
+                continue
+
+            # Extract reasoning level: " (max)", " (xhigh)", etc.
+            reasoning = ""
+            reasoning_m = re.search(r"\s*\(([^)]+)\)", model_str)
+            if reasoning_m:
+                reasoning = reasoning_m.group(1)
+                model_str = model_str[:reasoning_m.start()] + model_str[reasoning_m.end():]
+
+            # Split company from model name using the 4th company column
+            company = vals[3] if len(vals) > 3 else ""
+            model_name = model_str.strip()
+            if company and model_name.endswith(company):
+                model_name = model_name[:-len(company)].strip()
+            else:
+                # Fallback: try known companies
+                for c in sorted(_companies, key=len, reverse=True):
+                    if model_name.endswith(c):
+                        company = c
+                        model_name = model_name[:-len(c)].strip()
+                        break
+
+            title = model_name
+            if reasoning:
+                title = f"{model_name} ({reasoning})"
+
+            try:
+                score_num = int(score_str)
+            except ValueError:
+                score_num = 0
+
+            result.append({
+                "id": f"aa_{rank}_{model_name}",
+                "title": title,
+                "summary": f"智能指数 {score_str} · {company}" if company else f"智能指数 {score_str}",
+                "url": "https://www.datalearner.com/leaderboards/external/aa-quality-index",
+                "rank": rank,
+                "model": model_name,
+                "reasoning": reasoning,
+                "aa_score": score_str,
+                "company": company,
+                "score": score_num,
+                "source_type": "datalearner_aa_index",
+            })
+
+        return result[:limit]
+
+    except Exception:
+        return []

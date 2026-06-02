@@ -49,6 +49,10 @@ function mapItem(item: any, sourceType: string) {
     const s = summary.match(/卖出([\d.]+亿)/);
     if (b && s) subtitle = `买${b[1]}/卖${s[1]}`;
   }
+  // AA index: company from summary
+  else if (sourceType === "datalearner_aa_index" && item.company) {
+    subtitle = item.company;
+  }
   // Raw / news: use published_at as subtitle
   else if (item.published_at) {
     subtitle = new Date(item.published_at).toLocaleDateString();
@@ -106,6 +110,13 @@ export function GridRenderer({ blocks, isLoading, dataUpdatedAt }: { blocks: any
               <MatchList data={block.data} dataUpdatedAt={dataUpdatedAt} />
             ) : block.source_type === "qiumiwu_standings" ? (
               <StandingsTable data={block.data} />
+            ) : block.source_type === "datalearner_aa_index" ? (
+              <div className="border rounded-lg bg-card">
+                <CompactTable
+                  data={block.data.map((item: any) => mapItem(item, st))}
+                  fields={displayFields}
+                />
+              </div>
             ) : block.source_type === "datalearner_leaderboard" ? (
               <LeaderboardTable data={block.data} />
             ) : block.source_type === "tonghuashun_news" || block.display_style === "timeline" ? (
