@@ -226,7 +226,7 @@ def fetch_aa_index(_config: dict, limit: int) -> list[dict]:
             headers=_headers, timeout=30, follow_redirects=True,
         )
         resp.raise_for_status()
-        global_items, update_time, version = _parse_aa_page(resp.text, resp.url, "global")
+        global_items, update_time, version = _parse_aa_page(resp.text, str(resp.url), "global")
 
         # Fetch china
         china_items = []
@@ -236,7 +236,7 @@ def fetch_aa_index(_config: dict, limit: int) -> list[dict]:
                 headers=_headers, timeout=30, follow_redirects=True,
             )
             resp_cn.raise_for_status()
-            china_items, _, _ = _parse_aa_page(resp_cn.text, resp_cn.url, "china")
+            china_items, _, _ = _parse_aa_page(resp_cn.text, str(resp_cn.url), "china")
         except Exception:
             pass
 
