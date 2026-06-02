@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { BlockCard } from "./BlockCard";
 import { BlockSkeleton } from "./BlockSkeleton";
 import { CompactTable } from "./CompactTable";
@@ -67,6 +68,53 @@ function mapItem(item: any, sourceType: string) {
   };
 }
 
+function AAIndexBlock({ block, displayFields }: { block: any; displayFields: any[] }) {
+  const [region, setRegion] = useState<"global" | "china">("global");
+  const allData = block.data || [];
+  const filtered = allData.filter((item: any) => item.region === region || (!item.region && region === "global"));
+  const first = filtered[0];
+
+  return (
+    <div className="border rounded-lg bg-card overflow-hidden">
+      {first?.description && (
+        <div className="border-b border-border/50 bg-muted/30 px-4 py-2.5">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-xs text-muted-foreground leading-relaxed min-w-0">
+              {first.description}
+            </p>
+            <span className="shrink-0 text-[10px] text-muted-foreground/60">
+              {first?.version ? `v${first.version}` : ""}
+              {first?.updated ? ` · ${first.updated}` : ""}
+            </span>
+          </div>
+          <div className="flex items-center gap-1 mt-2">
+            <button
+              onClick={() => setRegion("global")}
+              className={`px-2.5 py-0.5 text-[10px] rounded transition-colors ${
+                region === "global" ? "bg-primary text-primary-foreground font-medium" : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              全球排名
+            </button>
+            <button
+              onClick={() => setRegion("china")}
+              className={`px-2.5 py-0.5 text-[10px] rounded transition-colors ${
+                region === "china" ? "bg-primary text-primary-foreground font-medium" : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              国产排名
+            </button>
+          </div>
+        </div>
+      )}
+      <CompactTable
+        data={filtered.map((item: any) => mapItem(item, block.source_type))}
+        fields={displayFields}
+      />
+    </div>
+  );
+}
+
 export function GridRenderer({ blocks, isLoading, dataUpdatedAt }: { blocks: any[]; isLoading: boolean; dataUpdatedAt?: number }) {
   if (isLoading) {
     return (
@@ -111,25 +159,7 @@ export function GridRenderer({ blocks, isLoading, dataUpdatedAt }: { blocks: any
             ) : block.source_type === "qiumiwu_standings" ? (
               <StandingsTable data={block.data} />
             ) : block.source_type === "datalearner_aa_index" ? (
-              <div className="border rounded-lg bg-card overflow-hidden">
-                {block.data?.[0]?.description && (
-                  <div className="border-b border-border/50 bg-muted/30 px-4 py-2.5">
-                    <div className="flex items-center justify-between gap-3">
-                      <p className="text-xs text-muted-foreground leading-relaxed min-w-0">
-                        {block.data[0].description}
-                      </p>
-                      <span className="shrink-0 text-[10px] text-muted-foreground/60">
-                        {block.data[0]?.version ? `v${block.data[0].version}` : ""}
-                        {block.data[0]?.updated ? ` · ${block.data[0].updated}` : ""}
-                      </span>
-                    </div>
-                  </div>
-                )}
-                <CompactTable
-                  data={block.data.map((item: any) => mapItem(item, st))}
-                  fields={displayFields}
-                />
-              </div>
+              <AAIndexBlock block={block} displayFields={displayFields} />
             ) : block.source_type === "datalearner_leaderboard" ? (
               <LeaderboardTable data={block.data} />
             ) : block.source_type === "tonghuashun_news" || block.display_style === "timeline" ? (
