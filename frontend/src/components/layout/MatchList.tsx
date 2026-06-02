@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { ChevronRight } from "lucide-react";
+import { motion } from "framer-motion";
+import { CalendarClock, ChevronRight } from "lucide-react";
 
 interface MatchItem {
   id: string | number;
@@ -243,17 +244,25 @@ export function MatchList({ data, dataUpdatedAt }: Props) {
 
   return (
     <div className="min-w-0 overflow-hidden rounded-lg border border-border/70 bg-card/75 shadow-sm">
-      {/* Top bar: update time + filters */}
-      <div className="flex items-center justify-between gap-3 border-b border-border/50 bg-muted/30 px-3 py-1.5">
-        <span className="text-[10px] text-muted-foreground/60 shrink-0">
+      {/* Top bar: semantic title + update time */}
+      <div className="flex items-center justify-between gap-3 border-b border-border/50 bg-muted/30 px-3 py-2">
+        <span className="flex items-center gap-1.5 text-xs font-semibold text-foreground/85">
+          <CalendarClock className="h-3.5 w-3.5 text-primary" aria-hidden="true" />
+          比赛中心
+        </span>
+        <span className="shrink-0 text-[10px] text-muted-foreground/60">
           最近更新 {updatedAt}
         </span>
+      </div>
+
+      {/* Filters */}
+      <div className="flex items-center justify-end gap-0.5 border-b border-border/50 bg-muted/15 px-3 py-1.5">
         <div className="flex items-center gap-0.5">
           {FILTER_OPTIONS.map((opt) => (
             <button
               key={opt.value}
               onClick={() => setStatusFilter(opt.value)}
-              className={`px-2 py-0.5 text-[10px] rounded transition-colors ${
+              className={`rounded px-2 py-0.5 text-[10px] transition-[color,background-color,transform] active:scale-[0.97] ${
                 statusFilter === opt.value
                   ? "bg-primary text-primary-foreground font-medium"
                   : "text-muted-foreground hover:text-foreground"
@@ -266,52 +275,59 @@ export function MatchList({ data, dataUpdatedAt }: Props) {
       </div>
 
       {/* Date → League → Matches */}
-      {dateGroups.map((dg) => (
-        <div key={dg.date}>
-          <div className="border-b border-border/60 bg-accent/10 px-3 py-1.5 text-[11px] font-semibold text-foreground/80">
-            {dg.label}
-            <span className="ml-2 font-normal text-muted-foreground">
-              {Object.values(dg.leagues).flat().length} 场
-            </span>
+      <motion.div
+        key={statusFilter}
+        initial={{ opacity: 0, y: 3 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.18, ease: "easeOut" }}
+      >
+        {dateGroups.map((dg) => (
+          <div key={dg.date}>
+            <div className="border-b border-border/60 bg-accent/10 px-3 py-1.5 text-[11px] font-semibold text-foreground/80">
+              {dg.label}
+              <span className="ml-2 font-normal text-muted-foreground">
+                {Object.values(dg.leagues).flat().length} 场
+              </span>
+            </div>
+
+            {Object.entries(dg.leagues).map(([league, matches]) => (
+              <section key={`${dg.date}-${league}`} className="min-w-0">
+                <div className="flex items-center justify-between gap-2 border-b border-border/45 bg-muted/20 px-3 py-1 text-[10px] font-semibold text-muted-foreground">
+                  <h4 className="flex min-w-0 items-center gap-1.5 truncate">
+                    <TeamLogo url={matches[0]?.logo_league} name={league} size="xs" />
+                    {league}
+                  </h4>
+                  <span className="shrink-0 tabular-nums">{matches.length} 场</span>
+                </div>
+
+                {matches.map((match) => {
+                  return match.url ? (
+                    <a
+                      key={match.id}
+                      href={match.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className={`${ROW_CLASS_NAME} group transition-[background-color,transform] hover:bg-primary/[0.06] active:scale-[0.99] focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring`}
+                    >
+                      <MatchRowContent match={match} showAffordance />
+                    </a>
+                  ) : (
+                    <div key={match.id} data-testid="match-row" className={ROW_CLASS_NAME}>
+                      <MatchRowContent match={match} />
+                    </div>
+                  );
+                })}
+              </section>
+            ))}
           </div>
+        ))}
 
-          {Object.entries(dg.leagues).map(([league, matches]) => (
-            <section key={`${dg.date}-${league}`} className="min-w-0">
-              <div className="flex items-center justify-between gap-2 border-b border-border/45 bg-muted/20 px-3 py-1 text-[10px] font-semibold text-muted-foreground">
-                <h4 className="flex min-w-0 items-center gap-1.5 truncate">
-                  <TeamLogo url={matches[0]?.logo_league} name={league} size="xs" />
-                  {league}
-                </h4>
-                <span className="shrink-0 tabular-nums">{matches.length} 场</span>
-              </div>
-
-              {matches.map((match) => {
-                return match.url ? (
-                  <a
-                    key={match.id}
-                    href={match.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className={`${ROW_CLASS_NAME} group transition-colors hover:bg-primary/[0.06] focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring`}
-                  >
-                    <MatchRowContent match={match} showAffordance />
-                  </a>
-                ) : (
-                  <div key={match.id} data-testid="match-row" className={ROW_CLASS_NAME}>
-                    <MatchRowContent match={match} />
-                  </div>
-                );
-              })}
-            </section>
-          ))}
-        </div>
-      ))}
-
-      {dateGroups.length === 0 && (
-        <div className="px-4 py-10 text-center text-sm text-muted-foreground">
-          暂无符合条件的比赛
-        </div>
-      )}
+        {dateGroups.length === 0 && (
+          <div className="px-4 py-10 text-center text-sm text-muted-foreground">
+            暂无符合条件的比赛
+          </div>
+        )}
+      </motion.div>
     </div>
   );
 }

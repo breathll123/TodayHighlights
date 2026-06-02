@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { motion } from "framer-motion";
+import { BrainCircuit, CalendarClock, ChartNoAxesCombined, Newspaper, Trophy } from "lucide-react";
 import { BlockCard } from "./BlockCard";
 import { BlockSkeleton } from "./BlockSkeleton";
 import { CompactTable } from "./CompactTable";
@@ -6,6 +8,7 @@ import { MatchList } from "./MatchList";
 import { NewsTimeline } from "./NewsTimeline";
 import { StandingsTable } from "./StandingsTable";
 import { LeaderboardTable } from "./LeaderboardTable";
+import { SectionHeading } from "./SectionHeading";
 import { FIELD_DEFS, DEFAULT_FIELDS } from "@/lib/field-defs";
 
 const SOURCE_NAMES: Record<string, string> = {
@@ -35,6 +38,14 @@ function fmtTitle(item: any): string {
   const code = item.symbols?.[0] ?? item.related_symbols_json?.[0];
   if (!code || String(code).startsWith("BK") || name.includes(String(code))) return name;
   return `${name}(${code})`;
+}
+
+function sectionIcon(sourceType: string) {
+  if (sourceType === "qiumiwu_matches") return CalendarClock;
+  if (sourceType === "qiumiwu_standings") return Trophy;
+  if (sourceType.startsWith("datalearner_")) return BrainCircuit;
+  if (sourceType === "tonghuashun_news") return Newspaper;
+  return ChartNoAxesCombined;
 }
 
 function mapItem(item: any, sourceType: string) {
@@ -91,7 +102,7 @@ function AAIndexBlock({ block, displayFields }: { block: any; displayFields: any
           <div className="flex items-center gap-1 mt-2">
             <button
               onClick={() => setRegion("global")}
-              className={`px-2.5 py-0.5 text-[10px] rounded transition-colors ${
+              className={`rounded px-2.5 py-0.5 text-[10px] transition-[color,background-color,transform] active:scale-[0.97] ${
                 region === "global" ? "bg-primary text-primary-foreground font-medium" : "text-muted-foreground hover:text-foreground"
               }`}
             >
@@ -99,7 +110,7 @@ function AAIndexBlock({ block, displayFields }: { block: any; displayFields: any
             </button>
             <button
               onClick={() => setRegion("china")}
-              className={`px-2.5 py-0.5 text-[10px] rounded transition-colors ${
+              className={`rounded px-2.5 py-0.5 text-[10px] transition-[color,background-color,transform] active:scale-[0.97] ${
                 region === "china" ? "bg-primary text-primary-foreground font-medium" : "text-muted-foreground hover:text-foreground"
               }`}
             >
@@ -108,11 +119,18 @@ function AAIndexBlock({ block, displayFields }: { block: any; displayFields: any
           </div>
         </div>
       )}
-      <CompactTable
-        showRank
-        data={filtered.map((item: any) => mapItem(item, block.source_type))}
-        fields={displayFields}
-      />
+      <motion.div
+        key={region}
+        initial={{ opacity: 0, y: 3 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.18, ease: "easeOut" }}
+      >
+        <CompactTable
+          showRank
+          data={filtered.map((item: any) => mapItem(item, block.source_type))}
+          fields={displayFields}
+        />
+      </motion.div>
     </div>
   );
 }
@@ -149,10 +167,10 @@ export function GridRenderer({ blocks, isLoading, dataUpdatedAt }: { blocks: any
         return (
           <section
             key={block.id}
-            className="space-y-2"
+            className="space-y-3"
             style={{ gridColumn: `span ${block.col_span || 1}`, gridRow: `span ${block.row_span || 1}` }}
           >
-            <h2 className="text-sm font-semibold text-muted-foreground tracking-wide">{block.title}</h2>
+            <SectionHeading icon={sectionIcon(st)} title={block.title} />
 
             {block.data?.length === 0 ? (
               <div className="bg-card border rounded-xl p-6 text-center text-sm text-muted-foreground">暂无数据</div>

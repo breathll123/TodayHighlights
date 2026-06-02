@@ -70,7 +70,7 @@
 .page-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 18px;
+  gap: 16px;
   max-width: 100%;
 }
 
@@ -88,6 +88,21 @@
   .page-grid > * {
     width: 100% !important;
     grid-column: span 1 !important;
+  }
+}
+
+@layer components {
+  .rank-row-gold {
+    background: linear-gradient(90deg, hsl(38 92% 54% / 0.09), transparent 68%);
+    box-shadow: inset 2px 0 0 hsl(38 92% 54% / 0.72);
+  }
+  .rank-row-silver {
+    background: linear-gradient(90deg, hsl(215 16% 68% / 0.07), transparent 68%);
+    box-shadow: inset 2px 0 0 hsl(215 16% 68% / 0.56);
+  }
+  .rank-row-bronze {
+    background: linear-gradient(90deg, hsl(24 72% 48% / 0.07), transparent 68%);
+    box-shadow: inset 2px 0 0 hsl(24 72% 48% / 0.56);
   }
 }
 

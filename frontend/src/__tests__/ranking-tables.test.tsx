@@ -27,6 +27,12 @@ describe("CompactTable rankings", () => {
     expect(screen.getByTestId("rank-medal-1")).toBeInTheDocument();
     expect(screen.getByLabelText("第 4 名")).toBeInTheDocument();
   });
+
+  it("uses restrained top-three glow hooks", () => {
+    render(<CompactTable showRank data={[{ id: 1, rank: 1, title: "Claude", score: 61 }]} fields={fields} />);
+
+    expect(screen.getByLabelText("第 1 名").closest("[data-rank-row]")).toHaveClass("rank-row-gold");
+  });
 });
 
 it("renders medals in the AI multi-benchmark leaderboard", () => {

@@ -169,4 +169,11 @@ describe("MatchList", () => {
     expect(screen.getByRole("link")).toHaveAttribute("rel", "noopener noreferrer");
     expect(within(screen.getByRole("link")).getByTestId("linked-row-affordance")).toBeInTheDocument();
   });
+
+  it("shows a semantic match heading and press feedback on filters", () => {
+    render(<MatchList data={[match()]} />);
+
+    expect(screen.getByText("比赛中心")).toBeInTheDocument();
+    expect(screen.getByText("全部").className).toContain("active:scale");
+  });
 });
