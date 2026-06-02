@@ -198,7 +198,8 @@ def get_page_blocks(session: Session, route: str) -> list[dict]:
     # Resolve live-API blocks in parallel (pass pre-fetched cookie, skip session)
     if live_blocks:
         with ThreadPoolExecutor(max_workers=8) as executor:
-            futures = {executor.submit(resolve_block_data, session, b, cookie): b for b in live_blocks}
+            # session=None is safe: live blocks only use it for get_cookie, which is pre-fetched
+            futures = {executor.submit(resolve_block_data, None, b, cookie): b for b in live_blocks}
             for future in as_completed(futures):
                 b = futures[future]
                 try:
