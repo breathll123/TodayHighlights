@@ -1,3 +1,5 @@
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
@@ -10,7 +12,7 @@ from app.services.adapters.eastmoney import (
     fetch_announcements, fetch_capital_flow,
     fetch_indices, fetch_industry, fetch_sectors,
 )
-def resolve_block_data(session: Session, block: PageBlock) -> list[dict]:
+def resolve_block_data(session: Session, block: PageBlock, cookie: str | None = None) -> list[dict]:
     source_type = block.source_type
     config = block.source_config or {}
     limit = block.display_count
@@ -66,7 +68,8 @@ def resolve_block_data(session: Session, block: PageBlock) -> list[dict]:
             for ri in raw_items
         ]
 
-    cookie = get_cookie(session)
+    if cookie is None:
+        cookie = get_cookie(session)
 
     if source_type == "hot_events":
         return fetch_hot_events(cookie, limit)
@@ -171,21 +174,47 @@ def get_page_blocks(session: Session, route: str) -> list[dict]:
         .order_by(PageBlock.grid_y, PageBlock.grid_x, PageBlock.sort_order)
     )
     blocks = session.scalars(stmt).all()
-    result = []
-    for block in blocks:
-        item = {
-            "id": block.id,
-            "title": block.title,
-            "sort_order": block.sort_order,
-            "display_style": block.display_style,
-            "display_count": block.display_count,
-            "source_type": block.source_type,
-            "source_config": block.source_config or {},
-            "col_span": block.col_span,
-            "row_span": block.row_span,
-            "grid_x": block.grid_x,
-            "grid_y": block.grid_y,
-            "data": resolve_block_data(session, block),
-        }
-        result.append(item)
-    return result
+
+    # Separate DB-dependent blocks (topic, raw) from live-API blocks
+    db_types = {"topic", "raw", "eastmoney_longhu", "tonghuashun_news"}
+    db_blocks = [b for b in blocks if b.source_type in db_types]
+    live_blocks = [b for b in blocks if b.source_type not in db_types]
+
+    # Resolve DB blocks sequentially (need session)
+    items = []
+    for b in db_blocks:
+        items.append({
+            "id": b.id, "title": b.title, "sort_order": b.sort_order,
+            "display_style": b.display_style, "display_count": b.display_count,
+            "source_type": b.source_type, "source_config": b.source_config or {},
+            "col_span": b.col_span, "row_span": b.row_span,
+            "grid_x": b.grid_x, "grid_y": b.grid_y,
+            "data": resolve_block_data(session, b),
+        })
+
+    # Pre-fetch cookie for live blocks
+    cookie = get_cookie(session)
+
+    # Resolve live-API blocks in parallel (pass pre-fetched cookie, skip session)
+    if live_blocks:
+        with ThreadPoolExecutor(max_workers=8) as executor:
+            futures = {executor.submit(resolve_block_data, session, b, cookie): b for b in live_blocks}
+            for future in as_completed(futures):
+                b = futures[future]
+                try:
+                    data = future.result()
+                except Exception:
+                    data = []
+                items.append({
+                    "id": b.id, "title": b.title, "sort_order": b.sort_order,
+                    "display_style": b.display_style, "display_count": b.display_count,
+                    "source_type": b.source_type, "source_config": b.source_config or {},
+                    "col_span": b.col_span, "row_span": b.row_span,
+                    "grid_x": b.grid_x, "grid_y": b.grid_y,
+                    "data": data,
+                })
+
+    # Preserve original order
+    block_order = {b.id: i for i, b in enumerate(blocks)}
+    items.sort(key=lambda x: block_order.get(x["id"], 0))
+    return items
