@@ -121,17 +121,31 @@ def fetch_leaderboard(_config: dict, limit: int) -> list[dict]:
 
 
 @ttl_cache(600)
-def fetch_aa_index(_config: dict, limit: int) -> list[dict]:
+def fetch_aa_index(config: dict, limit: int) -> list[dict]:
     """Parse AA Intelligence Index leaderboard from datalearner.com."""
+    import datetime as _dt
+
+    region = (config or {}).get("region", "")
+    url = "https://www.datalearner.com/leaderboards/external/aa-quality-index"
+    if region == "china":
+        url += "?isChina=1"
+
     try:
-        resp = httpx.get(
-            "https://www.datalearner.com/leaderboards/external/aa-quality-index",
-            headers=_headers,
-            timeout=30,
-            follow_redirects=True,
-        )
+        resp = httpx.get(url, headers=_headers, timeout=30, follow_redirects=True)
         resp.raise_for_status()
         html = resp.text
+
+        # Extract update time
+        update_time = ""
+        time_m = re.search(r"(\d{4}年\d{1,2}月\d{1,2}日)", html)
+        if time_m:
+            update_time = time_m.group(1)
+
+        # Version info for the header
+        version = ""
+        ver_m = re.search(r"v\d+\.\d+", html)
+        if ver_m:
+            version = ver_m.group(0)
 
         table_m = re.search(r"<table[^>]*>(.*?)</table>", html, re.DOTALL)
         if not table_m:
@@ -206,13 +220,16 @@ def fetch_aa_index(_config: dict, limit: int) -> list[dict]:
                 "id": f"aa_{rank}_{model_name}",
                 "title": title,
                 "summary": f"智能指数 {score_str} · {company}" if company else f"智能指数 {score_str}",
-                "url": "https://www.datalearner.com/leaderboards/external/aa-quality-index",
+                "url": url,
                 "rank": rank,
                 "model": model_name,
                 "reasoning": reasoning,
                 "aa_score": score_str,
                 "company": company,
                 "score": score_num,
+                "updated": update_time,
+                "version": version,
+                "description": "汇总编程、数学、科学、推理、智能体等 10 项标准化评测的综合分数。",
                 "source_type": "datalearner_aa_index",
             })
 

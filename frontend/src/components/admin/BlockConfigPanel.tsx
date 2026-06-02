@@ -169,6 +169,19 @@ export function BlockConfigPanel({ form, onChange, onSave, onCancel }: Props) {
         </div>
       )}
 
+      {form.source_type === "datalearner_aa_index" && (
+        <div className="space-y-1.5">
+          <Label className="text-xs">排名范围</Label>
+          <Select value={String(form.source_config?.region ?? "")} onValueChange={(v) => update("source_config", { ...form.source_config, region: v })}>
+            <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="全球" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="" className="text-xs">全球排名</SelectItem>
+              <SelectItem value="china" className="text-xs">国产模型排名</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+
       {/* Display Count — hidden for standings (always shows all leagues) */}
       {form.source_type !== "qiumiwu_standings" && (
         <div className="space-y-1.5">

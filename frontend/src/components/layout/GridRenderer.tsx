@@ -111,7 +111,20 @@ export function GridRenderer({ blocks, isLoading, dataUpdatedAt }: { blocks: any
             ) : block.source_type === "qiumiwu_standings" ? (
               <StandingsTable data={block.data} />
             ) : block.source_type === "datalearner_aa_index" ? (
-              <div className="border rounded-lg bg-card">
+              <div className="border rounded-lg bg-card overflow-hidden">
+                {block.data?.[0]?.description && (
+                  <div className="border-b border-border/50 bg-muted/30 px-4 py-2.5">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-xs text-muted-foreground leading-relaxed min-w-0">
+                        {block.data[0].description}
+                      </p>
+                      <span className="shrink-0 text-[10px] text-muted-foreground/60">
+                        {block.data[0]?.version ? `v${block.data[0].version}` : ""}
+                        {block.data[0]?.updated ? ` · ${block.data[0].updated}` : ""}
+                      </span>
+                    </div>
+                  </div>
+                )}
                 <CompactTable
                   data={block.data.map((item: any) => mapItem(item, st))}
                   fields={displayFields}
