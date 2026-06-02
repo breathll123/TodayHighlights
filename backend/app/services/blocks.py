@@ -155,7 +155,7 @@ def resolve_block_data(session: Session, block: PageBlock) -> list[dict]:
 
     if source_type == "datalearner_aa_index":
         from app.services.adapters.datalearner import fetch_aa_index
-        return fetch_aa_index(config, limit)
+        return fetch_aa_index(config, max(limit, 500))
 
     return []
 

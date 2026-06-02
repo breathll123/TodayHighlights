@@ -150,13 +150,16 @@ def fetch_aa_index(_config: dict, limit: int) -> list[dict]:
         ]
 
         result = []
+        next_rank = 1
         for row in rows[1:]:  # Skip header
             cells = re.findall(r"<td[^>]*>(.*?)</td>", row, re.DOTALL)
+            # Keep all cells including empty ones (top 3 have SVG icons, no text)
             vals = [re.sub(r"<[^>]+>", "", c).strip() for c in cells]
-            vals = [re.sub(r"\s+", " ", v).strip() for v in vals if v]
-            # vals: [rank, 'ModelName (reasoning)Company', 'score', 'company']
+            vals = [re.sub(r"\s+", " ", v).strip() for v in vals]
+            # vals: ['', 'ModelName (reasoning)Company', 'score', 'company']
+            #  or: ['4', 'ModelName (reasoning)Company', 'score', 'company']
 
-            if len(vals) < 3:
+            if len(vals) < 4:
                 continue
 
             rank_str = vals[0]
@@ -166,7 +169,9 @@ def fetch_aa_index(_config: dict, limit: int) -> list[dict]:
             try:
                 rank = int(rank_str)
             except ValueError:
-                continue
+                rank = next_rank  # Top rows without number (medal icon) — assign sequential
+
+            next_rank = rank + 1
 
             # Extract reasoning level: " (max)", " (xhigh)", etc.
             reasoning = ""
