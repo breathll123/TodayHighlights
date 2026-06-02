@@ -52,11 +52,11 @@ describe("MatchList", () => {
     const data = [match()];
     const { rerender } = render(<MatchList data={data} dataUpdatedAt={new Date(2026, 5, 1, 14, 32, 8).getTime()} />);
 
-    expect(screen.getByText("最近更新 14:32:08")).toBeInTheDocument();
+    expect(screen.getByText("最近更新 2026-06-01 14:32:08")).toBeInTheDocument();
 
     rerender(<MatchList data={data} dataUpdatedAt={new Date(2026, 5, 1, 14, 35, 9).getTime()} />);
 
-    expect(screen.getByText("最近更新 14:35:09")).toBeInTheDocument();
+    expect(screen.getByText("最近更新 2026-06-01 14:35:09")).toBeInTheDocument();
   });
 
   it("shows fixture start time and vs for an unplayed match", () => {
@@ -78,7 +78,7 @@ describe("MatchList", () => {
 
     const row = screen.getByRole("link");
     expect(within(row).getByText("67'")).toBeInTheDocument();
-    expect(within(row).getByText("67'").className).toContain("text-red");
+    expect(within(row).getByText("67'").parentElement).toHaveClass("text-red-500");
     expect(within(row).getByTestId("live-dot")).toBeInTheDocument();
     expect(within(row).getByTestId("live-dot").className).toContain("motion-safe:animate-pulse");
     expect(within(row).getByText("2 - 1")).toBeInTheDocument();
@@ -115,11 +115,11 @@ describe("MatchList", () => {
   it("uses warm semantic emphasis for postponed and cancelled matches", () => {
     const { rerender } = render(<MatchList data={[match({ status: 18, score_a: "", score_b: "" })]} />);
 
-    expect(within(screen.getByRole("link")).getByText("延期").className).toContain("text-amber");
+    expect(within(screen.getByRole("link")).getByText("延期").parentElement).toHaveClass("text-amber-500");
 
     rerender(<MatchList data={[match({ status: 19, score_a: "", score_b: "" })]} />);
 
-    expect(within(screen.getByRole("link")).getByText("取消").className).toContain("text-amber");
+    expect(within(screen.getByRole("link")).getByText("取消").parentElement).toHaveClass("text-amber-500");
   });
 
   it("supports legacy string statuses", () => {

@@ -140,15 +140,13 @@ describe("FootballTopicPage", () => {
 
     render(<TopicPage />, { wrapper: FootballWrapper });
 
-    expect(await within(screen.getByTestId("football-topic-overview")).findByText("1 场")).toBeInTheDocument();
+    expect(await screen.findByText("今日赛程")).toBeInTheDocument();
     expect(screen.getByText("足球主题看板")).toBeInTheDocument();
-    expect(screen.getByText("全球足球联赛实时比分与赛程，球迷屋数据源")).toBeInTheDocument();
-    expect(screen.getByText("赛事数量")).toBeInTheDocument();
-    expect(screen.getByText("最近更新")).toBeInTheDocument();
-    expect(screen.getByText("运行中")).toBeInTheDocument();
-    expect(screen.queryByText("当前主题")).not.toBeInTheDocument();
-    expect(screen.queryByText("观测时间")).not.toBeInTheDocument();
-    expect(screen.queryByText("内容模块")).not.toBeInTheDocument();
+    expect(screen.getByText("全球足球联赛实时比分、赛程、积分榜，球迷屋数据源。")).toBeInTheDocument();
+    expect(screen.getByText("当前主题")).toBeInTheDocument();
+    expect(screen.getByText("观测时间")).toBeInTheDocument();
+    expect(screen.getByText("内容模块")).toBeInTheDocument();
+    expect(screen.getByText("平台状态")).toBeInTheDocument();
   });
 });
 
