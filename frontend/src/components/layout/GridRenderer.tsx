@@ -127,7 +127,10 @@ function AAIndexBlock({ block, displayFields }: { block: any; displayFields: any
       >
         <CompactTable
           showRank
-          data={filtered.map((item: any) => mapItem(item, block.source_type))}
+          data={filtered.map((item: any, index: number) => ({
+            ...mapItem(item, block.source_type),
+            rank: index + 1,
+          }))}
           fields={displayFields}
         />
       </motion.div>

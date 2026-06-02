@@ -1,7 +1,8 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import { CompactTable } from "../components/layout/CompactTable";
+import { GridRenderer } from "../components/layout/GridRenderer";
 import { LeaderboardTable } from "../components/layout/LeaderboardTable";
 import { StandingsTable } from "../components/layout/StandingsTable";
 
@@ -63,4 +64,33 @@ it("renders medals in football standings but keeps fourth place plain", () => {
   expect(screen.getByTestId("rank-medal-1")).toBeInTheDocument();
   expect(screen.getByLabelText("第 4 名")).toBeInTheDocument();
   expect(screen.queryByTestId("rank-medal-4")).not.toBeInTheDocument();
+});
+
+it("re-ranks the domestic AA intelligence view after filtering", () => {
+  render(
+    <GridRenderer
+      isLoading={false}
+      blocks={[
+        {
+          id: 1,
+          title: "AI模型排行",
+          source_type: "datalearner_aa_index",
+          source_config: {},
+          data: [
+            { id: 1, title: "Claude", rank: 1, region: "global", score: 61, description: "综合指数" },
+            { id: 2, title: "Qwen", rank: 7, region: "china", score: 56, description: "综合指数" },
+            { id: 3, title: "Kimi", rank: 10, region: "china", score: 54, description: "综合指数" },
+            { id: 4, title: "DeepSeek", rank: 17, region: "china", score: 52, description: "综合指数" },
+          ],
+        },
+      ]}
+    />,
+  );
+
+  fireEvent.click(screen.getByRole("button", { name: "国产排名" }));
+
+  expect(screen.getByLabelText("第 1 名")).toBeInTheDocument();
+  expect(screen.getByLabelText("第 2 名")).toBeInTheDocument();
+  expect(screen.getByLabelText("第 3 名")).toBeInTheDocument();
+  expect(screen.getAllByTestId(/^rank-medal-/)).toHaveLength(3);
 });
