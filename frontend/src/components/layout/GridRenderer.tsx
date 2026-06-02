@@ -4,6 +4,7 @@ import { CompactTable } from "./CompactTable";
 import { MatchList } from "./MatchList";
 import { NewsTimeline } from "./NewsTimeline";
 import { StandingsTable } from "./StandingsTable";
+import { LeaderboardTable } from "./LeaderboardTable";
 import { FIELD_DEFS, DEFAULT_FIELDS } from "@/lib/field-defs";
 
 const SOURCE_NAMES: Record<string, string> = {
@@ -105,6 +106,8 @@ export function GridRenderer({ blocks, isLoading, dataUpdatedAt }: { blocks: any
               <MatchList data={block.data} dataUpdatedAt={dataUpdatedAt} />
             ) : block.source_type === "qiumiwu_standings" ? (
               <StandingsTable data={block.data} />
+            ) : block.source_type === "datalearner_leaderboard" ? (
+              <LeaderboardTable data={block.data} />
             ) : block.source_type === "tonghuashun_news" || block.display_style === "timeline" ? (
               <NewsTimeline data={block.data.map((item: any) => ({
                 id: item.id,

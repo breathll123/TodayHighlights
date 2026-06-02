@@ -16,6 +16,7 @@ const pages = [
   { route: "/", label: "摘要页" },
   { route: "/topics/stocks", label: "股票页" },
   { route: "/topics/football", label: "足球页" },
+  { route: "/topics/ai", label: "AI页" },
 ];
 
 export function AdminLayoutPage() {

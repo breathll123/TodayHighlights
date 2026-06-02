@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 const topics = [
   { href: "/", label: "全局", enabled: true },
   { href: "/topics/stocks", label: "股票", enabled: true },
-  { href: "#ai", label: "AI", enabled: false },
+  { href: "/topics/ai", label: "AI", enabled: true },
   { href: "/topics/football", label: "足球", enabled: true },
 ];
 
@@ -90,7 +90,7 @@ export function PublicNavbar() {
           </span>
           <Link to="/" className={cn("rounded-md px-3 py-1.5 text-sm", location.pathname === "/" ? "bg-primary text-primary-foreground" : "bg-card text-muted-foreground")}>全局</Link>
           <Link to="/topics/stocks" className={cn("rounded-md px-3 py-1.5 text-sm", location.pathname === "/topics/stocks" ? "bg-primary text-primary-foreground" : "bg-card text-muted-foreground")}>股票</Link>
-          <span className="inline-flex items-center gap-1 rounded-md bg-card px-3 py-1.5 text-sm text-muted-foreground/60"><BrainCircuit className="h-3.5 w-3.5" />AI</span>
+          <Link to="/topics/ai" className={cn("rounded-md px-3 py-1.5 text-sm", location.pathname === "/topics/ai" ? "bg-primary text-primary-foreground" : "bg-card text-muted-foreground")}>AI</Link>
           <Link to="/topics/football" className={cn("rounded-md px-3 py-1.5 text-sm", location.pathname === "/topics/football" ? "bg-primary text-primary-foreground" : "bg-card text-muted-foreground")}>足球</Link>
         </div>
       </div>

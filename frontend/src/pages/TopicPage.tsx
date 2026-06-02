@@ -12,6 +12,10 @@ const TOPIC_META: Record<string, { name: string; description: string }> = {
     name: "足球",
     description: "全球足球联赛实时比分、赛程、积分榜，球迷屋数据源。",
   },
+  "/topics/ai": {
+    name: "AI",
+    description: "AI 大模型性能评测排行榜，DataLearner 数据源。覆盖 HLE、ARC-AGI-2、SWE-bench 等基准。",
+  },
 };
 
 function topicMeta(pathname: string) {

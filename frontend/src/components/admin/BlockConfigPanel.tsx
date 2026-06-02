@@ -52,6 +52,10 @@ const SOURCE_TYPE_OPTIONS_QMW: { value: Block["source_type"]; label: string }[] 
   { value: "qiumiwu_standings", label: "联赛积分榜" },
 ];
 
+const SOURCE_TYPE_OPTIONS_AI: { value: Block["source_type"]; label: string }[] = [
+  { value: "datalearner_leaderboard", label: "AI模型排行榜" },
+];
+
 const DISPLAY_STYLE_OPTIONS = [
   { value: "card", label: "卡片" },
   { value: "list", label: "列表" },
@@ -123,6 +127,11 @@ export function BlockConfigPanel({ form, onChange, onSave, onCancel }: Props) {
             <SelectGroup>
               <SelectLabel className="text-[10px] text-muted-foreground">球迷屋 (实时)</SelectLabel>
               {SOURCE_TYPE_OPTIONS_QMW.map((o) => <SelectItem key={o.value} value={o.value} className="text-xs">{o.label}</SelectItem>)}
+            </SelectGroup>
+            <SelectSeparator />
+            <SelectGroup>
+              <SelectLabel className="text-[10px] text-muted-foreground">DataLearner (AI)</SelectLabel>
+              {SOURCE_TYPE_OPTIONS_AI.map((o) => <SelectItem key={o.value} value={o.value} className="text-xs">{o.label}</SelectItem>)}
             </SelectGroup>
           </SelectContent>
         </Select>

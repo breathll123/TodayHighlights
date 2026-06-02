@@ -56,6 +56,7 @@ export default function App() {
               <Route path="/" element={<SummaryPage />} />
               <Route path="/topics/stocks" element={<TopicPage />} />
               <Route path="/topics/football" element={<TopicPage />} />
+              <Route path="/topics/ai" element={<TopicPage />} />
             </Route>
 
             {/* Login */}
