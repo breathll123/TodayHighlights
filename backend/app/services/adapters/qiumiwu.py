@@ -1,3 +1,6 @@
+import re
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
 import httpx
 from app.core.cache import ttl_cache
 
@@ -27,7 +30,7 @@ _PRIORITY_LEAGUES = {
 }
 
 
-@ttl_cache(30)
+@ttl_cache(30, swr=300)
 def fetch_matches(_config: dict, limit: int) -> list[dict]:
     """Fetch live match data from qiumiwu schedule API."""
     try:
@@ -119,10 +122,11 @@ def fetch_matches(_config: dict, limit: int) -> list[dict]:
 _STANDINGS_LEAGUES = {
     "英超": "yingchao", "西甲": "xijia", "意甲": "yijia", "德甲": "dejia",
     "法甲": "fajia", "荷甲": "hejia", "葡超": "puchao", "瑞典超": "ruidianchao",
-    "英冠": "yingguan", "英甲": "yingjia",
+    "世界杯": "nanzushijiebei",
     "欧冠": "ouguanbei", "欧联杯": "oulianbei",
     "中超": "zhongchao",
     "亚冠精英": "yaguanjingying", "亚冠二级": "yaguanerji",
+    "英冠": "yingguan", "英甲": "yingjia",
     "巴甲": "bajia", "澳超": "aochao",
     "欧洲杯": "ouzhoubei", "美洲杯": "meizhoubei", "非洲杯": "feizhoubei",
 }
@@ -131,112 +135,157 @@ _STANDINGS_HEADERS = {
     "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15",
 }
 
+# Module-level client for connection pooling across parallel league fetches
+_standings_client = httpx.Client(
+    timeout=20,
+    headers=_STANDINGS_HEADERS,
+)
 
-@ttl_cache(300)
-def fetch_standings(_config: dict, limit: int) -> list[dict]:
-    """Fetch league standings from qiumiwu mobile pages."""
-    import re
 
-    result = []
-    for league_name, slug in _STANDINGS_LEAGUES.items():
-        try:
-            resp = httpx.get(
-                f"https://m.qiumiwu.com/league/{slug}/standings",
-                headers=_STANDINGS_HEADERS,
-                timeout=20,
-            )
-            resp.raise_for_status()
-            html = resp.text
+def _fetch_league(league_name: str, slug: str) -> list[dict]:
+    """Fetch and parse standings for a single league. Thread-safe via shared client."""
+    try:
+        resp = _standings_client.get(
+            f"https://m.qiumiwu.com/league/{slug}/standings",
+        )
+        resp.raise_for_status()
+        html = resp.text
 
-            # Season
-            year_m = re.search(r"(\d{4}-\d{4})", html)
-            season = year_m.group(1) if year_m else ""
+        # Season — try "2024-2025" first, fall back to single year "2026"
+        year_m = re.search(r"(\d{4}-\d{4})", html)
+        if year_m:
+            season = year_m.group(1)
+        else:
+            year_m2 = re.search(r"(\d{4})赛季", html)
+            season = year_m2.group(1) if year_m2 else ""
 
-            # Update time
-            update_m = re.search(r"(\d{4}/\d{1,2}/\d{1,2}\s+\d{1,2}:\d{1,2})更新", html)
-            update_time = update_m.group(1) if update_m else ""
+        # Update time
+        update_m = re.search(r"(\d{4}/\d{1,2}/\d{1,2}\s+\d{1,2}:\d{1,2})更新", html)
+        update_time = update_m.group(1) if update_m else ""
 
-            # Basic table — first 20 teams
-            teams = []
-            seen = set()
-            for m in re.finditer(
-                r'<a class="stats__table__list"\s+href="([^"]*)"(?:\s+pos="(\d+)")?[^>]*>\s*'
-                r"<span>(\d+)</span>\s*"
-                r'<img\s+alt="([^"]*)"\s+src="([^"]*)"[^>]*>\s*'
-                r"<span>([^<]*)</span>",
-                html,
-            ):
-                rank = int(m.group(3))
-                if rank <= 20 and rank not in seen:
-                    seen.add(rank)
-                    teams.append({
-                        "rank": rank,
-                        "name": m.group(6),
-                        "logo": m.group(5),
-                    })
-            teams.sort(key=lambda x: x["rank"])
+        # Parse group labels (for group-stage tournaments like World Cup)
+        group_labels = []
+        for gm in re.finditer(r"([A-Z])组", html):
+            label = gm.group(1)
+            if not group_labels or group_labels[-1] != label:
+                group_labels.append(label)
 
-            # Stats — per-team rows in type="info" section
-            info_start = html.find('type="info"')
-            if info_start < 0:
+        # Collect teams. For regular leagues (no groups), only take the first view (总榜).
+        # Group tournaments (World Cup etc.) keep all ranks across groups.
+        teams = []
+        seen_ranks = set()
+        for m in re.finditer(
+            r'<a class="stats__table__list"\s+href="([^"]*)"(?:\s+pos="(\d+)")?[^>]*>\s*'
+            r"<span>(\d+)</span>\s*"
+            r'<img\s+alt="([^"]*)"\s+src="([^"]*)"[^>]*>\s*'
+            r"<span>([^<]*)</span>",
+            html,
+        ):
+            rank = int(m.group(3))
+            # For regular leagues (no groups), dedup by rank (only 总榜)
+            if not group_labels and rank in seen_ranks:
                 continue
+            seen_ranks.add(rank)
+            teams.append({
+                "rank": rank,
+                "name": m.group(6),
+                "logo": m.group(5),
+            })
 
-            info_html = html[info_start:]
-            stat_rows = re.findall(
-                r'<div class="stats__table__list">((?:\s*<span[^>]*>[^<]*</span>\s*)+)</div>',
-                info_html,
-            )
+        # Stats — per-team rows in type="info" section
+        info_start = html.find('type="info"')
+        if info_start < 0:
+            return []
 
-            stats_list = []
-            for row_html in stat_rows:
-                values = re.findall(r"<span[^>]*>\s*([0-9./\-]+[%]?)\s*</span>", row_html)
-                if len(values) == 10 and values[0].strip().isdigit():
-                    stats_list.append({
-                        "gp": values[0].strip(),
-                        "pts": values[1].strip(),
-                        "wdl": values[2].strip(),
-                        "gf": values[3].strip(),
-                        "ga": values[4].strip(),
-                        "gd": values[5].strip(),
-                        "avg_gf": values[6].strip(),
-                        "avg_ga": values[7].strip(),
-                        "avg_gd": values[8].strip(),
-                        "win_rate": values[9].strip(),
-                    })
+        info_html = html[info_start:]
+        stat_rows = re.findall(
+            r'<div class="stats__table__list">((?:\s*<span[^>]*>[^<]*</span>\s*)+)</div>',
+            info_html,
+        )
 
-            # Match teams with stats (first 20 for 总榜)
-            for i, team in enumerate(teams):
-                if i < len(stats_list):
-                    s = stats_list[i]
-                    team["gp"] = s["gp"]
-                    team["pts"] = s["pts"]
-                    team["wdl"] = s["wdl"]
-                    team["gf"] = s["gf"]
-                    team["ga"] = s["ga"]
-                    team["gd"] = s["gd"]
-
-                result.append({
-                    "id": f"standings_{slug}_{team['rank']}",
-                    "title": f"#{team['rank']} {team['name']}",
-                    "summary": f"{league_name} · {season} · {team.get('pts','?')}分 {team.get('wdl','?')}",
-                    "url": f"https://m.qiumiwu.com/league/{slug}/standings",
-                    "league": league_name,
-                    "season": season,
-                    "updated": update_time,
-                    "rank": team["rank"],
-                    "team": team["name"],
-                    "logo": team["logo"],
-                    "gp": team.get("gp", ""),
-                    "pts": team.get("pts", ""),
-                    "wdl": team.get("wdl", ""),
-                    "gf": team.get("gf", ""),
-                    "ga": team.get("ga", ""),
-                    "gd": team.get("gd", ""),
-                    "score": int(team.get("pts", "0") or "0"),
-                    "source_type": "qiumiwu_standings",
+        stats_list = []
+        for row_html in stat_rows:
+            values = re.findall(r"<span[^>]*>\s*([0-9./\-]+[%]?)\s*</span>", row_html)
+            if len(values) == 10 and values[0].strip().isdigit():
+                if len(stats_list) >= len(teams):
+                    break  # Only take 总榜 stats for regular leagues
+                stats_list.append({
+                    "gp": values[0].strip(),
+                    "pts": values[1].strip(),
+                    "wdl": values[2].strip(),
+                    "gf": values[3].strip(),
+                    "ga": values[4].strip(),
+                    "gd": values[5].strip(),
+                    "avg_gf": values[6].strip(),
+                    "avg_ga": values[7].strip(),
+                    "avg_gd": values[8].strip(),
+                    "win_rate": values[9].strip(),
                 })
 
-        except Exception:
-            continue
+        # Match teams with stats by position index
+        result = []
+        teams_per_group = len(teams) // len(group_labels) if group_labels else 0
+        for i, team in enumerate(teams):
+            if i < len(stats_list):
+                s = stats_list[i]
+                team["gp"] = s["gp"]
+                team["pts"] = s["pts"]
+                team["wdl"] = s["wdl"]
+                team["gf"] = s["gf"]
+                team["ga"] = s["ga"]
+                team["gd"] = s["gd"]
 
-    return result[:limit]
+            # Assign group label if available
+            group = ""
+            if group_labels and teams_per_group > 0:
+                group_idx = i // teams_per_group
+                if group_idx < len(group_labels):
+                    group = group_labels[group_idx]
+                team["group"] = group
+
+            # Build ID — include group to avoid collisions in group tournaments
+            team_id = f"standings_{slug}_{group}_{team['rank']}" if group else f"standings_{slug}_{team['rank']}"
+
+            # Build summary — include group label
+            group_prefix = f"{group}组 · " if group else ""
+            result.append({
+                "id": team_id,
+                "title": f"#{team['rank']} {team['name']}",
+                "summary": f"{league_name} · {group_prefix}{season} · {team.get('pts','?')}分 {team.get('wdl','?')}",
+                "url": f"https://m.qiumiwu.com/league/{slug}/standings",
+                "league": league_name,
+                "group": group,
+                "season": season,
+                "updated": update_time,
+                "rank": team["rank"],
+                "team": team["name"],
+                "logo": team["logo"],
+                "gp": team.get("gp", ""),
+                "pts": team.get("pts", ""),
+                "wdl": team.get("wdl", ""),
+                "gf": team.get("gf", ""),
+                "ga": team.get("ga", ""),
+                "gd": team.get("gd", ""),
+                "score": int(team.get("pts", "0") or "0"),
+                "source_type": "qiumiwu_standings",
+            })
+
+        return result
+
+    except Exception:
+        return []
+
+
+@ttl_cache(300, swr=3600)
+def fetch_standings(_config: dict, limit: int) -> list[dict]:
+    """Fetch league standings from qiumiwu mobile pages — all leagues in parallel."""
+    all_results = []
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        futures = {
+            pool.submit(_fetch_league, name, slug): slug
+            for name, slug in _STANDINGS_LEAGUES.items()
+        }
+        for future in as_completed(futures):
+            all_results.extend(future.result())
+
+    return all_results[:limit]
