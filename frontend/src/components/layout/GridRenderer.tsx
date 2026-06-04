@@ -6,7 +6,6 @@ import { BlockSkeleton } from "./BlockSkeleton";
 import { CompactTable } from "./CompactTable";
 import { MatchList } from "./MatchList";
 import { NewsTimeline } from "./NewsTimeline";
-import { ScheduleList } from "./ScheduleList";
 import { StandingsTable } from "./StandingsTable";
 import { LeaderboardTable } from "./LeaderboardTable";
 import { SectionHeading } from "./SectionHeading";
@@ -183,7 +182,7 @@ export function GridRenderer({ blocks, isLoading, dataUpdatedAt }: { blocks: any
             ) : block.source_type === "qiumiwu_fixtures" ? (
               <MatchList data={block.data} dataUpdatedAt={dataUpdatedAt} defaultFilter="fixture" />
             ) : block.source_type === "qiumiwu_schedule" ? (
-              <ScheduleList data={block.data} />
+              <MatchList data={block.data} dataUpdatedAt={dataUpdatedAt} defaultFilter="fixture" />
             ) : block.source_type === "qiumiwu_standings" ? (
               <StandingsTable data={block.data} />
             ) : block.source_type === "datalearner_aa_index" ? (

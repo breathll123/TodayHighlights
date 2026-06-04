@@ -6,7 +6,6 @@ _HEADERS = {
     "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15",
 }
 
-# Competition slugs the user cares about
 _COMPETITIONS = {
     "男足世界杯": "nanzushijiebei",
     "女足世界杯": "nvzushijiebei",
@@ -22,6 +21,57 @@ _COMPETITIONS = {
     "法甲": "fajia",
     "中超": "zhongchao",
 }
+
+
+def _parse_date(date_label: str) -> str:
+    """Parse '06-13 星期六' → '2026-06-13'"""
+    m = re.match(r"(\d{2})-(\d{2})", date_label)
+    if m:
+        return f"2026-{m.group(1)}-{m.group(2)}"
+    return ""
+
+
+_LEAGUE_LOGO_CACHE: dict[str, str] = {}
+_LOGO_CACHE_TS = 0
+
+
+def _get_logo_map() -> dict[str, str]:
+    """Fetch team name → logo mapping from main schedule API. Cached for 5min."""
+    import time as _time
+    global _LEAGUE_LOGO_CACHE, _LOGO_CACHE_TS
+    now = _time.time()
+    if _LEAGUE_LOGO_CACHE and (now - _LOGO_CACHE_TS) < 300:
+        return _LEAGUE_LOGO_CACHE
+
+    try:
+        api_resp = httpx.get(
+            "https://api.qiumiwu.com/v5/game/schedule/0/1/0/0/0",
+            params={"reqfrom": "web"},
+            headers={"User-Agent": "Mozilla/5.0 DailyHighlights/0.1", "Referer": "https://www.qiumiwu.com/"},
+            timeout=20,
+        )
+        api_data = api_resp.json()
+        logo_map = {}
+        for m in api_data.get("data", {}).get("list", []) or []:
+            home = m.get("home", {})
+            away = m.get("away", {})
+            hname = home.get("name", "")
+            aname = away.get("name", "")
+            if hname:
+                logo_map[hname] = home.get("logo", "")
+            if aname:
+                logo_map[aname] = away.get("logo", "")
+            # Also map league logos
+            league = m.get("league", {})
+            lname = league.get("name", "")
+            llogo = league.get("logo", "")
+            if lname and llogo and lname not in logo_map:
+                logo_map[f"_league_{lname}"] = llogo
+        _LEAGUE_LOGO_CACHE = logo_map
+        _LOGO_CACHE_TS = now
+        return logo_map
+    except Exception:
+        return _LEAGUE_LOGO_CACHE or {}
 
 
 @ttl_cache(600)
@@ -40,55 +90,75 @@ def fetch_competition_schedule(config: dict, limit: int) -> list[dict]:
         resp.raise_for_status()
         html = resp.text
 
-        result = []
+        logo_map = _get_logo_map()
+        league_logo = logo_map.get(f"_league_{comp_name}", "")
 
-        # Parse match blocks:
-        # fixture__list__header: <span>TIME</span> ... <span>GROUP ROUND</span>
-        # fixture__list__info: <a href="/game/ID"><div><span>TEAM_A</span></div><div></div><div><span>TEAM_B</span></div></a>
-        match_blocks = re.findall(
-            r'<div class="fixture__list__header">\s*<span>(\d{2}:\d{2})</span>.*?<span>([^<]*)</span>\s*</div>\s*'
+        # Parse: find date sections, then matches within each date
+        # Date section: <div class="fixture__details__header"><span>06-12 星期五</span><span>2场</span>
+        # Match: <div class="fixture__list"> with time + group/round + teams
+
+        result = []
+        current_date = ""
+
+        # Find all fixture blocks and date headers in order
+        tokens = list(re.finditer(
+            r'(?:<div class="fixture__details__header">\s*<span>(\d{2}-\d{2}\s+\S+)</span>)|'
+            r'(?:fixture__list__header">\s*<span>(\d{2}:\d{2})</span>.*?<span>([^<]*)</span>\s*</div>\s*'
             r'<a[^>]*class="fixture__list__info"\s*href="/game/(\d+)"[^>]*>\s*'
             r'<div[^>]*class="fixture__list__team"[^>]*><span>([^<]+)</span>\s*</div>\s*'
             r'<div[^>]*class="fixture__list__score"[^>]*>\s*[^<]*</div>\s*'
-            r'<div[^>]*class="fixture__list__team"[^>]*><span>([^<]+)</span>',
+            r'<div[^>]*class="fixture__list__team"[^>]*><span>([^<]+)</span>)',
             html,
             re.DOTALL,
-        )
+        ))
 
-        for m in match_blocks:
-            time_str = m[0]
-            group_round = m[1].strip()
-            match_id = m[2]
-            team_a = m[3]
-            team_b = m[4]
+        for tok in tokens:
+            if tok.group(1):  # Date header
+                current_date = _parse_date(tok.group(1))
+            elif tok.group(2):  # Match
+                time_str = tok.group(2)
+                group_round = tok.group(3).strip()
+                match_id = tok.group(4)
+                team_a = tok.group(5)
+                team_b = tok.group(6)
 
-            # Parse group + round
-            group = ""
-            round_num = ""
-            # Handle "A组 第1轮 小组赛", "I组 第1轮 小组赛", "1/8决赛", "半决赛", "决赛" etc.
-            gr_m = re.match(r"([A-Z])组\s*第(\d+)轮", group_round)
-            if gr_m:
-                group = gr_m.group(1)
-                round_num = gr_m.group(2)
-            elif "决赛" in group_round:
-                round_num = group_round
-            else:
-                group = group_round
+                group, round_num = "", ""
+                gr_m = re.match(r"([A-Z])组\s*第(\d+)轮", group_round)
+                if gr_m:
+                    group = gr_m.group(1)
+                    round_num = gr_m.group(2)
+                elif "决赛" in group_round:
+                    round_num = group_round
+                else:
+                    group = group_round
 
-            result.append({
-                "id": f"schedule_{slug}_{match_id}",
-                "title": f"{team_a} vs {team_b}",
-                "summary": f"{comp_name} · {group_round} · {time_str}",
-                "url": f"https://m.qiumiwu.com/game/{match_id}" if match_id else "",
-                "competition": comp_name,
-                "group": group,
-                "round": round_num,
-                "time": time_str,
-                "team_a": team_a,
-                "team_b": team_b,
-                "score": 0,
-                "source_type": "qiumiwu_schedule",
-            })
+                start_iso = f"{current_date}T{time_str}:00" if current_date else ""
+
+                # Use group+round as "league" so MatchList groups by stage
+                stage_label = f"{group}组" if group else (round_num or comp_name)
+
+                result.append({
+                    "id": f"schedule_{slug}_{match_id}",
+                    "title": f"{team_a} vs {team_b}",
+                    "summary": f"{round_num or group_round} · {time_str}",
+                    "url": f"https://m.qiumiwu.com/game/{match_id}" if match_id else "",
+                    "league": stage_label,
+                    "logo_league": league_logo,
+                    "status": 1,
+                    "status_name": "未开赛",
+                    "team_a": team_a,
+                    "team_b": team_b,
+                    "logo_a": logo_map.get(team_a, ""),
+                    "logo_b": logo_map.get(team_b, ""),
+                    "score_a": "",
+                    "score_b": "",
+                    "minute": "",
+                    "start_time": start_iso,
+                    "group": group,
+                    "round": round_num,
+                    "score": 0,
+                    "source_type": "qiumiwu_schedule",
+                })
 
         return result[:limit]
 
