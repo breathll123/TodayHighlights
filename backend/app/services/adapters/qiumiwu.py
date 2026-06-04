@@ -276,6 +276,15 @@ def _fetch_league(league_name: str, slug: str) -> list[dict]:
         return []
 
 
+@ttl_cache(60)
+def fetch_fixtures(config: dict, limit: int) -> list[dict]:
+    """Fetch upcoming (fixture-only) matches, sorted by start time ascending."""
+    matches = fetch_matches(config, max(limit, 200))
+    fixtures = [m for m in matches if m.get("status") == 1]
+    fixtures.sort(key=lambda x: x.get("start_time", ""))
+    return fixtures[:limit]
+
+
 @ttl_cache(300, swr=3600)
 def fetch_standings(_config: dict, limit: int) -> list[dict]:
     """Fetch league standings from qiumiwu mobile pages — all leagues in parallel."""

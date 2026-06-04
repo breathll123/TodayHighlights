@@ -49,6 +49,7 @@ const SOURCE_TYPE_OPTIONS_THS: { value: Block["source_type"]; label: string }[] 
 
 const SOURCE_TYPE_OPTIONS_QMW: { value: Block["source_type"]; label: string }[] = [
   { value: "qiumiwu_matches", label: "足球比赛" },
+  { value: "qiumiwu_fixtures", label: "足球赛程" },
   { value: "qiumiwu_standings", label: "联赛积分榜" },
 ];
 

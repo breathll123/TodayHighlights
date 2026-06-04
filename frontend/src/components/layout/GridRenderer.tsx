@@ -179,6 +179,8 @@ export function GridRenderer({ blocks, isLoading, dataUpdatedAt }: { blocks: any
               <div className="bg-card border rounded-xl p-6 text-center text-sm text-muted-foreground">暂无数据</div>
             ) : block.source_type === "qiumiwu_matches" ? (
               <MatchList data={block.data} dataUpdatedAt={dataUpdatedAt} />
+            ) : block.source_type === "qiumiwu_fixtures" ? (
+              <MatchList data={block.data} dataUpdatedAt={dataUpdatedAt} defaultFilter="fixture" />
             ) : block.source_type === "qiumiwu_standings" ? (
               <StandingsTable data={block.data} />
             ) : block.source_type === "datalearner_aa_index" ? (

@@ -24,6 +24,7 @@ interface MatchItem {
 interface Props {
   data: MatchItem[];
   dataUpdatedAt?: number;
+  defaultFilter?: StatusFilter;
 }
 
 type StatusFilter = "all" | "live" | "fixture" | "played";
@@ -230,9 +231,9 @@ function groupMatches(items: MatchItem[]): DateGroup[] {
 
 // ── main ──
 
-export function MatchList({ data, dataUpdatedAt }: Props) {
+export function MatchList({ data, dataUpdatedAt, defaultFilter = "all" }: Props) {
   const [fallbackUpdatedAt, setFallbackUpdatedAt] = useState(() => Date.now());
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>(defaultFilter);
 
   useEffect(() => {
     if (dataUpdatedAt == null) setFallbackUpdatedAt(Date.now());
