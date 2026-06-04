@@ -43,6 +43,7 @@ def _get_logo_map() -> dict[str, str]:
     if _LEAGUE_LOGO_CACHE and (now - _LOGO_CACHE_TS) < 300:
         return _LEAGUE_LOGO_CACHE
 
+    logo_map = {}
     try:
         api_resp = httpx.get(
             "https://api.qiumiwu.com/v5/game/schedule/0/1/0/0/0",
@@ -51,7 +52,6 @@ def _get_logo_map() -> dict[str, str]:
             timeout=20,
         )
         api_data = api_resp.json()
-        logo_map = {}
         for m in api_data.get("data", {}).get("list", []) or []:
             home = m.get("home", {})
             away = m.get("away", {})
@@ -61,7 +61,6 @@ def _get_logo_map() -> dict[str, str]:
                 logo_map[hname] = home.get("logo", "")
             if aname:
                 logo_map[aname] = away.get("logo", "")
-            # Also map league logos
             league = m.get("league", {})
             lname = league.get("name", "")
             llogo = league.get("logo", "")
@@ -69,9 +68,46 @@ def _get_logo_map() -> dict[str, str]:
                 logo_map[f"_league_{lname}"] = llogo
         _LEAGUE_LOGO_CACHE = logo_map
         _LOGO_CACHE_TS = now
-        return logo_map
     except Exception:
-        return _LEAGUE_LOGO_CACHE or {}
+        pass
+    return _LEAGUE_LOGO_CACHE or logo_map
+
+
+def _fetch_logos_from_detail(match_id: str) -> tuple[str, str]:
+    """Fetch (home_logo, away_logo) from a match detail page."""
+    try:
+        resp = httpx.get(
+            f"https://m.qiumiwu.com/game/{match_id}",
+            headers=_HEADERS, timeout=15,
+        )
+        # Extract team logo img URLs — first two are home and away
+        logos = re.findall(r'<img[^>]*src="(https://file\.qiumiwu\.com/team/[^"]+)"[^>]*>', resp.text)
+        if len(logos) >= 2:
+            return logos[0], logos[1]
+    except Exception:
+        pass
+    return "", ""
+
+
+def _fill_logo_map(logo_map: dict[str, str], matches_info: list[dict]) -> dict[str, str]:
+    """For teams without logos, fetch from their match detail pages."""
+    fetched = 0
+    for m in matches_info:
+        team_a, team_b = m.get("team_a", ""), m.get("team_b", "")
+        match_id = m.get("match_id", "")
+        need_a = team_a and not logo_map.get(team_a)
+        need_b = team_b and not logo_map.get(team_b)
+
+        if (need_a or need_b) and match_id:
+            hlogo, alogo = _fetch_logos_from_detail(match_id)
+            if hlogo and team_a not in logo_map:
+                logo_map[team_a] = hlogo
+            if alogo and team_b not in logo_map:
+                logo_map[team_b] = alogo
+            fetched += 1
+            if fetched >= 20:
+                break
+    return logo_map
 
 
 @ttl_cache(600)
@@ -93,14 +129,11 @@ def fetch_competition_schedule(config: dict, limit: int) -> list[dict]:
         logo_map = _get_logo_map()
         league_logo = logo_map.get(f"_league_{comp_name}", "")
 
-        # Parse: find date sections, then matches within each date
-        # Date section: <div class="fixture__details__header"><span>06-12 星期五</span><span>2场</span>
-        # Match: <div class="fixture__list"> with time + group/round + teams
-
+        # Parse once: collect date headers and matches
         result = []
         current_date = ""
+        matches_info = []
 
-        # Find all fixture blocks and date headers in order
         tokens = list(re.finditer(
             r'(?:<div class="fixture__details__header">\s*<span>(\d{2}-\d{2}\s+\S+)</span>)|'
             r'(?:fixture__list__header">\s*<span>(\d{2}:\d{2})</span>.*?<span>([^<]*)</span>\s*</div>\s*'
@@ -111,6 +144,16 @@ def fetch_competition_schedule(config: dict, limit: int) -> list[dict]:
             html,
             re.DOTALL,
         ))
+
+        # First pass: collect match info for logo fetching
+        for tok in tokens:
+            if tok.group(2):  # Match
+                matches_info.append({
+                    "team_a": tok.group(5),
+                    "team_b": tok.group(6),
+                    "match_id": tok.group(4),
+                })
+        logo_map = _fill_logo_map(logo_map, matches_info)
 
         for tok in tokens:
             if tok.group(1):  # Date header
