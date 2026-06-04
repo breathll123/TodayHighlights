@@ -1,3 +1,5 @@
+import logging
+import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from sqlalchemy import select
@@ -12,6 +14,32 @@ from app.services.adapters.eastmoney import (
     fetch_announcements, fetch_capital_flow,
     fetch_indices, fetch_industry, fetch_sectors,
 )
+
+logger = logging.getLogger(__name__)
+
+# Module-level shared executor — avoids per-request creation/destruction overhead
+_BLOCK_EXECUTOR: ThreadPoolExecutor | None = None
+_EXECUTOR_LOCK = threading.Lock()
+
+
+def _get_executor() -> ThreadPoolExecutor:
+    """Get or create the shared block executor. Recreates after shutdown (test resilience)."""
+    global _BLOCK_EXECUTOR
+    if _BLOCK_EXECUTOR is None or _BLOCK_EXECUTOR._shutdown:
+        with _EXECUTOR_LOCK:
+            if _BLOCK_EXECUTOR is None or _BLOCK_EXECUTOR._shutdown:
+                _BLOCK_EXECUTOR = ThreadPoolExecutor(max_workers=8, thread_name_prefix="block-resolve")
+    return _BLOCK_EXECUTOR
+
+
+def shutdown_executor():
+    """Called during app shutdown."""
+    global _BLOCK_EXECUTOR
+    if _BLOCK_EXECUTOR is not None:
+        _BLOCK_EXECUTOR.shutdown(wait=False)
+        _BLOCK_EXECUTOR = None
+
+
 def resolve_block_data(session: Session, block: PageBlock, cookie: str | None = None) -> list[dict]:
     source_type = block.source_type
     config = block.source_config or {}
@@ -150,7 +178,7 @@ def resolve_block_data(session: Session, block: PageBlock, cookie: str | None = 
 
     if source_type == "qiumiwu_standings":
         from app.services.adapters.qiumiwu import fetch_standings
-        return fetch_standings(config, max(limit, 500))
+        return fetch_standings(config, max(limit, 1000))
 
     if source_type == "datalearner_leaderboard":
         from app.services.adapters.datalearner import fetch_leaderboard
@@ -159,6 +187,10 @@ def resolve_block_data(session: Session, block: PageBlock, cookie: str | None = 
     if source_type == "datalearner_aa_index":
         from app.services.adapters.datalearner import fetch_aa_index
         return fetch_aa_index(config, max(limit, 500))
+
+    if source_type == "aihot_news":
+        from app.services.adapters.aihot import fetch_news
+        return fetch_news(config, limit)
 
     return []
 
@@ -195,25 +227,27 @@ def get_page_blocks(session: Session, route: str) -> list[dict]:
     # Pre-fetch cookie for live blocks
     cookie = get_cookie(session)
 
-    # Resolve live-API blocks in parallel (pass pre-fetched cookie, skip session)
+    # Resolve live-API blocks in parallel using shared executor
     if live_blocks:
-        with ThreadPoolExecutor(max_workers=8) as executor:
-            # session=None is safe: live blocks only use it for get_cookie, which is pre-fetched
-            futures = {executor.submit(resolve_block_data, None, b, cookie): b for b in live_blocks}
-            for future in as_completed(futures):
-                b = futures[future]
-                try:
-                    data = future.result()
-                except Exception:
-                    data = []
-                items.append({
-                    "id": b.id, "title": b.title, "sort_order": b.sort_order,
-                    "display_style": b.display_style, "display_count": b.display_count,
-                    "source_type": b.source_type, "source_config": b.source_config or {},
-                    "col_span": b.col_span, "row_span": b.row_span,
-                    "grid_x": b.grid_x, "grid_y": b.grid_y,
-                    "data": data,
-                })
+        futures = {_get_executor().submit(resolve_block_data, None, b, cookie): b for b in live_blocks}
+        for future in as_completed(futures):
+            b = futures[future]
+            try:
+                data = future.result(timeout=15)
+            except TimeoutError:
+                logger.warning("Block %s (type=%s) timed out after 15s", b.id, b.source_type)
+                data = []
+            except Exception:
+                logger.warning("Block %s (type=%s) failed", b.id, b.source_type, exc_info=True)
+                data = []
+            items.append({
+                "id": b.id, "title": b.title, "sort_order": b.sort_order,
+                "display_style": b.display_style, "display_count": b.display_count,
+                "source_type": b.source_type, "source_config": b.source_config or {},
+                "col_span": b.col_span, "row_span": b.row_span,
+                "grid_x": b.grid_x, "grid_y": b.grid_y,
+                "data": data,
+            })
 
     # Preserve original order
     block_order = {b.id: i for i, b in enumerate(blocks)}

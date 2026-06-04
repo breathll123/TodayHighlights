@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, JSON, String, Text, UniqueConstraint, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, JSON, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -27,6 +27,10 @@ class Topic(TimestampMixin, Base):
 
 class Source(TimestampMixin, Base):
     __tablename__ = "sources"
+    __table_args__ = (
+        Index("ix_sources_site", "site"),
+        Index("ix_sources_next_crawl", "enabled", "next_crawl_at"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     topic_id: Mapped[int] = mapped_column(ForeignKey("topics.id"), nullable=False)
@@ -47,6 +51,9 @@ class Source(TimestampMixin, Base):
 
 class CrawlJob(Base):
     __tablename__ = "crawl_jobs"
+    __table_args__ = (
+        Index("ix_crawl_jobs_source_created", "source_id", "created_at"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     source_id: Mapped[int] = mapped_column(ForeignKey("sources.id"), nullable=False)
@@ -68,6 +75,8 @@ class RawItem(Base):
     __table_args__ = (
         UniqueConstraint("source_id", "external_id", name="uq_raw_item_external"),
         UniqueConstraint("source_id", "content_hash", name="uq_raw_item_hash"),
+        Index("ix_raw_items_source_published", "source_id", "published_at"),
+        Index("ix_raw_items_status_expires", "status", "expires_at"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -80,6 +89,11 @@ class RawItem(Base):
     published_at: Mapped[datetime | None] = mapped_column(DateTime)
     metrics_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
     content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    # Lifecycle fields
+    status: Mapped[str] = mapped_column(String(20), default="active", nullable=False)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime)
+    # Raw snapshot — original HTTP response for debugging / re-parsing
+    raw_snapshot: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
 
     source: Mapped[Source] = relationship(back_populates="raw_items")
@@ -88,6 +102,9 @@ class RawItem(Base):
 
 class Highlight(TimestampMixin, Base):
     __tablename__ = "highlights"
+    __table_args__ = (
+        Index("ix_highlights_topic_score", "topic_id", "is_hidden", "is_pinned", "score"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     topic_id: Mapped[int] = mapped_column(ForeignKey("topics.id"), nullable=False)
@@ -116,6 +133,9 @@ class AppSetting(TimestampMixin, Base):
 
 class PageBlock(TimestampMixin, Base):
     __tablename__ = "page_blocks"
+    __table_args__ = (
+        Index("ix_page_blocks_route_status", "page_route", "enabled", "status"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     page_route: Mapped[str] = mapped_column(String(80), nullable=False)

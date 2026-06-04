@@ -54,6 +54,7 @@ const SOURCE_TYPE_OPTIONS_QMW: { value: Block["source_type"]; label: string }[] 
 
 const SOURCE_TYPE_OPTIONS_AI: { value: Block["source_type"]; label: string }[] = [
   { value: "datalearner_aa_index", label: "AI模型智能指数排行榜" },
+  { value: "aihot_news", label: "AI 资讯快讯" },
 ];
 
 const DISPLAY_STYLE_OPTIONS = [

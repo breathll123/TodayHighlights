@@ -185,6 +185,14 @@ export function GridRenderer({ blocks, isLoading, dataUpdatedAt }: { blocks: any
               <AAIndexBlock block={block} displayFields={displayFields} />
             ) : block.source_type === "datalearner_leaderboard" ? (
               <LeaderboardTable data={block.data} />
+            ) : block.source_type === "aihot_news" ? (
+              <NewsTimeline data={block.data.map((item: any) => ({
+                id: item.id,
+                title: item.title ?? "",
+                url: item.url,
+                published_at: item.published_at,
+                summary: item.summary,
+              }))} />
             ) : block.source_type === "tonghuashun_news" || block.display_style === "timeline" ? (
               <NewsTimeline data={block.data.map((item: any) => ({
                 id: item.id,

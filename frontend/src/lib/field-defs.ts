@@ -77,6 +77,10 @@ export const FIELD_DEFS: Record<string, FieldDef[]> = {
     { key: "subtitle", label: "机构", type: "text" },
     { key: "score", label: "智能指数", type: "number" },
   ],
+  aihot_news: [
+    { key: "title", label: "标题", type: "text" },
+    { key: "subtitle", label: "来源", type: "text" },
+  ],
 };
 
 const DEFAULT_STOCK = ["title", "percent", "score"];
@@ -102,4 +106,5 @@ export const DEFAULT_FIELDS: Record<string, string[]> = {
   qiumiwu_standings: ["title", "subtitle", "score"],
   datalearner_leaderboard: ["title", "subtitle", "score"],
   datalearner_aa_index: ["title", "subtitle", "score"],
+  aihot_news: ["title", "subtitle"],
 };

@@ -6,6 +6,7 @@ from sqlalchemy import select
 from app.core.config import SH_TZ
 from app.core.database import SessionLocal
 from app.models.entities import Source
+from app.services.cleanup import run_full_cleanup
 from app.services.jobs import run_crawl_job
 
 
@@ -22,7 +23,13 @@ def crawl_enabled_sources() -> None:
             run_crawl_job(session, source.id, "scheduled")
 
 
+def scheduled_cleanup() -> None:
+    with SessionLocal() as session:
+        run_full_cleanup(session)
+
+
 def create_scheduler() -> BackgroundScheduler:
     scheduler = BackgroundScheduler(timezone="Asia/Shanghai")
     scheduler.add_job(crawl_enabled_sources, "interval", minutes=1, id="crawl_enabled_sources", replace_existing=True)
+    scheduler.add_job(scheduled_cleanup, "interval", hours=6, id="scheduled_cleanup", replace_existing=True)
     return scheduler

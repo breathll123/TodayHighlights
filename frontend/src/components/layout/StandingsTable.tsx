@@ -18,6 +18,7 @@ interface StandingItem {
   ga?: string;
   gd?: string;
   league?: string;
+  group?: string;
   season?: string;
   updated?: string;
 }
@@ -168,33 +169,46 @@ export function StandingsTable({ data }: Props) {
       </div>
 
       {/* Rows */}
-      {items.map((item, i) => (
-        <motion.a
-          key={item.id}
-          href={item.url || "#"}
-          target="_blank"
-          rel="noopener noreferrer"
-          data-rank-row={item.rank}
-          initial={{ opacity: 0, y: 4 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.22, delay: Math.min(i, 6) * 0.03, ease: "easeOut" }}
-          className={`grid min-h-10 grid-cols-[2.5rem_minmax(0,1fr)_2.5rem_2.5rem_2.5rem_2.5rem_2.5rem_2.5rem] items-center gap-1 border-b border-border/40 px-2.5 py-2 text-xs transition-[background-color,border-color,transform] last:border-b-0 hover:bg-primary/[0.06] active:scale-[0.99] ${rankRowTone(item.rank)}`}
-        >
-          <RankBadge rank={item.rank} className="justify-center" />
-          <span className="flex items-center gap-1.5 truncate">
-            <TeamLogo url={item.logo} name={item.team} />
-            <span className="truncate font-medium">{item.team}</span>
-          </span>
-          <span className="text-center tabular-nums text-muted-foreground">{item.gp || "-"}</span>
-          <span className="text-center tabular-nums text-muted-foreground text-[10px]">{item.wdl || "-"}</span>
-          <span className="text-center tabular-nums text-muted-foreground">{item.gf || "-"}</span>
-          <span className="text-center tabular-nums text-muted-foreground">{item.ga || "-"}</span>
-          <span className={`text-center tabular-nums ${(item.gd || "").startsWith("-") ? "text-green-500" : (item.gd && item.gd !== "0" ? "text-red-500" : "text-muted-foreground")}`}>
-            {item.gd || "-"}
-          </span>
-          <span className="text-center tabular-nums font-bold text-foreground">{item.pts || "-"}</span>
-        </motion.a>
-      ))}
+      {items.map((item, i) => {
+        // Insert group separator when group changes (for group-stage tournaments like World Cup)
+        const showGroupHeader = item.group && (i === 0 || items[i - 1]?.group !== item.group);
+        return (
+          <div key={item.id}>
+            {showGroupHeader && (
+              <div className="flex items-center gap-2 border-b border-border/40 bg-primary/[0.04] px-2.5 py-1.5">
+                <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-sm bg-primary/10 px-1 text-[10px] font-bold text-primary">
+                  {item.group}
+                </span>
+                <span className="text-[11px] font-medium text-muted-foreground">{item.group}组</span>
+              </div>
+            )}
+            <motion.a
+              href={item.url || "#"}
+              target="_blank"
+              rel="noopener noreferrer"
+              data-rank-row={item.rank}
+              initial={{ opacity: 0, y: 4 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.22, delay: Math.min(i, 6) * 0.03, ease: "easeOut" }}
+              className={`grid min-h-10 grid-cols-[2.5rem_minmax(0,1fr)_2.5rem_2.5rem_2.5rem_2.5rem_2.5rem_2.5rem] items-center gap-1 border-b border-border/40 px-2.5 py-2 text-xs transition-[background-color,border-color,transform] last:border-b-0 hover:bg-primary/[0.06] active:scale-[0.99] ${rankRowTone(item.rank)}`}
+            >
+              <RankBadge rank={item.rank} className="justify-center" />
+              <span className="flex items-center gap-1.5 truncate">
+                <TeamLogo url={item.logo} name={item.team} />
+                <span className="truncate font-medium">{item.team}</span>
+              </span>
+              <span className="text-center tabular-nums text-muted-foreground">{item.gp || "-"}</span>
+              <span className="text-center tabular-nums text-muted-foreground text-[10px]">{item.wdl || "-"}</span>
+              <span className="text-center tabular-nums text-muted-foreground">{item.gf || "-"}</span>
+              <span className="text-center tabular-nums text-muted-foreground">{item.ga || "-"}</span>
+              <span className={`text-center tabular-nums ${(item.gd || "").startsWith("-") ? "text-green-500" : (item.gd && item.gd !== "0" ? "text-red-500" : "text-muted-foreground")}`}>
+                {item.gd || "-"}
+              </span>
+              <span className="text-center tabular-nums font-bold text-foreground">{item.pts || "-"}</span>
+            </motion.a>
+          </div>
+        );
+      })}
     </div>
   );
 }

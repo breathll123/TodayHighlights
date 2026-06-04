@@ -37,6 +37,10 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
     scheduler = getattr(_app.state, "scheduler", None)
     if scheduler is not None:
         scheduler.shutdown(wait=False)
+    from app.services.blocks import shutdown_executor
+    shutdown_executor()
+    from app.core.cache import shutdown_swr_executor
+    shutdown_swr_executor()
 
 
 app = FastAPI(title="Daily Highlights API", lifespan=lifespan)

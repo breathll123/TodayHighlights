@@ -8,7 +8,7 @@ _headers = {
 }
 
 
-@ttl_cache(600)
+@ttl_cache(600, swr=3600)
 def fetch_leaderboard(_config: dict, limit: int) -> list[dict]:
     """Parse AI model leaderboard from datalearner.com HTML table."""
     try:
@@ -216,31 +216,41 @@ def _parse_aa_page(html: str, url: str, region: str) -> tuple[list[dict], str, s
     return result, update_time, version
 
 
-@ttl_cache(600)
+@ttl_cache(600, swr=3600)
 def fetch_aa_index(_config: dict, limit: int) -> list[dict]:
-    """Parse AA Intelligence Index leaderboard — returns both global and china datasets."""
-    try:
-        # Fetch global
+    """Parse AA Intelligence Index leaderboard — global and china datasets in parallel."""
+
+    def _fetch_global():
         resp = httpx.get(
             "https://www.datalearner.com/leaderboards/external/aa-quality-index",
             headers=_headers, timeout=30, follow_redirects=True,
         )
         resp.raise_for_status()
-        global_items, update_time, version = _parse_aa_page(resp.text, str(resp.url), "global")
+        return _parse_aa_page(resp.text, str(resp.url), "global")
 
-        # Fetch china
-        china_items = []
-        try:
-            resp_cn = httpx.get(
-                "https://www.datalearner.com/leaderboards/external/aa-quality-index?isChina=1",
-                headers=_headers, timeout=30, follow_redirects=True,
-            )
-            resp_cn.raise_for_status()
-            china_items, _, _ = _parse_aa_page(resp_cn.text, str(resp_cn.url), "china")
-        except Exception:
-            pass
+    def _fetch_china():
+        resp = httpx.get(
+            "https://www.datalearner.com/leaderboards/external/aa-quality-index?isChina=1",
+            headers=_headers, timeout=30, follow_redirects=True,
+        )
+        resp.raise_for_status()
+        return _parse_aa_page(resp.text, str(resp.url), "china")
+
+    try:
+        from concurrent.futures import ThreadPoolExecutor
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            f_global = pool.submit(_fetch_global)
+            f_china = pool.submit(_fetch_china)
+
+            global_items, update_time, version = f_global.result()
+
+            china_items = []
+            try:
+                china_items, _, _ = f_china.result()
+            except Exception:
+                pass
 
         return (global_items + china_items)[:max(limit, 1000)]
-
     except Exception:
         return []

@@ -10,14 +10,24 @@ from app.core.crypto import CryptoService
 from app.models.entities import Source
 
 
-def get_cookie(session: Session) -> str:
-    source = session.scalar(select(Source).where(Source.site == "xueqiu").limit(1))
-    if source is None:
+@ttl_cache(300)
+def _decrypt_cookie(cookie_encrypted: str) -> str:
+    """Cached decryption of xueqiu cookie. Keyed on encrypted string."""
+    if not cookie_encrypted:
         return ""
-    return CryptoService(settings.app_secret_key).decrypt(source.cookie_encrypted)
+    return CryptoService(settings.app_secret_key).decrypt(cookie_encrypted)
 
 
-@ttl_cache(30)
+def get_cookie(session: Session) -> str:
+    encrypted = session.scalar(
+        select(Source.cookie_encrypted).where(Source.site == "xueqiu").limit(1)
+    )
+    if not encrypted:
+        return ""
+    return _decrypt_cookie(encrypted)
+
+
+@ttl_cache(30, swr=300)
 def fetch_hot_events(cookie: str, limit: int) -> list[dict]:
     try:
         resp = httpx.get(
@@ -42,7 +52,7 @@ def fetch_hot_events(cookie: str, limit: int) -> list[dict]:
         return []
 
 
-@ttl_cache(30)
+@ttl_cache(30, swr=300)
 def fetch_hot_stocks(cookie: str, config: dict, limit: int) -> list[dict]:
     try:
         stock_type = config.get("type", 10)
@@ -70,17 +80,17 @@ def fetch_hot_stocks(cookie: str, config: dict, limit: int) -> list[dict]:
         return []
 
 
-@ttl_cache(30)
+@ttl_cache(30, swr=300)
 def fetch_hot_stocks_cn(cookie: str, config: dict, limit: int) -> list[dict]:
     return _fetch_hot_stocks_typed(cookie, 12, "xueqiu_hot_cn", limit)
 
 
-@ttl_cache(30)
+@ttl_cache(30, swr=300)
 def fetch_hot_stocks_hk(cookie: str, config: dict, limit: int) -> list[dict]:
     return _fetch_hot_stocks_typed(cookie, 13, "xueqiu_hot_hk", limit)
 
 
-@ttl_cache(30)
+@ttl_cache(30, swr=300)
 def fetch_hot_stocks_us(cookie: str, config: dict, limit: int) -> list[dict]:
     return _fetch_hot_stocks_typed(cookie, 11, "xueqiu_hot_us", limit)
 
@@ -111,7 +121,7 @@ def _fetch_hot_stocks_typed(cookie: str, stock_type: int, source: str, limit: in
         return []
 
 
-@ttl_cache(30)
+@ttl_cache(30, swr=300)
 def fetch_screener(cookie: str, config: dict, limit: int) -> list[dict]:
     try:
         order_by = config.get("order_by", "percent")

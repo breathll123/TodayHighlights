@@ -1,3 +1,5 @@
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
 import httpx
 
 from app.core.cache import ttl_cache
@@ -12,7 +14,7 @@ _http = httpx.Client(
 )
 
 
-@ttl_cache(30)
+@ttl_cache(30, swr=300)
 def fetch_sectors(config: dict, limit: int) -> list[dict]:
     try:
         board_type = config.get("board_type", "concept")
@@ -41,7 +43,7 @@ def fetch_sectors(config: dict, limit: int) -> list[dict]:
         return []
 
 
-@ttl_cache(30)
+@ttl_cache(30, swr=300)
 def fetch_longhu(config: dict, limit: int) -> list[dict]:
     try:
         resp = _http.get(
@@ -76,7 +78,24 @@ def fetch_longhu(config: dict, limit: int) -> list[dict]:
         return []
 
 
-@ttl_cache(30)
+def _fetch_top_stock(board_code: str) -> tuple[str, dict | None]:
+    """Fetch the top stock from a single industry board. Thread-safe via shared _http client."""
+    try:
+        sr = _http.get(
+            "https://push2delay.eastmoney.com/api/qt/clist/get",
+            params={"pn": 1, "pz": 1, "po": 1, "np": 1, "fltt": 2, "invt": 2, "fid": "f3",
+                    "fs": f"b:{board_code}", "fields": "f2,f3,f12,f14"},
+        )
+        sr.raise_for_status()
+        items = sr.json().get("data", {}).get("diff", [])
+        if items:
+            return board_code, items[0]
+    except Exception:
+        pass
+    return board_code, None
+
+
+@ttl_cache(30, swr=600)
 def fetch_industry(config: dict, limit: int) -> list[dict]:
     try:
         resp = _http.get(
@@ -87,22 +106,17 @@ def fetch_industry(config: dict, limit: int) -> list[dict]:
         resp.raise_for_status()
         boards = resp.json().get("data", {}).get("diff", [])
 
-        # Fetch top stock from each board
+        # Fetch top stock from each board IN PARALLEL
         top_stocks: dict[str, dict] = {}
-        for b in boards[:limit]:
-            code = b.get("f12", "")
-            try:
-                sr = _http.get(
-                    "https://push2delay.eastmoney.com/api/qt/clist/get",
-                    params={"pn": 1, "pz": 1, "po": 1, "np": 1, "fltt": 2, "invt": 2, "fid": "f3",
-                            "fs": f"b:{code}", "fields": "f2,f3,f12,f14"},
-                )
-                sr.raise_for_status()
-                items = sr.json().get("data", {}).get("diff", [])
-                if items:
-                    top_stocks[code] = items[0]
-            except Exception:
-                pass
+        board_codes = [b.get("f12", "") for b in boards[:limit]]
+
+        if board_codes:
+            with ThreadPoolExecutor(max_workers=min(len(board_codes), 8)) as pool:
+                futures = [pool.submit(_fetch_top_stock, code) for code in board_codes]
+                for future in as_completed(futures):
+                    code, stock = future.result()
+                    if stock is not None:
+                        top_stocks[code] = stock
 
         result = []
         for item in boards:
@@ -125,7 +139,7 @@ def fetch_industry(config: dict, limit: int) -> list[dict]:
         return []
 
 
-@ttl_cache(30)
+@ttl_cache(30, swr=300)
 def fetch_indices(_config: dict, limit: int) -> list[dict]:
     """指数行情 — 使用新浪财经 API，稳定不封 IP"""
     try:
@@ -172,7 +186,7 @@ def fetch_indices(_config: dict, limit: int) -> list[dict]:
         return []
 
 
-@ttl_cache(30)
+@ttl_cache(30, swr=300)
 def fetch_capital_flow(_config: dict, limit: int) -> list[dict]:
     try:
         resp = _http.get(
@@ -199,7 +213,7 @@ def fetch_capital_flow(_config: dict, limit: int) -> list[dict]:
         return []
 
 
-@ttl_cache(60)
+@ttl_cache(60, swr=600)
 def fetch_announcements(_config: dict, limit: int) -> list[dict]:
     try:
         resp = httpx.get(

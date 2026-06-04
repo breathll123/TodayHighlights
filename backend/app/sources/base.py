@@ -13,6 +13,7 @@ class RawItemDraft:
     published_at: datetime | None
     metrics: dict[str, int | str] = field(default_factory=dict)
     content_hash: str = ""
+    raw_snapshot: str = ""  # Original HTTP response body for debugging / re-parsing
 
 
 class SourceAdapter(Protocol):

@@ -5,6 +5,7 @@ from app.sources.tonghuashun import TonghuashunAdapter
 from app.sources.dongqiudi import DongqiudiAdapter
 from app.sources.qiumiwu import QiumiwuAdapter
 from app.sources.datalearner import DatalearnerAdapter
+from app.sources.aihot import AihotAdapter
 
 ADAPTER_REGISTRY: dict[str, type] = {
     "xueqiu": XueqiuAdapter,
@@ -13,6 +14,7 @@ ADAPTER_REGISTRY: dict[str, type] = {
     "dongqiudi": DongqiudiAdapter,
     "qiumiwu": QiumiwuAdapter,
     "datalearner": DatalearnerAdapter,
+    "aihot": AihotAdapter,
 }
 
 
