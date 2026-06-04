@@ -74,6 +74,8 @@ def fetch_news(_config: dict, limit: int) -> list[dict]:
                 "score": 0,
                 "source_type": "aihot_news",
             })
+        if not result:
+            raise ValueError("empty RSS — don't cache")
         return result
     except Exception:
         return []

@@ -251,6 +251,9 @@ def fetch_aa_index(_config: dict, limit: int) -> list[dict]:
             except Exception:
                 pass
 
-        return (global_items + china_items)[:max(limit, 1000)]
+        combined = (global_items + china_items)[:max(limit, 1000)]
+        if not combined:
+            raise ValueError("empty result — don't cache")
+        return combined
     except Exception:
         return []
