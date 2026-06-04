@@ -63,6 +63,7 @@ const DISPLAY_STYLE_OPTIONS = [
   { value: "card", label: "卡片" },
   { value: "list", label: "列表" },
   { value: "timeline", label: "时间线" },
+  { value: "schedule", label: "赛程表" },
 ] as const;
 
 export function BlockConfigPanel({ form, onChange, onSave, onCancel }: Props) {

@@ -178,8 +178,10 @@ export function GridRenderer({ blocks, isLoading, dataUpdatedAt }: { blocks: any
 
             {block.data?.length === 0 ? (
               <div className="bg-card border rounded-xl p-6 text-center text-sm text-muted-foreground">暂无数据</div>
+            ) : block.source_type === "qiumiwu_matches" && block.display_style === "schedule" ? (
+              <MatchCards data={block.data} />
             ) : block.source_type === "qiumiwu_matches" ? (
-              <MatchCards data={block.data} dataUpdatedAt={dataUpdatedAt} />
+              <MatchList data={block.data} dataUpdatedAt={dataUpdatedAt} />
             ) : block.source_type === "qiumiwu_fixtures" ? (
               <MatchList data={block.data} dataUpdatedAt={dataUpdatedAt} defaultFilter="fixture" />
             ) : block.source_type === "qiumiwu_schedule" ? (
