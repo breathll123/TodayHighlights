@@ -50,6 +50,7 @@ const SOURCE_TYPE_OPTIONS_THS: { value: Block["source_type"]; label: string }[] 
 const SOURCE_TYPE_OPTIONS_QMW: { value: Block["source_type"]; label: string }[] = [
   { value: "qiumiwu_matches", label: "足球比赛" },
   { value: "qiumiwu_fixtures", label: "足球赛程" },
+  { value: "qiumiwu_schedule", label: "赛事赛程表" },
   { value: "qiumiwu_standings", label: "联赛积分榜" },
 ];
 
@@ -166,6 +167,30 @@ export function BlockConfigPanel({ form, onChange, onSave, onCancel }: Props) {
               <SelectItem value="percent" className="text-xs">涨跌幅</SelectItem>
               <SelectItem value="turnover_rate" className="text-xs">换手率</SelectItem>
               <SelectItem value="volume" className="text-xs">成交量</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+
+      {form.source_type === "qiumiwu_schedule" && (
+        <div className="space-y-1.5">
+          <Label className="text-xs">选择赛事</Label>
+          <Select value={String(form.source_config?.competition ?? "男足世界杯")} onValueChange={(v) => update("source_config", { ...form.source_config, competition: v })}>
+            <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="男足世界杯" className="text-xs">男足世界杯</SelectItem>
+              <SelectItem value="女足世界杯" className="text-xs">女足世界杯</SelectItem>
+              <SelectItem value="欧洲杯" className="text-xs">欧洲杯</SelectItem>
+              <SelectItem value="美洲杯" className="text-xs">美洲杯</SelectItem>
+              <SelectItem value="亚洲杯" className="text-xs">亚洲杯</SelectItem>
+              <SelectItem value="欧冠" className="text-xs">欧冠</SelectItem>
+              <SelectItem value="欧联杯" className="text-xs">欧联杯</SelectItem>
+              <SelectItem value="英超" className="text-xs">英超</SelectItem>
+              <SelectItem value="西甲" className="text-xs">西甲</SelectItem>
+              <SelectItem value="意甲" className="text-xs">意甲</SelectItem>
+              <SelectItem value="德甲" className="text-xs">德甲</SelectItem>
+              <SelectItem value="法甲" className="text-xs">法甲</SelectItem>
+              <SelectItem value="中超" className="text-xs">中超</SelectItem>
             </SelectContent>
           </Select>
         </div>

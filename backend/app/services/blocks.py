@@ -180,6 +180,10 @@ def resolve_block_data(session: Session, block: PageBlock, cookie: str | None = 
         from app.services.adapters.qiumiwu import fetch_fixtures
         return fetch_fixtures(config, limit)
 
+    if source_type == "qiumiwu_schedule":
+        from app.services.adapters.qiumiwu_schedule import fetch_competition_schedule
+        return fetch_competition_schedule(config, limit)
+
     if source_type == "qiumiwu_standings":
         from app.services.adapters.qiumiwu import fetch_standings
         return fetch_standings(config, max(limit, 1000))
