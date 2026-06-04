@@ -2,17 +2,20 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Radio } from "lucide-react";
 
 interface NewsItem {
-  id: number;
+  id: string | number;
   title: string;
   url?: string;
   published_at?: string;
   summary?: string;
+  source?: string;
 }
 
 function fmtTime(ts: string | null | undefined) {
   if (!ts) return "";
   const d = new Date(ts);
-  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  const h = String(d.getHours()).padStart(2, "0");
+  const m = String(d.getMinutes()).padStart(2, "0");
+  return `${h}:${m}`;
 }
 
 export function NewsTimeline({ data }: { data: NewsItem[] }) {
@@ -28,7 +31,7 @@ export function NewsTimeline({ data }: { data: NewsItem[] }) {
     <div className="relative rounded-xl border border-border/70 bg-card/75 p-3 shadow-sm">
       <div className="mb-2 flex items-center gap-2 px-1 text-[11px] font-medium uppercase text-muted-foreground">
         <Radio className="h-3.5 w-3.5 text-primary" aria-hidden="true" />
-        Live Feed
+        AI 资讯快讯
       </div>
       <div className="absolute bottom-4 left-[18px] top-11 w-px bg-border" />
 
@@ -48,25 +51,42 @@ export function NewsTimeline({ data }: { data: NewsItem[] }) {
               </div>
 
               <div className="min-w-0">
+                {/* Time + Source + Title */}
                 <div className="flex items-baseline gap-2">
                   <span className="shrink-0 font-mono text-[11px] text-muted-foreground tabular-nums">
                     {fmtTime(item.published_at)}
                   </span>
+                  {item.source && (
+                    <span className="shrink-0 truncate text-[11px] text-muted-foreground/60">
+                      {item.source}
+                    </span>
+                  )}
+                </div>
+
+                {/* Title */}
+                <div className="mt-0.5">
                   {item.url ? (
                     <a
                       href={item.url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="line-clamp-2 flex-1 text-[13px] font-medium leading-snug text-foreground/90 transition-colors hover:text-primary"
+                      className="text-[13px] font-medium leading-snug text-foreground/90 transition-colors hover:text-primary"
                     >
                       {item.title}
                     </a>
                   ) : (
-                    <span className="line-clamp-2 flex-1 text-[13px] font-medium leading-snug text-foreground/90">
+                    <span className="text-[13px] font-medium leading-snug text-foreground/90">
                       {item.title}
                     </span>
                   )}
                 </div>
+
+                {/* Summary */}
+                {item.summary && (
+                  <p className="mt-1 text-[12px] leading-relaxed text-muted-foreground/80 line-clamp-3">
+                    {item.summary}
+                  </p>
+                )}
               </div>
             </motion.div>
           ))}

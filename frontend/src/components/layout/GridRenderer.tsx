@@ -192,6 +192,7 @@ export function GridRenderer({ blocks, isLoading, dataUpdatedAt }: { blocks: any
                 url: item.url,
                 published_at: item.published_at,
                 summary: item.summary,
+                source: item.source,
               }))} />
             ) : block.source_type === "tonghuashun_news" || block.display_style === "timeline" ? (
               <NewsTimeline data={block.data.map((item: any) => ({
