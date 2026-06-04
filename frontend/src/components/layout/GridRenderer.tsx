@@ -4,6 +4,7 @@ import { BrainCircuit, CalendarClock, ChartNoAxesCombined, Newspaper, Trophy } f
 import { BlockCard } from "./BlockCard";
 import { BlockSkeleton } from "./BlockSkeleton";
 import { CompactTable } from "./CompactTable";
+import { MatchCards } from "./MatchCards";
 import { MatchList } from "./MatchList";
 import { NewsTimeline } from "./NewsTimeline";
 import { StandingsTable } from "./StandingsTable";
@@ -178,7 +179,7 @@ export function GridRenderer({ blocks, isLoading, dataUpdatedAt }: { blocks: any
             {block.data?.length === 0 ? (
               <div className="bg-card border rounded-xl p-6 text-center text-sm text-muted-foreground">暂无数据</div>
             ) : block.source_type === "qiumiwu_matches" ? (
-              <MatchList data={block.data} dataUpdatedAt={dataUpdatedAt} />
+              <MatchCards data={block.data} dataUpdatedAt={dataUpdatedAt} />
             ) : block.source_type === "qiumiwu_fixtures" ? (
               <MatchList data={block.data} dataUpdatedAt={dataUpdatedAt} defaultFilter="fixture" />
             ) : block.source_type === "qiumiwu_schedule" ? (
