@@ -60,11 +60,12 @@ def fetch_matches(_config: dict, limit: int) -> list[dict]:
             scores = m.get("scores", [])
             priority = 1 if league_name in _PRIORITY_LEAGUES else 0
 
-            # Parse scores array: [home_ft, away_ft, home_ht, away_ht, ?, ?, home_corner, away_corner, ?]
-            home_score = str(scores[0][0]) if scores and scores[0] else ""
-            away_score = str(scores[0][1]) if scores and scores[0] else ""
-            home_ht = str(scores[0][2]) if scores and len(scores[0]) > 2 else ""
-            away_ht = str(scores[0][3]) if scores and len(scores[0]) > 3 else ""
+            # scores array: [home_stats], [away_stats]
+            # Each stats: [ft, ht, ?, ?, ?, ?, corners, ?, ?]
+            home_score = str(scores[0][0]) if scores and len(scores) > 0 and scores[0] else ""
+            away_score = str(scores[1][0]) if scores and len(scores) > 1 and scores[1] else ""
+            home_ht = str(scores[0][1]) if scores and len(scores) > 0 and len(scores[0]) > 1 else ""
+            away_ht = str(scores[1][1]) if scores and len(scores) > 1 and len(scores[1]) > 1 else ""
 
             title = f"{home.get('name', '?')} vs {away.get('name', '?')}"
 
