@@ -1,8 +1,10 @@
+from hashlib import sha256
+from pathlib import Path
 from urllib.parse import urlparse
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -38,17 +40,24 @@ def page_blocks(route: str, session: Session = Depends(get_session)) -> dict:
 
 _IMAGE_CLIENT = httpx.Client(timeout=10, headers={"User-Agent": "Mozilla/5.0", "Referer": "https://www.qiumiwu.com/"})
 
+# Disk cache for proxied images
+_IMG_CACHE_DIR = Path("/tmp/dataflow-img-cache")
+_IMG_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+
 
 @router.get("/proxy/image")
 def proxy_image(url: str = Query(...)):
-    """Proxy third-party images to fix Content-Type mismatches and CORS.
-
-    Domain allowlist is deferred to nginx proxy layer at deployment time.
-    Local dev allows all domains."""
+    """Proxy third-party images with local disk cache."""
     domain = urlparse(url).netloc
-    # Only block obviously internal hosts to prevent basic SSRF
     if domain in ("localhost", "127.0.0.1", "::1") or domain.startswith("10.") or domain.startswith("192.168.") or domain.startswith("172.16."):
         raise HTTPException(status_code=403, detail=f"Internal host blocked: {domain}")
+
+    # Disk cache: hash URL → local file
+    cache_key = sha256(url.encode()).hexdigest()[:24]
+    cache_file = _IMG_CACHE_DIR / cache_key
+
+    if cache_file.exists() and cache_file.stat().st_size > 0:
+        return FileResponse(cache_file, media_type="image/png")
 
     try:
         resp = _IMAGE_CLIENT.get(url)
@@ -57,16 +66,15 @@ def proxy_image(url: str = Query(...)):
         if not body:
             raise ValueError("empty body")
         content_type = resp.headers.get("content-type", "image/png")
-        # Fix WebP served as PNG
         if body[:4] == b"RIFF" and b"WEBP" in body[:12]:
             content_type = "image/webp"
-    except Exception:
-        # Return 1x1 transparent PNG
-        body = b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15\xc4\x89\x00\x00\x00\nIDATx\x9cc\x00\x01\x00\x00\x05\x00\x01\r\n-\xb4\x00\x00\x00\x00IEND\xaeB`\x82"
-        content_type = "image/png"
 
-    return StreamingResponse(
-        iter([body]),
-        media_type=content_type,
-        headers={"Cache-Control": "public, max-age=86400"},
-    )
+        # Save to disk cache
+        cache_file.write_bytes(body)
+        return FileResponse(cache_file, media_type=content_type)
+    except Exception:
+        # Return 1x1 transparent PNG (not cached)
+        return StreamingResponse(
+            iter([b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15\xc4\x89\x00\x00\x00\nIDATx\x9cc\x00\x01\x00\x00\x05\x00\x01\r\n-\xb4\x00\x00\x00\x00IEND\xaeB`\x82"]),
+            media_type="image/png",
+        )
