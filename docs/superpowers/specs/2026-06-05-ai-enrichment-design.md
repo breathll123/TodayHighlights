@@ -133,6 +133,8 @@ raw_items
 - `model_config_id`
 - `generated_by_model`
 - `error_message`
+- `retry_count`
+- `last_attempted_at`
 - `generated_at`
 - `created_at`
 - `updated_at`
@@ -140,6 +142,9 @@ raw_items
 约束：
 
 - 同一个 `raw_item_id` 首版只保留一条当前有效加工结果。
+- 初始生成 `retry_count = 0`，每次重试递增。
+- 自动重试和后台手动重试共用 `retry_count`，`retry_count >= 3` 后后台不再允许继续重试，除非后续单独增加“重置重试次数”能力。
+- 每次尝试模型调用前更新 `last_attempted_at`。
 - 生成成功后同步创建或更新 `highlights`。
 - AI 失败不影响原始数据保存和公开页原始内容展示。
 
@@ -152,6 +157,7 @@ raw_items
 - `id`
 - `topic_id`
 - `summary_date`
+- `version`
 - `status`: `generated` / `failed` / `hidden`
 - `title`
 - `items_json`: 3-5 条看点，每条包含标题、原因、涉及标的/板块、风险提示、引用来源 ID
@@ -163,7 +169,13 @@ raw_items
 - `created_at`
 - `updated_at`
 
-公开页读取最新 `generated` 且未隐藏的股票主题汇总。
+版本规则：
+
+- 同一个 `topic_id + summary_date` 可以有多个版本。
+- 定时任务生成当天第一个版本时使用 `version = 1`。
+- 后台手动重新生成时新增一条记录，`version` 递增，不覆盖旧记录。
+- 公开页读取同一主题下最新 `generated` 且未隐藏的最高版本。
+- 后续如果需要回滚，只需要把旧版本恢复为可展示状态；首版后台不做回滚 UI。
 
 ### 生成日志
 
@@ -171,13 +183,79 @@ raw_items
 
 新增 `ai_generation_jobs`，供 `/admin/ai-jobs` 查询：
 
-- 任务类型：单条加工 / 主题汇总。
-- 状态。
-- 输入数量。
-- 成功数量。
-- 失败数量。
-- 错误摘要。
-- 开始和结束时间。
+- `id`
+- `job_type`: `item_enrichment` / `topic_summary`
+- `trigger_type`: `crawl` / `scheduled` / `manual` / `retry`
+- `topic_id`
+- `raw_item_id`
+- `item_enrichment_id`
+- `topic_summary_id`
+- `model_config_id`
+- `status`: `pending` / `processing` / `succeeded` / `failed` / `partial`
+- `input_count`
+- `success_count`
+- `failed_count`
+- `retry_of_job_id`
+- `error_message`
+- `log_excerpt`
+- `started_at`
+- `finished_at`
+- `created_at`
+
+约束：
+
+- 单条重试任务通过 `retry_of_job_id` 指向原失败任务。
+- 批处理里部分候选失败时，任务状态为 `partial`，成功项仍保存。
+- `/admin/ai-jobs` 展示最近任务、失败原因、重试入口和当前默认模型状态。
+
+## 候选筛选规则
+
+首版候选筛选采用确定性规则，不使用语义相似度，避免联调阶段出现不可复现结果。
+
+### 单条加工候选
+
+适用范围：
+
+- 股票主题下资讯、公告、快讯、雪球内容等文本型 `raw_items`。
+- 榜单、行情、比分等结构化数据不进入单条加工候选。
+
+时间窗口：
+
+- 只处理 `published_at` 或 `created_at` 在最近 24 小时内的 `raw_items`。
+- 爬虫触发时优先处理本次保存的新内容。
+- 定时补偿任务最多回扫最近 24 小时未处理内容。
+
+内容长度：
+
+- 标题去空白后少于 6 个字符时跳过。
+- `title + body` 归一化后少于 40 个字符时跳过。
+- 正文过长时截取前 4,000 个字符作为模型输入，原始内容仍完整保留在 `raw_items`。
+
+去重：
+
+- `raw_items` 继续使用现有 `source_id + external_id` 和 `source_id + content_hash` 唯一约束。
+- AI 候选层额外跳过已经存在 `ai_item_enrichments` 的 `raw_item_id`。
+- 同一 topic、同一 24 小时窗口内，归一化标题完全相同的内容只处理发布时间最新的一条。
+- 首版不做标题相似度和语义相似度去重。
+
+批处理上限：
+
+- 单次爬虫触发最多创建 50 个单条加工候选。
+- 定时补偿任务单批最多处理 200 个候选。
+- 超出上限的候选留到下一轮，按 `published_at` 倒序处理。
+
+### 主题汇总上下文
+
+主题级今日看点输入由两部分组成：
+
+- 最近 24 小时内 `status = generated` 且 `importance_score >= 60` 的单条加工结果，最多 30 条。
+- 最近 24 小时内明显榜单/行情异动项，最多 20 条。
+
+榜单/行情异动首版规则：
+
+- 热股、板块、资金流、龙虎榜等 source type 可作为异动来源。
+- 优先选择原始数据中排名前 10、涨跌幅绝对值明显、资金流字段靠前、或龙虎榜成交/买卖额靠前的项目。
+- 具体字段按各 source adapter 已暴露 metrics 映射，无法识别数值字段时只使用排名前 10。
 
 ## 生成任务
 
@@ -191,7 +269,7 @@ raw_items
 流程：
 
 1. 读取股票主题下新保存的 `raw_items`。
-2. 按 source type、时间、去重、关键词、内容长度筛出候选。
+2. 按 source type、时间、去重、关键词、内容长度和批处理上限筛出候选。
 3. 创建 `ai_item_enrichments` pending 记录。
 4. 后台任务调用默认模型生成结构化 JSON。
 5. 校验 JSON。
@@ -203,6 +281,7 @@ raw_items
 - 模型不可用：记录 failed，不影响爬虫。
 - JSON 不合法：记录 failed，不展示半成品。
 - API Key 未配置：跳过生成，后台提示未配置。
+- 重试次数达到 3 次：保持 failed，后台隐藏重试按钮或置灰。
 
 ### 主题级今日看点
 
@@ -271,15 +350,31 @@ raw_items
 
 - 没有模型配置或没有生成结果时隐藏，不影响原页面。
 - 生成失败时不在公开页显示失败信息。
+- 请求加载中时只显示一个轻量骨架区，不阻塞原有 page blocks 渲染。
+- 请求失败时隐藏顶部 AI 今日看点，不显示错误 toast。
 
 ### 区块内增强
 
-资讯、公告、快讯类区块可显示：
+资讯、公告、快讯类区块满足以下条件时显示 AI 增强：
+
+- 对应 `raw_item_id` 存在 `ai_item_enrichments`。
+- `status = generated`。
+- `importance_score >= 40`。
+- 结果未被隐藏。
+
+显示内容：
 
 - AI 摘要。
 - 标签。
 - 重要性评分。
 - 原文链接。
+
+降级：
+
+- 没有加工结果时显示原始内容。
+- 加工状态为 `pending` 或 `processing` 时显示原始内容，不显示行内 loading。
+- 加工状态为 `failed` 时显示原始内容，不显示失败信息。
+- 加工状态为 `hidden` 时显示原始内容，不显示 AI 摘要和标签。
 
 榜单、行情类区块首版不逐条显示 AI 摘要，只参与顶部汇总。
 
@@ -301,6 +396,38 @@ raw_items
 
 ## Prompt 输出结构
 
+### 单条加工 Prompt 草稿
+
+System:
+
+```text
+你是 DataFlow 的股票信息整理助手。你的任务是把输入内容整理成中性、可读、可追溯的信息摘要。
+你可以说明事件、影响解读、关注点和风险提示。
+你必须避免买入、卖出、持有等操作建议，避免价格预测和涨跌预测，避免“必然”“确定”“强烈推荐”等确定性表达。
+只输出合法 JSON，不输出 Markdown，不输出额外解释。
+```
+
+User:
+
+```text
+请基于以下股票主题内容生成结构化摘要。
+
+输出字段：
+- title: 简短标题
+- summary: 中性摘要
+- tags: 主题标签
+- related_symbols: 涉及标的或板块，可为空
+- importance_score: 0 到 100 的重要性评分
+- focus_points: 为什么值得关注
+- risk_points: 需要注意的不确定性
+
+内容：
+标题：{title}
+来源：{source_name}
+发布时间：{published_at}
+正文：{body}
+```
+
 单条加工要求模型输出 JSON：
 
 ```json
@@ -313,6 +440,34 @@ raw_items
   "focus_points": ["为什么值得关注"],
   "risk_points": ["需要注意的不确定性"]
 }
+```
+
+### 主题汇总 Prompt 草稿
+
+System:
+
+```text
+你是 DataFlow 的股票今日看点编辑助手。你的任务是从已加工摘要和市场异动上下文中提炼 3 到 5 条今日重点。
+你可以做影响解读和风险提示，但不能输出买卖建议、价格预测、涨跌预测或确定性投资结论。
+每条看点都应说明为什么重要，并保留引用来源 ID。
+只输出合法 JSON，不输出 Markdown，不输出额外解释。
+```
+
+User:
+
+```text
+请基于以下股票主题上下文生成今日看点。
+
+输入包含：
+1. 单条 AI 加工结果列表
+2. 榜单/行情异动列表
+
+输出字段：
+- title: 今日看点标题
+- items: 3 到 5 条看点
+
+上下文：
+{context_json}
 ```
 
 主题汇总要求模型输出 JSON：
@@ -332,7 +487,35 @@ raw_items
 }
 ```
 
+### 服务端校验边界
+
 服务端必须校验字段类型和长度，不能直接信任模型输出。
+
+单条加工边界：
+
+- `title`: 字符串，1-60 个字符。
+- `summary`: 字符串，20-180 个字符。
+- `tags`: 字符串数组，最多 5 个，每个 1-12 个字符。
+- `related_symbols`: 字符串数组，最多 10 个，每个 1-20 个字符。
+- `importance_score`: 整数，范围 0-100。
+- `focus_points`: 字符串数组，1-3 条，每条 1-80 个字符。
+- `risk_points`: 字符串数组，0-3 条，每条 1-80 个字符。
+
+主题汇总边界：
+
+- `title`: 字符串，1-40 个字符。
+- `items`: 数组，3-5 条。
+- `items[].title`: 字符串，1-60 个字符。
+- `items[].reason`: 字符串，20-120 个字符。
+- `items[].related`: 字符串数组，最多 8 个，每个 1-20 个字符。
+- `items[].risk`: 字符串，0-100 个字符。
+- `items[].source_refs`: 整数数组，最多 10 个。
+
+校验失败处理：
+
+- 字段缺失、类型错误、长度越界或 JSON 解析失败时，生成状态记为 `failed`。
+- 不对越界内容做静默截断，避免展示被截断后语义不完整的 AI 文案。
+- 失败原因写入 `ai_generation_jobs.error_message` 和对应结果表的 `error_message`。
 
 ## 测试策略
 
@@ -341,9 +524,13 @@ raw_items
 - 模型配置 CRUD，API Key 加密和不回传明文。
 - 只允许一个默认模型。
 - 候选筛选规则。
+- 候选时间窗口、内容长度、去重和批处理上限。
 - Mock 模型客户端生成单条加工结果。
 - 生成失败时状态和错误记录。
+- 重试次数、`last_attempted_at` 和重试上限。
 - 主题级汇总生成和公开读取。
+- 同日手动重新生成时版本递增，不覆盖旧版本。
+- Prompt 输出校验边界，包含 score、summary、tags、focus/risk points 的长度和数量。
 
 前端：
 
@@ -351,6 +538,8 @@ raw_items
 - API Key 已配置/未配置状态。
 - AI 今日看点模块有数据、无数据、加载、错误状态。
 - 区块内 AI 摘要和标签展示。
+- 区块内增强只在 `generated`、未隐藏、`importance_score >= 40` 时出现。
+- 生成失败或隐藏时回退显示原始内容。
 
 集成：
 
