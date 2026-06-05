@@ -123,6 +123,74 @@ class Highlight(TimestampMixin, Base):
     raw_item: Mapped[RawItem] = relationship(back_populates="highlights")
 
 
+class User(TimestampMixin, Base):
+    __tablename__ = "users"
+    __table_args__ = (
+        UniqueConstraint("username", name="uq_users_username"),
+        UniqueConstraint("email", name="uq_users_email"),
+        Index("ix_users_role_status", "role", "status"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    username: Mapped[str] = mapped_column(String(80), nullable=False)
+    email: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    role: Mapped[str] = mapped_column(String(20), default="user", nullable=False)
+    status: Mapped[str] = mapped_column(String(20), default="active", nullable=False)
+    last_login_at: Mapped[datetime | None] = mapped_column(DateTime)
+
+
+class AIBlockAnalysis(TimestampMixin, Base):
+    __tablename__ = "ai_block_analyses"
+    __table_args__ = (
+        Index("ix_ai_block_analysis_cache", "page_route", "block_id", "data_hash", "status", "expires_at"),
+        Index("ix_ai_block_analysis_user_created", "generated_by_user_id", "created_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    page_route: Mapped[str] = mapped_column(String(80), nullable=False)
+    block_id: Mapped[int] = mapped_column(ForeignKey("page_blocks.id"), nullable=False)
+    block_title: Mapped[str] = mapped_column(String(120), nullable=False)
+    source_type: Mapped[str] = mapped_column(String(40), nullable=False)
+    data_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[str] = mapped_column(String(30), default="processing", nullable=False)
+    summary_points_json: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
+    key_changes_json: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
+    risk_points_json: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
+    related_entities_json: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
+    evidence_refs_json: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list, nullable=False)
+    model_config_id: Mapped[int | None] = mapped_column(ForeignKey("ai_model_configs.id"))
+    generated_by_model: Mapped[str] = mapped_column(String(160), default="", nullable=False)
+    generated_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    token_usage_id: Mapped[int | None] = mapped_column(ForeignKey("ai_token_usages.id"))
+    error_message: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    generated_at: Mapped[datetime | None] = mapped_column(DateTime)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime)
+
+
+class AITokenUsage(Base):
+    __tablename__ = "ai_token_usages"
+    __table_args__ = (
+        Index("ix_ai_token_usages_user_created", "user_id", "created_at"),
+        Index("ix_ai_token_usages_model_created", "model_config_id", "created_at"),
+        Index("ix_ai_token_usages_type_created", "usage_type", "created_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    model_config_id: Mapped[int | None] = mapped_column(ForeignKey("ai_model_configs.id"))
+    model_name: Mapped[str] = mapped_column(String(160), default="", nullable=False)
+    usage_type: Mapped[str] = mapped_column(String(40), nullable=False)
+    prompt_tokens: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    completion_tokens: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    total_tokens: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    estimated: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    request_status: Mapped[str] = mapped_column(String(30), default="success", nullable=False)
+    related_job_id: Mapped[int | None] = mapped_column(ForeignKey("ai_generation_jobs.id"))
+    related_block_analysis_id: Mapped[int | None] = mapped_column(ForeignKey("ai_block_analyses.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
+
+
 class AIModelConfig(TimestampMixin, Base):
     __tablename__ = "ai_model_configs"
 
@@ -205,6 +273,8 @@ class AIGenerationJob(Base):
     retry_of_job_id: Mapped[int | None] = mapped_column(ForeignKey("ai_generation_jobs.id"))
     error_message: Mapped[str] = mapped_column(Text, default="", nullable=False)
     log_excerpt: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    block_analysis_id: Mapped[int | None] = mapped_column(ForeignKey("ai_block_analyses.id"))
     started_at: Mapped[datetime | None] = mapped_column(DateTime)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
