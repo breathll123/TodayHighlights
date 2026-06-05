@@ -123,6 +123,93 @@ class Highlight(TimestampMixin, Base):
     raw_item: Mapped[RawItem] = relationship(back_populates="highlights")
 
 
+class AIModelConfig(TimestampMixin, Base):
+    __tablename__ = "ai_model_configs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    base_url: Mapped[str] = mapped_column(String(500), nullable=False)
+    model: Mapped[str] = mapped_column(String(160), nullable=False)
+    api_key_encrypted: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    is_default: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    notes: Mapped[str] = mapped_column(Text, default="", nullable=False)
+
+
+class AIItemEnrichment(TimestampMixin, Base):
+    __tablename__ = "ai_item_enrichments"
+    __table_args__ = (
+        UniqueConstraint("raw_item_id", name="uq_ai_item_enrichment_raw_item"),
+        Index("ix_ai_item_enrichments_topic_status", "topic_id", "status", "importance_score"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    topic_id: Mapped[int] = mapped_column(ForeignKey("topics.id"), nullable=False)
+    raw_item_id: Mapped[int] = mapped_column(ForeignKey("raw_items.id"), nullable=False)
+    status: Mapped[str] = mapped_column(String(30), default="pending", nullable=False)
+    generated_title: Mapped[str] = mapped_column(String(300), default="", nullable=False)
+    summary: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    tags_json: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
+    related_symbols_json: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
+    importance_score: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    focus_points_json: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
+    risk_points_json: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
+    model_config_id: Mapped[int | None] = mapped_column(ForeignKey("ai_model_configs.id"))
+    generated_by_model: Mapped[str] = mapped_column(String(160), default="", nullable=False)
+    error_message: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    retry_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    last_attempted_at: Mapped[datetime | None] = mapped_column(DateTime)
+    generated_at: Mapped[datetime | None] = mapped_column(DateTime)
+
+
+class AITopicSummary(TimestampMixin, Base):
+    __tablename__ = "ai_topic_summaries"
+    __table_args__ = (
+        UniqueConstraint("topic_id", "summary_date", "version", name="uq_ai_topic_summary_version"),
+        Index("ix_ai_topic_summaries_topic_status", "topic_id", "status", "summary_date", "version"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    topic_id: Mapped[int] = mapped_column(ForeignKey("topics.id"), nullable=False)
+    summary_date: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    status: Mapped[str] = mapped_column(String(30), default="generated", nullable=False)
+    title: Mapped[str] = mapped_column(String(120), default="", nullable=False)
+    items_json: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list, nullable=False)
+    source_refs_json: Mapped[list[int]] = mapped_column(JSON, default=list, nullable=False)
+    model_config_id: Mapped[int | None] = mapped_column(ForeignKey("ai_model_configs.id"))
+    generated_by_model: Mapped[str] = mapped_column(String(160), default="", nullable=False)
+    error_message: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    generated_at: Mapped[datetime | None] = mapped_column(DateTime)
+
+
+class AIGenerationJob(Base):
+    __tablename__ = "ai_generation_jobs"
+    __table_args__ = (
+        Index("ix_ai_generation_jobs_created", "created_at"),
+        Index("ix_ai_generation_jobs_status", "status", "job_type"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    job_type: Mapped[str] = mapped_column(String(40), nullable=False)
+    trigger_type: Mapped[str] = mapped_column(String(40), nullable=False)
+    topic_id: Mapped[int | None] = mapped_column(ForeignKey("topics.id"))
+    raw_item_id: Mapped[int | None] = mapped_column(ForeignKey("raw_items.id"))
+    item_enrichment_id: Mapped[int | None] = mapped_column(ForeignKey("ai_item_enrichments.id"))
+    topic_summary_id: Mapped[int | None] = mapped_column(ForeignKey("ai_topic_summaries.id"))
+    model_config_id: Mapped[int | None] = mapped_column(ForeignKey("ai_model_configs.id"))
+    status: Mapped[str] = mapped_column(String(30), default="pending", nullable=False)
+    input_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    success_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    failed_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    retry_of_job_id: Mapped[int | None] = mapped_column(ForeignKey("ai_generation_jobs.id"))
+    error_message: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    log_excerpt: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
+
+
 class AppSetting(TimestampMixin, Base):
     __tablename__ = "app_settings"
 
