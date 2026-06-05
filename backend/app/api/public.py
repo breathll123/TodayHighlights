@@ -9,8 +9,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.database import get_session
-from app.models.entities import Highlight, Topic
-from app.schemas.public import HighlightRead, TopicRead
+from app.models.entities import AITopicSummary, Highlight, Topic
+from app.schemas.public import AITopicSummaryItemRead, AITopicSummaryRead, HighlightRead, TopicRead
 from app.services.blocks import get_page_blocks
 
 router = APIRouter(prefix="/api/public", tags=["public"])
@@ -36,6 +36,29 @@ def page_blocks(route: str, session: Session = Depends(get_session)) -> dict:
     route = "/" + route if not route.startswith("/") else route
     blocks = get_page_blocks(session, route)
     return {"blocks": blocks}
+
+
+@router.get("/topics/{slug}/ai-summary")
+def get_topic_ai_summary(slug: str, session: Session = Depends(get_session)) -> AITopicSummaryRead:
+    topic = session.scalar(select(Topic).where(Topic.slug == slug, Topic.enabled.is_(True)))
+    if topic is None:
+        raise HTTPException(status_code=404, detail="Topic not found")
+
+    summary = session.scalar(
+        select(AITopicSummary)
+        .where(AITopicSummary.topic_id == topic.id, AITopicSummary.status == "generated")
+        .order_by(AITopicSummary.summary_date.desc(), AITopicSummary.version.desc())
+        .limit(1)
+    )
+    if summary is None:
+        raise HTTPException(status_code=404, detail="No AI summary available")
+
+    return AITopicSummaryRead(
+        title=summary.title,
+        version=summary.version,
+        generated_at=summary.generated_at,
+        items=[AITopicSummaryItemRead(**item) for item in summary.items_json],
+    )
 
 
 _IMAGE_CLIENT = httpx.Client(timeout=10, headers={"User-Agent": "Mozilla/5.0", "Referer": "https://www.qiumiwu.com/"})

@@ -12,6 +12,7 @@ from app.core.crypto import CryptoService
 from app.core.database import get_session
 from app.models.entities import CrawlJob, Highlight, PageBlock, Source, Topic
 from app.schemas.admin import AIModelConfigWrite, BlockCreate, BlockRead, BlockUpdate, HighlightUpdate, ReorderRequest, SourceCreate, SourceRead, SourceUpdate
+from app.services.ai_enrichment import generate_topic_summary
 from app.services.ai_models import create_ai_model, list_ai_models, serialize_ai_model, set_default_ai_model, update_ai_model
 from app.services.content import update_highlight_review
 from app.services.jobs import run_crawl_job
@@ -159,6 +160,13 @@ class ModelSettingsWrite(BaseModel):
     base_url: str
     api_key: str = ""
     model: str
+
+
+@router.post("/ai/topic-summaries/stocks/regenerate")
+def regenerate_stocks_ai_summary(session: Session = Depends(get_session)) -> dict:
+    summary = generate_topic_summary(session, topic_slug="stocks", trigger_type="manual")
+    session.commit()
+    return {"id": summary.id, "version": summary.version, "status": summary.status}
 
 
 @router.get("/ai-models")

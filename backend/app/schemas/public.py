@@ -28,3 +28,18 @@ class HighlightRead(BaseModel):
 
 class PageBlocksResponse(BaseModel):
     blocks: list[dict[str, Any]]
+
+
+class AITopicSummaryItemRead(BaseModel):
+    title: str
+    reason: str
+    related: list[str]
+    risk: str
+    source_refs: list[int]
+
+
+class AITopicSummaryRead(BaseModel):
+    title: str
+    version: int
+    generated_at: datetime | None
+    items: list[AITopicSummaryItemRead]

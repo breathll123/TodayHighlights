@@ -5,11 +5,11 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.crypto import CryptoService
-from app.models.entities import AIGenerationJob, AIItemEnrichment, AIModelConfig, Highlight, RawItem
+from app.models.entities import AIGenerationJob, AIItemEnrichment, AIModelConfig, AITopicSummary, Highlight, RawItem, Topic
 from app.services.ai_client import AIClient, PostJson
 from app.services.ai_models import get_default_ai_model
-from app.services.ai_prompts import ITEM_SYSTEM_PROMPT, item_user_prompt
-from app.services.ai_validation import validate_item_enrichment_payload
+from app.services.ai_prompts import ITEM_SYSTEM_PROMPT, TOPIC_SYSTEM_PROMPT, item_user_prompt, topic_user_prompt
+from app.services.ai_validation import validate_item_enrichment_payload, validate_topic_summary_payload
 
 ITEM_WINDOW_HOURS = 24
 MIN_TITLE_CHARS = 6
@@ -284,3 +284,133 @@ def retry_item_enrichment(session: Session, job_id: int, post_json: PostJson | N
         trigger_type="retry",
         retry_of_job_id=job_id,
     )
+
+
+def generate_topic_summary(
+    session: Session,
+    topic_slug: str,
+    trigger_type: str = "manual",
+    post_json: PostJson | None = None,
+) -> AITopicSummary:
+    """Generate an AI topic summary from recent enrichments and signals."""
+    import asyncio
+    import json as _json
+
+    topic = session.scalar(select(Topic).where(Topic.slug == topic_slug, Topic.enabled.is_(True)))
+    if topic is None:
+        raise ValueError("Topic not found")
+
+    model_cfg = get_default_ai_model(session)
+    if model_cfg is None:
+        raise ValueError("No default AI model configured")
+
+    # Gather recent generated enrichments (last 24 hours)
+    cutoff = datetime.utcnow() - timedelta(hours=24)
+    enrichments = session.scalars(
+        select(AIItemEnrichment)
+        .where(
+            AIItemEnrichment.topic_id == topic.id,
+            AIItemEnrichment.status == "generated",
+            AIItemEnrichment.generated_at >= cutoff,
+        )
+        .order_by(AIItemEnrichment.importance_score.desc())
+        .limit(20)
+    ).all()
+
+    # Build context for the AI
+    enrichment_data = [
+        {
+            "id": e.id,
+            "title": e.generated_title,
+            "summary": e.summary,
+            "tags": e.tags_json,
+            "importance_score": e.importance_score,
+            "focus_points": e.focus_points_json,
+            "risk_points": e.risk_points_json,
+        }
+        for e in enrichments
+    ]
+
+    context = _json.dumps({"enrichments": enrichment_data}, ensure_ascii=False)
+
+    # Determine next version for today
+    today = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+    latest = session.scalar(
+        select(AITopicSummary)
+        .where(AITopicSummary.topic_id == topic.id, AITopicSummary.summary_date == today)
+        .order_by(AITopicSummary.version.desc())
+        .limit(1)
+    )
+    next_version = (latest.version + 1) if latest else 1
+
+    started_at = datetime.utcnow()
+
+    try:
+        crypto = CryptoService(settings.app_secret_key)
+        api_key = crypto.decrypt(model_cfg.api_key_encrypted)
+        client = AIClient(
+            base_url=model_cfg.base_url,
+            api_key=api_key,
+            model=model_cfg.model,
+            post_json=post_json,
+        )
+
+        result = asyncio.run(
+            client.complete_json(TOPIC_SYSTEM_PROMPT, topic_user_prompt(context))
+        )
+
+        validated = validate_topic_summary_payload(result)
+
+        summary = AITopicSummary(
+            topic_id=topic.id,
+            summary_date=today,
+            version=next_version,
+            status="generated",
+            title=validated.title,
+            items_json=[
+                {
+                    "title": item.title,
+                    "reason": item.reason,
+                    "related": item.related,
+                    "risk": item.risk,
+                    "source_refs": item.source_refs,
+                }
+                for item in validated.items
+            ],
+            source_refs_json=[],
+            model_config_id=model_cfg.id,
+            generated_by_model=model_cfg.model,
+            generated_at=datetime.utcnow(),
+        )
+        session.add(summary)
+        session.flush()
+
+        job = _build_job(
+            job_type="topic_summary",
+            trigger_type=trigger_type,
+            status="succeeded",
+            topic_id=topic.id,
+            topic_summary_id=summary.id,
+            model_config_id=model_cfg.id,
+            input_count=len(enrichments),
+            success_count=1,
+            started_at=started_at,
+            finished_at=datetime.utcnow(),
+        )
+        session.add(job)
+
+        return summary
+
+    except Exception as exc:
+        job = _build_job(
+            job_type="topic_summary",
+            trigger_type=trigger_type,
+            status="failed",
+            topic_id=topic.id,
+            model_config_id=model_cfg.id,
+            error_message=str(exc)[:500],
+            started_at=started_at,
+            finished_at=datetime.utcnow(),
+        )
+        session.add(job)
+        raise
