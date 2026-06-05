@@ -16,6 +16,9 @@ from app.services.ai_models import get_default_ai_model
 from app.services.blocks import resolve_block_data
 
 BLOCK_ANALYSIS_TTL_MINUTES = 60
+MAX_ANALYSIS_ITEMS = 10
+MAX_ITEM_SUMMARY_CHARS = 200
+
 BLOCK_ANALYSIS_SYSTEM_PROMPT = (
     "你是 DataFlow 的区块级信息分析助手。只基于用户提供的方块内容分析，不能补充外部事实。"
     "输出 JSON：summary_points, key_changes, risk_points, related_entities, confidence。"
@@ -74,15 +77,42 @@ def build_evidence_refs(data: list[dict]) -> list[dict]:
     return refs
 
 
+def _item_priority(item: dict) -> float:
+    """Score item importance to prioritize the most significant ones for AI analysis."""
+    score = 0.0
+    # Prefer items with explicit scores
+    raw_score = item.get("score")
+    if isinstance(raw_score, int | float) and raw_score > 0:
+        score += min(float(raw_score), 100) * 0.01
+    # Prefer items with meaningful summaries (substance over noise)
+    summary = str(item.get("summary") or item.get("content") or "")
+    score += min(len(summary) / 120, 1.0) * 0.3
+    # Prefer items with higher percent changes (market-moving)
+    raw_pct = item.get("percent")
+    if isinstance(raw_pct, int | float) and raw_pct != 0:
+        score += min(abs(float(raw_pct)) / 10, 1.0) * 0.5
+    # Prefer items with tags (already classified as important)
+    tags = item.get("tags") or item.get("tags_json") or []
+    if isinstance(tags, list) and len(tags) > 0:
+        score += min(len(tags) * 0.1, 0.3)
+    return score
+
+
 def block_user_prompt(block: PageBlock, data: list[dict]) -> str:
+    # Prioritize and limit items to keep prompts focused and fast
+    prioritized = sorted(data, key=_item_priority, reverse=True)
+    top = prioritized[:MAX_ANALYSIS_ITEMS]
+
     compact = [
         {
-            "title": item.get("title") or item.get("name"),
-            "summary": item.get("summary") or item.get("content"),
-            "tags": item.get("tags") or item.get("tags_json"),
-            "metrics": item.get("metrics") or {k: item.get(k) for k in ("score", "percent", "rank", "status")},
+            "title": str(item.get("title") or item.get("name") or "")[:120],
+            "summary": str(item.get("summary") or item.get("content") or "")[:MAX_ITEM_SUMMARY_CHARS],
+            "tags": (item.get("tags") or item.get("tags_json") or [])[:5],
+            "score": item.get("score"),
+            "percent": item.get("percent"),
+            "rank": item.get("rank"),
         }
-        for item in data[:20]
+        for item in top
     ]
     return json.dumps(
         {"block_title": block.title, "source_type": block.source_type, "items": compact},

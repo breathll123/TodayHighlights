@@ -188,7 +188,7 @@ export function fetchAITopicSummary(slug: string): Promise<AITopicSummaryRespons
 // --- Block AI Analysis ---
 
 export function generateBlockAIAnalysis(data: { page_route: string; block_id: number }): Promise<BlockAIAnalysis> {
-  return api.post<BlockAIAnalysis>("/api/ai/block-analyses", data).then((r) => r.data);
+  return api.post<BlockAIAnalysis>("/api/ai/block-analyses", data, { timeout: 120_000 }).then((r) => r.data);
 }
 
 // --- Admin Users & Usage ---
