@@ -10,9 +10,9 @@ from app.core.auth import create_admin_token, verify_admin
 from app.core.config import settings
 from app.core.crypto import CryptoService
 from app.core.database import get_session
-from app.models.entities import CrawlJob, Highlight, PageBlock, Source, Topic
-from app.schemas.admin import AIModelConfigWrite, BlockCreate, BlockRead, BlockUpdate, HighlightUpdate, ReorderRequest, SourceCreate, SourceRead, SourceUpdate
-from app.services.ai_enrichment import generate_topic_summary
+from app.models.entities import AIGenerationJob, CrawlJob, Highlight, PageBlock, Source, Topic
+from app.schemas.admin import AIJobListResponse, AIJobRead, AIModelConfigWrite, BlockCreate, BlockRead, BlockUpdate, HighlightUpdate, ReorderRequest, SourceCreate, SourceRead, SourceUpdate
+from app.services.ai_enrichment import generate_topic_summary, retry_item_enrichment
 from app.services.ai_models import create_ai_model, list_ai_models, serialize_ai_model, set_default_ai_model, update_ai_model
 from app.services.content import update_highlight_review
 from app.services.jobs import run_crawl_job
@@ -167,6 +167,53 @@ def regenerate_stocks_ai_summary(session: Session = Depends(get_session)) -> dic
     summary = generate_topic_summary(session, topic_slug="stocks", trigger_type="manual")
     session.commit()
     return {"id": summary.id, "version": summary.version, "status": summary.status}
+
+
+@router.get("/ai-jobs")
+def list_ai_jobs(page: int = 1, page_size: int = 20, session: Session = Depends(get_session)) -> AIJobListResponse:
+    total = session.scalar(select(func.count()).select_from(AIGenerationJob))
+    jobs = session.scalars(
+        select(AIGenerationJob).order_by(AIGenerationJob.created_at.desc())
+        .limit(page_size).offset((page - 1) * page_size)
+    ).all()
+    return AIJobListResponse(
+        total=total or 0,
+        page=page,
+        page_size=page_size,
+        items=[
+            AIJobRead(
+                id=job.id,
+                job_type=job.job_type,
+                trigger_type=job.trigger_type,
+                topic_id=job.topic_id,
+                status=job.status,
+                input_count=job.input_count,
+                success_count=job.success_count,
+                failed_count=job.failed_count,
+                error_message=job.error_message,
+                log_excerpt=job.log_excerpt,
+                started_at=job.started_at,
+                finished_at=job.finished_at,
+                created_at=job.created_at,
+            )
+            for job in jobs
+        ],
+    )
+
+
+@router.post("/ai-jobs/{job_id}/retry")
+def retry_ai_job(job_id: int, session: Session = Depends(get_session)) -> dict:
+    try:
+        enrichment = retry_item_enrichment(session, job_id)
+    except ValueError as exc:
+        msg = str(exc)
+        if "not found" in msg:
+            raise HTTPException(status_code=404, detail=msg) from exc
+        if "Retry count exceeded" in msg:
+            raise HTTPException(status_code=400, detail=msg) from exc
+        raise HTTPException(status_code=500, detail=msg) from exc
+    session.commit()
+    return {"id": enrichment.id, "status": enrichment.status, "retry_count": enrichment.retry_count}
 
 
 @router.get("/ai-models")

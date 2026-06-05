@@ -131,3 +131,26 @@ class AIModelConfigRead(BaseModel):
     has_api_key: bool
     created_at: datetime
     updated_at: datetime
+
+
+class AIJobRead(BaseModel):
+    id: int
+    job_type: str
+    trigger_type: str
+    topic_id: int | None
+    status: str
+    input_count: int
+    success_count: int
+    failed_count: int
+    error_message: str
+    log_excerpt: str
+    started_at: datetime | None
+    finished_at: datetime | None
+    created_at: datetime
+
+
+class AIJobListResponse(BaseModel):
+    total: int
+    page: int
+    page_size: int
+    items: list[AIJobRead]

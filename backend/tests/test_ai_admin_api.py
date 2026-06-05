@@ -37,3 +37,15 @@ def test_only_one_default_ai_model(client: TestClient) -> None:
     listed = client.get("/api/admin/ai-models").json()
     defaults = [item["name"] for item in listed if item["is_default"]]
     assert defaults == ["B"]
+
+
+def test_list_ai_jobs(client: TestClient) -> None:
+    response = client.get("/api/admin/ai-jobs")
+    assert response.status_code == 200
+    assert response.json()["total"] == 0
+    assert response.json()["items"] == []
+
+
+def test_retry_missing_ai_job_returns_404(client: TestClient) -> None:
+    response = client.post("/api/admin/ai-jobs/999/retry")
+    assert response.status_code == 404
