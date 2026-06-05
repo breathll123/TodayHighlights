@@ -225,6 +225,7 @@ def get_page_blocks(session: Session, route: str) -> list[dict]:
     for b in db_blocks:
         items.append({
             "id": b.id, "title": b.title, "sort_order": b.sort_order,
+            "page_route": b.page_route,
             "display_style": b.display_style, "display_count": b.display_count,
             "source_type": b.source_type, "source_config": b.source_config or {},
             "col_span": b.col_span, "row_span": b.row_span,
@@ -250,6 +251,7 @@ def get_page_blocks(session: Session, route: str) -> list[dict]:
                 data = []
             items.append({
                 "id": b.id, "title": b.title, "sort_order": b.sort_order,
+                "page_route": b.page_route,
                 "display_style": b.display_style, "display_count": b.display_count,
                 "source_type": b.source_type, "source_config": b.source_config or {},
                 "col_span": b.col_span, "row_span": b.row_span,
