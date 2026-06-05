@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Navigate, Outlet } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, Outlet, useLocation } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/hooks/use-auth";
 import { PublicNavbar } from "@/components/layout/PublicNavbar";
 import { AdminSidebar } from "@/components/admin/AdminSidebar";
@@ -41,8 +41,10 @@ function AdminLayout() {
 }
 
 function ProtectedRoute() {
-  const { isAuthenticated } = useAuth();
-  if (!isAuthenticated) return <Navigate to="/login" replace />;
+  const { isAuthenticated, isAdmin } = useAuth();
+  const location = useLocation();
+  if (!isAuthenticated) return <Navigate to="/login" replace state={{ from: location.pathname }} />;
+  if (!isAdmin) return <Navigate to="/" replace />;
   return <AdminLayout />;
 }
 

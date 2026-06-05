@@ -1,25 +1,37 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { KeyRound, RadioTower } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { useAuth } from "@/hooks/use-auth";
 import { toast } from "sonner";
 
 export function LoginPage() {
+  const [mode, setMode] = useState<"login" | "register">("login");
+  const [loginValue, setLoginValue] = useState("");
+  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
-  const { login } = useAuth();
+  const { login, register } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+
+  const from = (location.state as { from?: string })?.from ?? "/";
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     try {
-      await login(password);
-      navigate("/admin/sources");
+      if (mode === "register") {
+        await register(username, email, password);
+      } else {
+        await login(loginValue || "admin", password);
+      }
+      navigate(from, { replace: true });
     } catch (err: any) {
-      toast.error(err.message || "登录失败");
+      toast.error(err.message || "操作失败");
     } finally {
       setLoading(false);
     }
@@ -34,23 +46,48 @@ export function LoginPage() {
               <RadioTower className="h-5 w-5" aria-hidden="true" />
             </div>
             <h1 className="text-2xl font-semibold">DataFlow</h1>
-            <p className="mt-2 text-sm leading-6 text-muted-foreground">多主题实时信息聚合平台 · 运营控制台</p>
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">
+              {mode === "register" ? "注册新账户" : "多主题实时信息聚合平台"}
+            </p>
           </div>
-          <div className="space-y-2">
-            <label htmlFor="admin-password" className="text-sm font-medium">管理密码</label>
-            <Input
-              id="admin-password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="请输入密码"
-              autoFocus
-            />
+
+          {mode === "register" && (
+            <div className="space-y-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="reg-username">用户名</Label>
+                <Input id="reg-username" value={username} onChange={(e) => setUsername(e.target.value)} placeholder="用户名" autoFocus required />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="reg-email">邮箱 (选填)</Label>
+                <Input id="reg-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="email@example.com" />
+              </div>
+            </div>
+          )}
+
+          {mode === "login" && (
+            <div className="space-y-1.5">
+              <Label htmlFor="login-value">用户名或邮箱</Label>
+              <Input id="login-value" value={loginValue} onChange={(e) => setLoginValue(e.target.value)} placeholder="用户名或邮箱" autoFocus />
+            </div>
+          )}
+
+          <div className="space-y-1.5">
+            <Label htmlFor="login-password">密码</Label>
+            <Input id="login-password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="输入密码" required />
           </div>
+
           <Button type="submit" className="w-full gap-2" disabled={loading}>
             <KeyRound className="h-4 w-4" aria-hidden="true" />
-            {loading ? "登录中..." : "登录"}
+            {loading ? "处理中..." : mode === "register" ? "注册" : "登录"}
           </Button>
+
+          <p className="text-center text-xs text-muted-foreground">
+            {mode === "login" ? (
+              <>没有账户？<button type="button" className="underline hover:text-foreground" onClick={() => setMode("register")}>注册</button></>
+            ) : (
+              <>已有账户？<button type="button" className="underline hover:text-foreground" onClick={() => setMode("login")}>登录</button></>
+            )}
+          </p>
         </form>
       </div>
     </div>

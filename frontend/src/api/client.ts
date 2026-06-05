@@ -1,5 +1,5 @@
 import axios from "axios";
-import type { AIModelConfig, AIModelConfigWrite, AIGenerationJob, AIJobListResponse, AITopicSummaryResponse, Block, CrawlJob, Highlight, JobListResponse, ModelSettings, PageBlocksResponse, Source, Topic } from "./types";
+import type { AIModelConfig, AIModelConfigWrite, AIGenerationJob, AIJobListResponse, AITopicSummaryResponse, AuthResponse, AuthUser, Block, CrawlJob, Highlight, JobListResponse, ModelSettings, PageBlocksResponse, Source, Topic } from "./types";
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE ?? "http://localhost:8000",
@@ -29,6 +29,20 @@ export function fetchHighlights(): Promise<Highlight[]> {
 
 export function fetchPageBlocks(route: string): Promise<PageBlocksResponse> {
   return api.get<PageBlocksResponse>(`/api/public/pages/${route}/blocks`).then((r) => r.data);
+}
+
+// --- Auth APIs ---
+
+export function registerUser(data: { username: string; email: string; password: string }): Promise<AuthResponse> {
+  return api.post<AuthResponse>("/api/auth/register", data).then((r) => r.data);
+}
+
+export function loginUser(data: { login: string; password: string }): Promise<AuthResponse> {
+  return api.post<AuthResponse>("/api/auth/login", data).then((r) => r.data);
+}
+
+export function fetchMe(): Promise<AuthUser> {
+  return api.get<AuthUser>("/api/auth/me").then((r) => r.data);
 }
 
 // --- Admin APIs ---

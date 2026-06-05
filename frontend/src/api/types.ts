@@ -153,3 +153,16 @@ export interface AIItemEnhancement {
 export function shouldShowAI(enrichment?: AIItemEnhancement): boolean {
   return Boolean(enrichment && enrichment.status === "generated" && enrichment.importance_score >= 40);
 }
+
+export interface AuthUser {
+  id: number;
+  username: string;
+  email: string | null;
+  role: "admin" | "user";
+  status: "active" | "disabled";
+}
+
+export interface AuthResponse {
+  token: string;
+  user: AuthUser;
+}
