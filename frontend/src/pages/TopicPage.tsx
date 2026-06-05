@@ -1,7 +1,10 @@
 import { useLocation } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import { usePageBlocks } from "@/hooks/use-page-blocks";
 import { DashboardShell } from "@/components/layout/DashboardShell";
 import { GridRenderer } from "@/components/layout/GridRenderer";
+import { AITopicSummary } from "@/components/layout/AITopicSummary";
+import { fetchAITopicSummary } from "@/api/client";
 
 const TOPIC_META: Record<string, { name: string; description: string }> = {
   "/topics/stocks": {
@@ -25,11 +28,26 @@ function topicMeta(pathname: string) {
   };
 }
 
+function topicSlug(pathname: string): string | null {
+  const match = pathname.match(/^\/topics\/([a-zA-Z0-9_-]+)/);
+  return match ? match[1] : null;
+}
+
 export function TopicPage() {
   const location = useLocation();
   const meta = topicMeta(location.pathname);
+  const slug = topicSlug(location.pathname);
 
   const { data, isLoading, error } = usePageBlocks(location.pathname);
+
+  // Only fetch AI summary for stocks topic
+  const { data: aiSummary, isLoading: aiLoading } = useQuery({
+    queryKey: ["ai-topic-summary", slug],
+    queryFn: () => fetchAITopicSummary(slug!),
+    enabled: slug === "stocks",
+    retry: false,
+    staleTime: 5 * 60 * 1000,
+  });
 
   return (
     <DashboardShell
@@ -45,7 +63,22 @@ export function TopicPage() {
           {meta.name}主题加载失败，请检查后端服务、数据源或发布状态。
         </div>
       ) : (
-        <GridRenderer blocks={data?.blocks ?? []} isLoading={isLoading} />
+        <>
+          {/* AI Summary for stocks topic */}
+          {aiLoading && (
+            <div className="mb-6 rounded-xl border border-primary/10 bg-primary/5 animate-pulse px-5 py-8">
+              <div className="h-4 w-40 bg-primary/10 rounded mb-3" />
+              <div className="space-y-2">
+                <div className="h-3 w-full bg-primary/5 rounded" />
+                <div className="h-3 w-3/4 bg-primary/5 rounded" />
+                <div className="h-3 w-5/6 bg-primary/5 rounded" />
+              </div>
+            </div>
+          )}
+          {aiSummary && !aiLoading && <AITopicSummary summary={aiSummary} />}
+
+          <GridRenderer blocks={data?.blocks ?? []} isLoading={isLoading} />
+        </>
       )}
     </DashboardShell>
   );
