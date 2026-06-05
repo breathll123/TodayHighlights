@@ -46,8 +46,13 @@ def validate_block_analysis_payload(payload: dict) -> BlockAnalysisValidated:
     if not summary_points:
         raise ValueError("summary_points is required")
     confidence = payload.get("confidence", 0)
+    if isinstance(confidence, str):
+        try:
+            confidence = float(confidence)
+        except (ValueError, TypeError):
+            confidence = 0.5
     if not isinstance(confidence, int | float):
-        raise ValueError("confidence must be a number")
+        confidence = 0.5
     confidence = max(0.0, min(1.0, float(confidence)))
     return BlockAnalysisValidated(
         summary_points=summary_points,
