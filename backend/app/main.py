@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import select
 
-from app.api import admin, public
+from app.api import admin, auth, public
 from app.core.auth import seed_default_password
 from app.core.config import settings
 from app.core.database import Base, SessionLocal, engine
@@ -51,6 +51,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.include_router(auth.router)
 app.include_router(public.router)
 app.include_router(admin.auth_router)
 app.include_router(admin.router)

@@ -1,49 +1,46 @@
-import json
-import time
-
 from fastapi import Depends, HTTPException
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
-from app.core.config import settings
-from app.core.crypto import CryptoService
 from app.core.database import get_session
+from app.models.entities import User
+from app.services.auth_service import create_token, create_user, resolve_token_user
 from app.services.settings import get_plain_setting, set_plain_setting
 
 security = HTTPBearer(auto_error=False)
 DEFAULT_PASSWORD = "admin123"
 
 
-def verify_admin(
+def get_current_user(
     credentials: HTTPAuthorizationCredentials | None = Depends(security),
     session: Session = Depends(get_session),
-) -> bool:
+) -> User:
     if credentials is None:
         raise HTTPException(status_code=401, detail="Missing token")
+    return resolve_token_user(session, credentials.credentials)
 
-    try:
-        crypto = CryptoService(settings.app_secret_key)
-        payload = json.loads(crypto.decrypt(credentials.credentials))
-        exp = payload.get("exp", 0)
-        if exp < time.time():
-            raise HTTPException(status_code=401, detail="Token expired")
-        return True
-    except Exception:
-        raise HTTPException(status_code=401, detail="Invalid token")
+
+def verify_admin(user: User = Depends(get_current_user)) -> bool:
+    if user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin required")
+    return True
 
 
 def create_admin_token(password: str, session: Session) -> str:
     stored = get_plain_setting(session, "admin.password", DEFAULT_PASSWORD)
     if password != stored:
         raise HTTPException(status_code=403, detail="Incorrect password")
-
-    crypto = CryptoService(settings.app_secret_key)
-    payload = json.dumps({"exp": int(time.time()) + 86400 * 7})  # 7 days
-    return crypto.encrypt(payload)
+    admin = session.query(User).filter(User.role == "admin").first()
+    if admin is None:
+        admin = create_user(session, "admin", "", password, role="admin")
+    return create_token(admin)
 
 
 def seed_default_password(session: Session) -> None:
     existing = get_plain_setting(session, "admin.password")
     if not existing:
         set_plain_setting(session, "admin.password", DEFAULT_PASSWORD)
-        session.commit()
+    admin = session.query(User).filter(User.role == "admin").first()
+    if admin is None:
+        create_user(session, "admin", "", existing or DEFAULT_PASSWORD, role="admin")
+    session.commit()
