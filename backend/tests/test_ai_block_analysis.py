@@ -79,7 +79,7 @@ def test_estimate_tokens_is_stable_for_short_text():
 
 
 def _seed_user_model_block(session):
-    user = User(username="alice", email="", password_hash="hash", role="user", status="active")
+    user = User(username="alice", email=None, password_hash="hash", role="user", status="active")
     topic = Topic(name="股票", slug="stocks", enabled=True)
     session.add_all([user, topic])
     session.flush()
@@ -175,3 +175,39 @@ def test_analyze_block_uses_valid_cache(client):
     )
     assert analysis.id == cached.id
     assert analysis.summary_points_json == ["缓存结果"]
+
+
+from app.services.auth_service import create_token
+
+
+def test_block_analysis_requires_login(client):
+    response = client.post("/api/ai/block-analyses", json={"page_route": "/topics/stocks", "block_id": 1})
+    assert response.status_code == 401
+
+
+def test_block_analysis_api_returns_cache_for_logged_in_user(client):
+    session = next(client.app.dependency_overrides[get_session]())
+    user, block = _seed_user_model_block(session)
+    cached = AIBlockAnalysis(
+        page_route="/topics/stocks",
+        block_id=block.id,
+        block_title=block.title,
+        source_type=block.source_type,
+        data_hash="manual-cache",
+        status="generated",
+        summary_points_json=["缓存"],
+        expires_at=datetime.utcnow() + timedelta(minutes=30),
+        generated_by_user_id=user.id,
+    )
+    session.add(cached)
+    session.commit()
+    token = create_token(user)
+
+    response = client.get(
+        "/api/ai/block-analyses",
+        params={"page_route": "/topics/stocks", "block_id": block.id, "data_hash": "manual-cache"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["summary_points"] == ["缓存"]

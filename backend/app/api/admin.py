@@ -6,12 +6,14 @@ from pydantic import BaseModel
 
 from fastapi import Request
 
-from app.core.auth import create_admin_token, verify_admin
+from app.core.auth import create_admin_token, get_current_user, verify_admin
 from app.core.config import settings
 from app.core.crypto import CryptoService
 from app.core.database import get_session
-from app.models.entities import AIGenerationJob, CrawlJob, Highlight, PageBlock, Source, Topic
+from app.models.entities import AIGenerationJob, AIBlockAnalysis, AITokenUsage, CrawlJob, Highlight, PageBlock, Source, Topic, User
 from app.schemas.admin import AIJobListResponse, AIJobRead, AIModelConfigWrite, BlockCreate, BlockRead, BlockUpdate, HighlightUpdate, ReorderRequest, SourceCreate, SourceRead, SourceUpdate
+from app.schemas.auth import UserRead
+from app.services.ai_block_analysis import analyze_block
 from app.services.ai_enrichment import generate_topic_summary, retry_item_enrichment
 from app.services.ai_models import create_ai_model, list_ai_models, serialize_ai_model, set_default_ai_model, update_ai_model
 from app.services.content import update_highlight_review
@@ -218,6 +220,80 @@ def retry_ai_job(job_id: int, session: Session = Depends(get_session)) -> dict:
         raise HTTPException(status_code=500, detail=msg) from exc
     session.commit()
     return {"id": enrichment.id, "status": enrichment.status, "retry_count": enrichment.retry_count}
+
+
+@router.get("/users")
+def list_users(session: Session = Depends(get_session)) -> list[dict]:
+    users = session.scalars(select(User).order_by(User.created_at.desc())).all()
+    return [
+        {
+            "id": user.id,
+            "username": user.username,
+            "email": user.email,
+            "role": user.role,
+            "status": user.status,
+            "last_login_at": user.last_login_at,
+            "created_at": user.created_at,
+        }
+        for user in users
+    ]
+
+
+@router.patch("/users/{user_id}")
+def update_user_status(user_id: int, payload: dict, session: Session = Depends(get_session)) -> dict:
+    user = session.get(User, user_id)
+    if user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    status = payload.get("status")
+    if status not in {"active", "disabled"}:
+        raise HTTPException(status_code=400, detail="Invalid status")
+    user.status = status
+    session.commit()
+    return {"id": user.id, "status": user.status}
+
+
+@router.get("/ai/token-usages")
+def list_token_usages(page: int = 1, page_size: int = 20, session: Session = Depends(get_session)) -> dict:
+    total = session.scalar(select(func.count()).select_from(AITokenUsage)) or 0
+    usages = session.scalars(
+        select(AITokenUsage).order_by(AITokenUsage.created_at.desc()).offset((page - 1) * page_size).limit(page_size)
+    ).all()
+    return {
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "items": [
+            {
+                "id": usage.id,
+                "user_id": usage.user_id,
+                "model_name": usage.model_name,
+                "usage_type": usage.usage_type,
+                "prompt_tokens": usage.prompt_tokens,
+                "completion_tokens": usage.completion_tokens,
+                "total_tokens": usage.total_tokens,
+                "estimated": usage.estimated,
+                "request_status": usage.request_status,
+                "created_at": usage.created_at,
+            }
+            for usage in usages
+        ],
+    }
+
+
+@router.post("/ai/block-analyses/{analysis_id}/regenerate")
+def regenerate_block_analysis(analysis_id: int, session: Session = Depends(get_session), admin: User = Depends(get_current_user)) -> dict:
+    previous = session.get(AIBlockAnalysis, analysis_id)
+    if previous is None:
+        raise HTTPException(status_code=404, detail="Analysis not found")
+    analysis = analyze_block(
+        session,
+        user=admin,
+        page_route=previous.page_route,
+        block_id=previous.block_id,
+        force=True,
+    )
+    session.commit()
+    return {"id": analysis.id, "status": analysis.status}
 
 
 @router.get("/ai-models")
