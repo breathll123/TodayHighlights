@@ -11,7 +11,8 @@ from app.core.config import settings
 from app.core.crypto import CryptoService
 from app.core.database import get_session
 from app.models.entities import CrawlJob, Highlight, PageBlock, Source, Topic
-from app.schemas.admin import BlockCreate, BlockRead, BlockUpdate, HighlightUpdate, ReorderRequest, SourceCreate, SourceRead, SourceUpdate
+from app.schemas.admin import AIModelConfigWrite, BlockCreate, BlockRead, BlockUpdate, HighlightUpdate, ReorderRequest, SourceCreate, SourceRead, SourceUpdate
+from app.services.ai_models import create_ai_model, list_ai_models, serialize_ai_model, set_default_ai_model, update_ai_model
 from app.services.content import update_highlight_review
 from app.services.jobs import run_crawl_job
 from app.services.settings import get_plain_setting, get_secret_setting, set_plain_setting, set_secret_setting
@@ -158,6 +159,41 @@ class ModelSettingsWrite(BaseModel):
     base_url: str
     api_key: str = ""
     model: str
+
+
+@router.get("/ai-models")
+def list_admin_ai_models(session: Session = Depends(get_session)) -> list[dict]:
+    return [serialize_ai_model(model) for model in list_ai_models(session)]
+
+
+@router.post("/ai-models")
+def create_admin_ai_model(payload: AIModelConfigWrite, session: Session = Depends(get_session)) -> dict:
+    model = create_ai_model(session, payload)
+    session.commit()
+    session.refresh(model)
+    return serialize_ai_model(model)
+
+
+@router.put("/ai-models/{model_id}")
+def update_admin_ai_model(model_id: int, payload: AIModelConfigWrite, session: Session = Depends(get_session)) -> dict:
+    try:
+        model = update_ai_model(session, model_id, payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    session.commit()
+    session.refresh(model)
+    return serialize_ai_model(model)
+
+
+@router.post("/ai-models/{model_id}/set-default")
+def set_admin_ai_model_default(model_id: int, session: Session = Depends(get_session)) -> dict:
+    try:
+        model = set_default_ai_model(session, model_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    session.commit()
+    session.refresh(model)
+    return serialize_ai_model(model)
 
 
 @router.get("/settings/model")

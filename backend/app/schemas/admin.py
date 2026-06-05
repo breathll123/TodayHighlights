@@ -106,3 +106,28 @@ class BlockRead(BaseModel):
 
 class ReorderRequest(BaseModel):
     items: list[dict[str, int]]
+
+
+class AIModelConfigWrite(BaseModel):
+    name: str
+    base_url: str
+    model: str
+    api_key: str = ""
+    is_default: bool = False
+    enabled: bool = True
+    notes: str = ""
+
+
+class AIModelConfigRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+    base_url: str
+    model: str
+    is_default: bool
+    enabled: bool
+    notes: str
+    has_api_key: bool
+    created_at: datetime
+    updated_at: datetime
