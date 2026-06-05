@@ -11,6 +11,17 @@ import { StandingsTable } from "./StandingsTable";
 import { LeaderboardTable } from "./LeaderboardTable";
 import { SectionHeading } from "./SectionHeading";
 import { FIELD_DEFS, DEFAULT_FIELDS } from "@/lib/field-defs";
+import type { AIItemEnhancement } from "@/api/types";
+
+function buildAIEnrichment(item: any): AIItemEnhancement | undefined {
+  if (!item.generated_by_model) return undefined;
+  return {
+    status: item.review_status ?? "generated",
+    summary: item.summary ?? "",
+    tags: item.tags_json ?? [],
+    importance_score: item.score ?? 0,
+  };
+}
 
 const SOURCE_NAMES: Record<string, string> = {
   topic: "主题看点",
@@ -200,6 +211,7 @@ export function GridRenderer({ blocks, isLoading, dataUpdatedAt }: { blocks: any
                 published_at: item.published_at,
                 summary: item.summary,
                 source: item.source,
+                ai_enrichment: buildAIEnrichment(item),
               }))} />
             ) : block.source_type === "tonghuashun_news" || block.display_style === "timeline" ? (
               <NewsTimeline data={block.data.map((item: any) => ({
@@ -208,6 +220,7 @@ export function GridRenderer({ blocks, isLoading, dataUpdatedAt }: { blocks: any
                 url: item.url,
                 published_at: item.published_at,
                 summary: item.summary,
+                ai_enrichment: buildAIEnrichment(item),
               }))} />
             ) : block.display_style === "list" ? (
               <div className="border rounded-lg bg-card">
@@ -227,6 +240,7 @@ export function GridRenderer({ blocks, isLoading, dataUpdatedAt }: { blocks: any
                     sourceName={sourceNameFor(item, st)}
                     isPinned={item.is_pinned}
                     url={item.url}
+                    aiEnrichment={buildAIEnrichment(item)}
                   />
                 ))}
               </div>

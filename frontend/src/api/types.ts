@@ -141,3 +141,14 @@ export interface AITopicSummaryResponse {
   generated_at: string | null;
   items: AITopicSummaryItem[];
 }
+
+export interface AIItemEnhancement {
+  status: string;
+  summary: string;
+  tags: string[];
+  importance_score: number;
+}
+
+export function shouldShowAI(enrichment?: AIItemEnhancement): boolean {
+  return Boolean(enrichment && enrichment.status === "generated" && enrichment.importance_score >= 40);
+}

@@ -1,5 +1,7 @@
-import { ArrowUpRight, Pin, Tags } from "lucide-react";
+import { ArrowUpRight, Pin, Sparkles, Tags } from "lucide-react";
 import { motion } from "framer-motion";
+import type { AIItemEnhancement } from "@/api/types";
+import { shouldShowAI } from "@/api/types";
 
 interface BlockCardProps {
   title: string;
@@ -9,20 +11,27 @@ interface BlockCardProps {
   isPinned?: boolean;
   url?: string;
   className?: string;
+  aiEnrichment?: AIItemEnhancement;
 }
 
-export function BlockCard({ title, summary, tags, sourceName, isPinned, url, className }: BlockCardProps) {
+export function BlockCard({ title, summary, tags, sourceName, isPinned, url, className, aiEnrichment }: BlockCardProps) {
   const isClickable = !!url;
+  const showAI = shouldShowAI(aiEnrichment);
   const Tag = isClickable ? "a" : "div";
   const card = (
     <Tag
       {...(isClickable ? { href: url, target: "_blank", rel: "noopener noreferrer" } : {})}
-      className={`group block overflow-hidden rounded-lg border border-border/50 bg-card/80 shadow-sm transition-all duration-200 ${isClickable ? "cursor-pointer hover:border-primary/40 hover:bg-card hover:shadow-md" : ""} ${isPinned ? "ring-1 ring-amber-500/30" : ""} ${className ?? ""}`}
+      className={`group block overflow-hidden rounded-lg border border-border/50 bg-card/80 shadow-sm transition-all duration-200 ${isClickable ? "cursor-pointer hover:border-primary/40 hover:bg-card hover:shadow-md" : ""} ${isPinned ? "ring-1 ring-amber-500/30" : ""} ${showAI ? "ring-1 ring-primary/20" : ""} ${className ?? ""}`}
     >
       <div className="p-4">
         {sourceName && (
           <span className="mb-2 inline-flex rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
             {sourceName}
+          </span>
+        )}
+        {showAI && (
+          <span className="mb-2 ml-1 inline-flex items-center gap-1 rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
+            <Sparkles className="h-2.5 w-2.5" />AI 摘要
           </span>
         )}
 

@@ -1,5 +1,7 @@
 import { motion, AnimatePresence } from "framer-motion";
-import { Radio } from "lucide-react";
+import { Radio, Sparkles } from "lucide-react";
+import type { AIItemEnhancement } from "@/api/types";
+import { shouldShowAI } from "@/api/types";
 
 interface NewsItem {
   id: string | number;
@@ -8,6 +10,7 @@ interface NewsItem {
   published_at?: string;
   summary?: string;
   source?: string;
+  ai_enrichment?: AIItemEnhancement;
 }
 
 function fmtTime(ts: string | null | undefined) {
@@ -64,19 +67,26 @@ export function NewsTimeline({ data }: { data: NewsItem[] }) {
                 </div>
 
                 {/* Title */}
-                <div className="mt-0.5">
-                  {item.url ? (
-                    <a
-                      href={item.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-[13px] font-medium leading-snug text-foreground/90 transition-colors hover:text-primary"
-                    >
-                      {item.title}
-                    </a>
-                  ) : (
-                    <span className="text-[13px] font-medium leading-snug text-foreground/90">
-                      {item.title}
+                <div className="mt-0.5 flex items-start gap-2">
+                  <div className="min-w-0 flex-1">
+                    {item.url ? (
+                      <a
+                        href={item.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-[13px] font-medium leading-snug text-foreground/90 transition-colors hover:text-primary"
+                      >
+                        {item.title}
+                      </a>
+                    ) : (
+                      <span className="text-[13px] font-medium leading-snug text-foreground/90">
+                        {item.title}
+                      </span>
+                    )}
+                  </div>
+                  {shouldShowAI(item.ai_enrichment) && (
+                    <span className="shrink-0 inline-flex items-center gap-0.5 rounded bg-primary/10 px-1 py-0.5 text-[9px] font-medium text-primary" title="AI 生成摘要">
+                      <Sparkles className="h-2 w-2" />AI
                     </span>
                   )}
                 </div>
@@ -86,6 +96,13 @@ export function NewsTimeline({ data }: { data: NewsItem[] }) {
                   <p className="mt-1 text-[12px] leading-relaxed text-muted-foreground/80 line-clamp-3">
                     {item.summary}
                   </p>
+                )}
+                {shouldShowAI(item.ai_enrichment) && item.ai_enrichment!.tags.length > 0 && (
+                  <div className="mt-1.5 flex flex-wrap gap-1">
+                    {item.ai_enrichment!.tags.map((t) => (
+                      <span key={t} className="inline-flex rounded-full bg-primary/5 px-1.5 py-0.5 text-[9px] text-primary/70">{t}</span>
+                    ))}
+                  </div>
                 )}
               </div>
             </motion.div>
