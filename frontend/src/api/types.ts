@@ -143,6 +143,56 @@ export interface AITopicSummaryResponse {
   items: AITopicSummaryItem[];
 }
 
+export interface BlockAIAnalysis {
+  id: number;
+  page_route: string;
+  block_id: number;
+  block_title: string;
+  status: "processing" | "generated" | "failed";
+  summary_points: string[];
+  key_changes: string[];
+  risk_points: string[];
+  related_entities: string[];
+  evidence_refs: { title: string; source?: string; published_at?: string | null; url?: string | null }[];
+  generated_by_model: string;
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+  token_estimated: boolean;
+  generated_at: string | null;
+  expires_at: string | null;
+}
+
+export interface AdminUser {
+  id: number;
+  username: string;
+  email: string | null;
+  role: "admin" | "user";
+  status: "active" | "disabled";
+  last_login_at: string | null;
+  created_at: string;
+}
+
+export interface AITokenUsage {
+  id: number;
+  user_id: number | null;
+  model_name: string;
+  usage_type: string;
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+  estimated: boolean;
+  request_status: string;
+  created_at: string;
+}
+
+export interface AITokenUsageListResponse {
+  total: number;
+  page: number;
+  page_size: number;
+  items: AITokenUsage[];
+}
+
 export interface AIItemEnhancement {
   status: string;
   summary: string;

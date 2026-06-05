@@ -6,11 +6,13 @@ export function SectionHeading({
   icon: Icon,
   title,
   meta,
+  action,
   className,
 }: {
   icon: LucideIcon;
   title: string;
   meta?: ReactNode;
+  action?: ReactNode;
   className?: string;
 }) {
   return (
@@ -21,7 +23,10 @@ export function SectionHeading({
         </span>
         <span className="truncate">{title}</span>
       </h2>
-      {meta ? <span className="shrink-0 text-[11px] text-muted-foreground">{meta}</span> : null}
+      <div className="flex shrink-0 items-center gap-2">
+        {meta ? <span className="text-[11px] text-muted-foreground">{meta}</span> : null}
+        {action}
+      </div>
     </div>
   );
 }

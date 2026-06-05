@@ -1,5 +1,5 @@
 import axios from "axios";
-import type { AIModelConfig, AIModelConfigWrite, AIGenerationJob, AIJobListResponse, AITopicSummaryResponse, AuthResponse, AuthUser, Block, CrawlJob, Highlight, JobListResponse, ModelSettings, PageBlocksResponse, Source, Topic } from "./types";
+import type { AdminUser, AIModelConfig, AIModelConfigWrite, AIGenerationJob, AIJobListResponse, AITokenUsageListResponse, AITopicSummaryResponse, AuthResponse, AuthUser, Block, BlockAIAnalysis, CrawlJob, Highlight, JobListResponse, ModelSettings, PageBlocksResponse, Source, Topic } from "./types";
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE ?? "http://localhost:8000",
@@ -183,4 +183,24 @@ export function retryAIJob(jobId: number): Promise<{ id: number; status: string;
 
 export function fetchAITopicSummary(slug: string): Promise<AITopicSummaryResponse> {
   return api.get<AITopicSummaryResponse>(`/api/public/topics/${slug}/ai-summary`).then((r) => r.data);
+}
+
+// --- Block AI Analysis ---
+
+export function generateBlockAIAnalysis(data: { page_route: string; block_id: number }): Promise<BlockAIAnalysis> {
+  return api.post<BlockAIAnalysis>("/api/ai/block-analyses", data).then((r) => r.data);
+}
+
+// --- Admin Users & Usage ---
+
+export function fetchAdminUsers(): Promise<AdminUser[]> {
+  return api.get<AdminUser[]>("/api/admin/users").then((r) => r.data);
+}
+
+export function updateAdminUserStatus(id: number, status: "active" | "disabled"): Promise<{ id: number; status: string }> {
+  return api.patch(`/api/admin/users/${id}`, { status }).then((r) => r.data);
+}
+
+export function fetchAITokenUsages(page = 1, pageSize = 20): Promise<AITokenUsageListResponse> {
+  return api.get<AITokenUsageListResponse>("/api/admin/ai/token-usages", { params: { page, page_size: pageSize } }).then((r) => r.data);
 }

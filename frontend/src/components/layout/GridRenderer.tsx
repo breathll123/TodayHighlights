@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 import { BrainCircuit, CalendarClock, ChartNoAxesCombined, Newspaper, Trophy } from "lucide-react";
+import { useMutation } from "@tanstack/react-query";
 import { BlockCard } from "./BlockCard";
 import { BlockSkeleton } from "./BlockSkeleton";
 import { CompactTable } from "./CompactTable";
@@ -10,7 +11,11 @@ import { NewsTimeline } from "./NewsTimeline";
 import { StandingsTable } from "./StandingsTable";
 import { LeaderboardTable } from "./LeaderboardTable";
 import { SectionHeading } from "./SectionHeading";
+import { BlockAIAnalysisDrawer } from "./BlockAIAnalysisDrawer";
 import { FIELD_DEFS, DEFAULT_FIELDS } from "@/lib/field-defs";
+import { generateBlockAIAnalysis } from "@/api/client";
+import { Button } from "@/components/ui/button";
+import { useAuth } from "@/hooks/use-auth";
 import type { AIItemEnhancement } from "@/api/types";
 
 function buildAIEnrichment(item: any): AIItemEnhancement | undefined {
@@ -151,6 +156,13 @@ function AAIndexBlock({ block, displayFields }: { block: any; displayFields: any
 }
 
 export function GridRenderer({ blocks, isLoading, dataUpdatedAt }: { blocks: any[]; isLoading: boolean; dataUpdatedAt?: number }) {
+  const { isAuthenticated } = useAuth();
+  const [selectedBlock, setSelectedBlock] = useState<any | null>(null);
+  const [requiresLogin, setRequiresLogin] = useState(false);
+  const analysisMutation = useMutation({
+    mutationFn: generateBlockAIAnalysis,
+  });
+
   if (isLoading) {
     return (
       <div className="page-grid">
@@ -185,7 +197,29 @@ export function GridRenderer({ blocks, isLoading, dataUpdatedAt }: { blocks: any
             className="space-y-3"
             style={{ gridColumn: `span ${block.col_span || 1}`, gridRow: `span ${block.row_span || 1}` }}
           >
-            <SectionHeading icon={sectionIcon(st)} title={block.title} />
+            <SectionHeading
+              icon={sectionIcon(st)}
+              title={block.title}
+              action={
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 gap-1.5 px-2 text-xs"
+                  onClick={() => {
+                    setSelectedBlock(block);
+                    if (!isAuthenticated) {
+                      setRequiresLogin(true);
+                      return;
+                    }
+                    setRequiresLogin(false);
+                    analysisMutation.mutate({ page_route: block.page_route, block_id: block.id });
+                  }}
+                >
+                  <BrainCircuit className="h-3.5 w-3.5" aria-hidden="true" />
+                  AI 分析
+                </Button>
+              }
+            />
 
             {block.data?.length === 0 ? (
               <div className="bg-card border rounded-xl p-6 text-center text-sm text-muted-foreground">暂无数据</div>
@@ -248,6 +282,20 @@ export function GridRenderer({ blocks, isLoading, dataUpdatedAt }: { blocks: any
           </section>
         );
       })}
+
+      <BlockAIAnalysisDrawer
+        open={Boolean(selectedBlock)}
+        title={selectedBlock?.title ?? ""}
+        analysis={analysisMutation.data ?? null}
+        isLoading={analysisMutation.isPending}
+        error={analysisMutation.error ? analysisMutation.error.message : null}
+        requiresLogin={requiresLogin}
+        onClose={() => {
+          setSelectedBlock(null);
+          setRequiresLogin(false);
+          analysisMutation.reset();
+        }}
+      />
     </div>
   );
 }
