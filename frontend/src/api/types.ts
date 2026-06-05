@@ -80,3 +80,64 @@ export interface Block {
 export interface PageBlocksResponse {
   blocks: (Block & { data: unknown[] })[];
 }
+
+export interface AIModelConfig {
+  id: number;
+  name: string;
+  base_url: string;
+  model: string;
+  is_default: boolean;
+  enabled: boolean;
+  notes: string;
+  has_api_key: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AIModelConfigWrite {
+  name: string;
+  base_url: string;
+  model: string;
+  api_key: string;
+  is_default: boolean;
+  enabled: boolean;
+  notes: string;
+}
+
+export interface AIGenerationJob {
+  id: number;
+  job_type: string;
+  trigger_type: string;
+  topic_id: number | null;
+  status: string;
+  input_count: number;
+  success_count: number;
+  failed_count: number;
+  error_message: string;
+  log_excerpt: string;
+  started_at: string | null;
+  finished_at: string | null;
+  created_at: string;
+}
+
+export interface AIJobListResponse {
+  total: number;
+  page: number;
+  page_size: number;
+  items: AIGenerationJob[];
+}
+
+export interface AITopicSummaryItem {
+  title: string;
+  reason: string;
+  related: string[];
+  risk: string;
+  source_refs: number[];
+}
+
+export interface AITopicSummaryResponse {
+  title: string;
+  version: number;
+  generated_at: string | null;
+  items: AITopicSummaryItem[];
+}

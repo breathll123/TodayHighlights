@@ -1,5 +1,5 @@
 import axios from "axios";
-import type { Highlight, Topic, Source, CrawlJob, JobListResponse, ModelSettings, Block, PageBlocksResponse } from "./types";
+import type { AIModelConfig, AIModelConfigWrite, AIGenerationJob, AIJobListResponse, AITopicSummaryResponse, Block, CrawlJob, Highlight, JobListResponse, ModelSettings, PageBlocksResponse, Source, Topic } from "./types";
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE ?? "http://localhost:8000",
@@ -134,4 +134,38 @@ export function deleteTopic(id: number): Promise<{ deleted: boolean }> {
 
 export function publishPage(route: string): Promise<{ published: boolean; blocks: number }> {
   return api.post(`/api/admin/pages/${route}/publish`).then((r) => r.data);
+}
+
+// --- AI Model APIs ---
+
+export function fetchAIModels(): Promise<AIModelConfig[]> {
+  return api.get<AIModelConfig[]>("/api/admin/ai-models").then((r) => r.data);
+}
+
+export function createAIModel(data: AIModelConfigWrite): Promise<AIModelConfig> {
+  return api.post<AIModelConfig>("/api/admin/ai-models", data).then((r) => r.data);
+}
+
+export function updateAIModel(id: number, data: AIModelConfigWrite): Promise<AIModelConfig> {
+  return api.put<AIModelConfig>(`/api/admin/ai-models/${id}`, data).then((r) => r.data);
+}
+
+export function setDefaultAIModel(id: number): Promise<AIModelConfig> {
+  return api.post<AIModelConfig>(`/api/admin/ai-models/${id}/set-default`).then((r) => r.data);
+}
+
+// --- AI Job APIs ---
+
+export function fetchAIJobs(page = 1, pageSize = 20): Promise<AIJobListResponse> {
+  return api.get<AIJobListResponse>("/api/admin/ai-jobs", { params: { page, page_size: pageSize } }).then((r) => r.data);
+}
+
+export function retryAIJob(jobId: number): Promise<{ id: number; status: string; retry_count: number }> {
+  return api.post(`/api/admin/ai-jobs/${jobId}/retry`).then((r) => r.data);
+}
+
+// --- Public AI APIs ---
+
+export function fetchAITopicSummary(slug: string): Promise<AITopicSummaryResponse> {
+  return api.get<AITopicSummaryResponse>(`/api/public/topics/${slug}/ai-summary`).then((r) => r.data);
 }
