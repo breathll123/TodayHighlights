@@ -39,6 +39,7 @@ def list_sources(type: str | None = None, session: Session = Depends(get_session
             "name": source.name,
             "entry_url": source.entry_url,
             "enabled": source.enabled,
+            "enable_highlight": source.enable_highlight,
             "crawl_interval_minutes": source.crawl_interval_minutes,
             "last_crawled_at": source.last_crawled_at,
             "has_cookie": bool(source.cookie_encrypted),
@@ -91,6 +92,8 @@ def update_source(source_id: int, payload: SourceUpdate, session: Session = Depe
         source.enabled = payload.enabled
     if payload.crawl_interval_minutes is not None:
         source.crawl_interval_minutes = payload.crawl_interval_minutes
+    if payload.enable_highlight is not None:
+        source.enable_highlight = payload.enable_highlight
     session.commit()
     session.refresh(source)
     return {
@@ -100,6 +103,7 @@ def update_source(source_id: int, payload: SourceUpdate, session: Session = Depe
         "name": source.name,
         "entry_url": source.entry_url,
         "enabled": source.enabled,
+        "enable_highlight": source.enable_highlight,
         "crawl_interval_minutes": source.crawl_interval_minutes,
         "last_crawled_at": source.last_crawled_at,
         "has_cookie": bool(source.cookie_encrypted),

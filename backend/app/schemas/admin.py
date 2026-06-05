@@ -21,6 +21,7 @@ class SourceUpdate(BaseModel):
     entry_url: str | None = None
     cookie: str | None = None
     enabled: bool | None = None
+    enable_highlight: bool | None = None
     crawl_interval_minutes: int | None = None
 
 

@@ -51,11 +51,12 @@ export function createSource(data: {
   cookie: string;
   enabled: boolean;
   crawl_interval_minutes: number;
+  enable_highlight?: boolean;
 }): Promise<Source> {
   return api.post<Source>("/api/admin/sources", data).then((r) => r.data);
 }
 
-export function updateSource(sourceId: number, data: { name?: string; entry_url?: string; cookie?: string; enabled?: boolean; crawl_interval_minutes?: number }): Promise<Source> {
+export function updateSource(sourceId: number, data: { name?: string; entry_url?: string; cookie?: string; enabled?: boolean; crawl_interval_minutes?: number; enable_highlight?: boolean }): Promise<Source> {
   return api.put<Source>(`/api/admin/sources/${sourceId}`, data).then((r) => r.data);
 }
 

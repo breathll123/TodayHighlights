@@ -6,18 +6,28 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { Pencil } from "lucide-react";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 
-const defaultForm = { topic_id: 1, site: "xueqiu", name: "", entry_url: "", cookie: "", enabled: true, crawl_interval_minutes: 60 };
+const defaultForm = { topic_id: 1, site: "xueqiu", name: "", entry_url: "", cookie: "", enabled: true, crawl_interval_minutes: 60, enable_highlight: false };
+
+interface EditState {
+  id: number;
+  name: string;
+  entry_url: string;
+  enabled: boolean;
+  enable_highlight: boolean;
+  crawl_interval_minutes: number;
+}
 
 export function AdminSourcesPage() {
   const queryClient = useQueryClient();
   const { data: sources, isLoading } = useQuery({ queryKey: ["sources"], queryFn: fetchSources });
 
   const [form, setForm] = useState(defaultForm);
-  const [editSource, setEditSource] = useState<{ id: number; name: string; entry_url: string; enabled: boolean; crawl_interval_minutes: number } | null>(null);
+  const [editSource, setEditSource] = useState<EditState | null>(null);
   const [editCookie, setEditCookie] = useState("");
 
   const createMut = useMutation({
@@ -40,7 +50,7 @@ export function AdminSourcesPage() {
 
   if (isLoading) return <div className="text-center py-12 text-muted-foreground">加载中...</div>;
 
-  const openEdit = (s: { id: number; name: string; entry_url: string; enabled: boolean; crawl_interval_minutes: number }) => {
+  const openEdit = (s: EditState) => {
     setEditSource(s);
     setEditCookie("");
   };
@@ -57,7 +67,7 @@ export function AdminSourcesPage() {
         className="space-y-4 rounded-xl border border-border/75 bg-card/80 p-6 shadow-sm"
         onSubmit={(e) => {
           e.preventDefault();
-          createMut.mutate(form);
+          createMut.mutate({ ...form });
         }}
       >
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -80,6 +90,10 @@ export function AdminSourcesPage() {
             <Input type="number" value={form.crawl_interval_minutes} onChange={(e) => setForm({ ...form, crawl_interval_minutes: +e.target.value })} />
           </label>
         </div>
+        <div className="flex items-center gap-3">
+          <Switch checked={form.enable_highlight} onCheckedChange={(v) => setForm({ ...form, enable_highlight: v })} id="new-hl" />
+          <Label htmlFor="new-hl" className="text-sm cursor-pointer">启用 AI 内容加工 (enable_highlight)</Label>
+        </div>
         <Button type="submit" disabled={createMut.isPending}>
           {createMut.isPending ? "保存中..." : "添加数据源"}
         </Button>
@@ -98,6 +112,7 @@ export function AdminSourcesPage() {
                   <th className="px-4 py-3 text-left font-medium">站点</th>
                   <th className="px-4 py-3 text-left font-medium">Cookie</th>
                   <th className="px-4 py-3 text-left font-medium">状态</th>
+                  <th className="px-4 py-3 text-left font-medium">AI 加工</th>
                   <th className="px-4 py-3 text-left font-medium">间隔</th>
                   <th className="px-4 py-3 text-left font-medium">操作</th>
                 </tr>
@@ -109,9 +124,14 @@ export function AdminSourcesPage() {
                     <td className="px-4 py-3">{s.site}</td>
                     <td className="px-4 py-3">{s.has_cookie ? "已配置" : "未配置"}</td>
                     <td className="px-4 py-3">{s.enabled ? "启用" : "禁用"}</td>
+                    <td className="px-4 py-3">{s.enable_highlight ? "已开启" : "未开启"}</td>
                     <td className="px-4 py-3">{s.crawl_interval_minutes}分</td>
                     <td className="px-4 py-3 flex items-center gap-2">
-                      <Button size="sm" variant="outline" onClick={() => openEdit(s)}>
+                      <Button size="sm" variant="outline" onClick={() => openEdit({
+                        id: s.id, name: s.name, entry_url: s.entry_url,
+                        enabled: s.enabled, enable_highlight: s.enable_highlight,
+                        crawl_interval_minutes: s.crawl_interval_minutes,
+                      })}>
                         <Pencil className="w-3 h-3 mr-1" />编辑
                       </Button>
                       <Button size="sm" onClick={() => crawlMut.mutate(s.id)} disabled={crawlMut.isPending}>
@@ -158,6 +178,14 @@ export function AdminSourcesPage() {
                 />
               </div>
             </div>
+            <div className="flex items-center gap-3">
+              <Switch
+                checked={editSource?.enable_highlight ?? false}
+                onCheckedChange={(v) => setEditSource((s) => s ? { ...s, enable_highlight: v } : null)}
+                id="edit-hl"
+              />
+              <Label htmlFor="edit-hl" className="text-sm cursor-pointer">启用 AI 内容加工</Label>
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditSource(null)}>取消</Button>
@@ -168,6 +196,7 @@ export function AdminSourcesPage() {
                 if (editCookie) data.cookie = editCookie;
                 if (editSource.name) data.name = editSource.name;
                 data.crawl_interval_minutes = editSource.crawl_interval_minutes;
+                data.enable_highlight = editSource.enable_highlight;
                 updateMut.mutate({ id: editSource.id, data });
               }}
               disabled={updateMut.isPending}

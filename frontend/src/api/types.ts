@@ -24,6 +24,7 @@ export interface Source {
   name: string;
   entry_url: string;
   enabled: boolean;
+  enable_highlight: boolean;
   crawl_interval_minutes: number;
   last_crawled_at: string | null;
   has_cookie: boolean;
