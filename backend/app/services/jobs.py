@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from app.core.config import SH_TZ, settings
 from app.core.crypto import CryptoService
 from app.models.entities import CrawlJob, Highlight, Source
+from app.services.ai_enrichment import create_pending_enrichments, process_item_enrichment, select_item_candidates
 from app.services.content import save_raw_items
 from app.services.settings import get_plain_setting, get_secret_setting
 from app.services.summarizer import HighlightDraft, SummarizerClient
@@ -83,7 +84,14 @@ def run_crawl_job(session: Session, source_id: int, trigger_type: str) -> CrawlJ
         raw_items = save_raw_items(session, source.id, drafts)
 
         if source.enable_highlight:
-            _generate_highlights(session, source, raw_items)
+            candidates = select_item_candidates(session, source.topic_id, raw_items, limit=50)
+            if candidates:
+                enrichments = create_pending_enrichments(session, source.topic_id, candidates)
+                for enrichment in enrichments:
+                    try:
+                        process_item_enrichment(session, enrichment.id, trigger_type=trigger_type)
+                    except Exception:
+                        pass  # Individual enrichment failures don't block the crawl job
 
         job.status = "success"
         job.items_found = len(drafts)
