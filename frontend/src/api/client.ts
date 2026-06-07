@@ -1,5 +1,5 @@
 import axios from "axios";
-import type { AdminUser, AIModelConfig, AIModelConfigWrite, AIGenerationJob, AIJobListResponse, AIPromptTemplate, AIPromptTemplateWrite, AITokenUsageDetail, AITokenUsageListResponse, AITopicSummaryResponse, AIUsageStats, AuthResponse, AuthUser, Block, BlockAIAnalysis, CrawlJob, Highlight, JobListResponse, MarketIndex, ModelSettings, PageBlocksResponse, Source, Topic } from "./types";
+import type { AdminUser, AIJobsStats, AIModelConfig, AIModelConfigWrite, AIGenerationJob, AIJobListResponse, AIPromptTemplate, AIPromptTemplateWrite, AITokenUsageDetail, AITokenUsageListResponse, AITopicSummaryResponse, AIUsageStats, AuthResponse, AuthUser, Block, BlockAIAnalysis, CrawlJob, Highlight, JobListResponse, MarketIndex, ModelSettings, PageBlocksResponse, Source, Topic } from "./types";
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE ?? "http://localhost:8000",
@@ -171,8 +171,12 @@ export function setDefaultAIModel(id: number): Promise<AIModelConfig> {
 
 // --- AI Job APIs ---
 
-export function fetchAIJobs(page = 1, pageSize = 20): Promise<AIJobListResponse> {
-  return api.get<AIJobListResponse>("/api/admin/ai-jobs", { params: { page, page_size: pageSize } }).then((r) => r.data);
+export function fetchAIJobs(params: { page?: number; page_size?: number; status?: string; trigger_type?: string; date_from?: string; date_to?: string } = {}): Promise<AIJobListResponse> {
+  return api.get<AIJobListResponse>("/api/admin/ai-jobs", { params }).then((r) => r.data);
+}
+
+export function fetchAIJobsStats(): Promise<AIJobsStats> {
+  return api.get<AIJobsStats>("/api/admin/ai-jobs/stats").then((r) => r.data);
 }
 
 export function retryAIJob(jobId: number): Promise<{ id: number; status: string; retry_count: number }> {

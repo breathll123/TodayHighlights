@@ -177,10 +177,37 @@ def regenerate_stocks_ai_summary(session: Session = Depends(get_session)) -> dic
 
 
 @router.get("/ai-jobs")
-def list_ai_jobs(page: int = 1, page_size: int = 20, session: Session = Depends(get_session)) -> AIJobListResponse:
-    total = session.scalar(select(func.count()).select_from(AIGenerationJob))
+def list_ai_jobs(
+    page: int = 1,
+    page_size: int = 20,
+    status: str | None = None,
+    trigger_type: str | None = None,
+    date_from: str | None = None,
+    date_to: str | None = None,
+    session: Session = Depends(get_session),
+) -> AIJobListResponse:
+    from datetime import datetime
+    stmt = select(AIGenerationJob)
+    if status:
+        stmt = stmt.where(AIGenerationJob.status == status)
+    if trigger_type:
+        stmt = stmt.where(AIGenerationJob.trigger_type == trigger_type)
+    if date_from:
+        try:
+            df = datetime.strptime(date_from, "%Y-%m-%d")
+            stmt = stmt.where(AIGenerationJob.created_at >= df)
+        except ValueError:
+            pass
+    if date_to:
+        try:
+            dt = datetime.strptime(date_to + " 23:59:59", "%Y-%m-%d %H:%M:%S")
+            stmt = stmt.where(AIGenerationJob.created_at <= dt)
+        except ValueError:
+            pass
+
+    total = session.scalar(select(func.count()).select_from(stmt.subquery())) or 0
     jobs = session.scalars(
-        select(AIGenerationJob).order_by(AIGenerationJob.created_at.desc())
+        stmt.order_by(AIGenerationJob.created_at.desc())
         .limit(page_size).offset((page - 1) * page_size)
     ).all()
     return AIJobListResponse(
@@ -206,6 +233,35 @@ def list_ai_jobs(page: int = 1, page_size: int = 20, session: Session = Depends(
             for job in jobs
         ],
     )
+
+
+@router.get("/ai-jobs/stats")
+def get_ai_jobs_stats(session: Session = Depends(get_session)) -> dict:
+    from datetime import date, datetime
+    today = datetime.combine(date.today(), datetime.min.time())
+
+    def _count(*where_clauses) -> int:
+        stmt = select(func.count()).select_from(AIGenerationJob)
+        for clause in where_clauses:
+            stmt = stmt.where(clause)
+        return session.scalar(stmt) or 0
+
+    by_type_rows = session.execute(
+        select(AIGenerationJob.job_type, func.count().label("cnt")).group_by(AIGenerationJob.job_type)
+    ).all()
+    by_trigger_rows = session.execute(
+        select(AIGenerationJob.trigger_type, func.count().label("cnt")).group_by(AIGenerationJob.trigger_type)
+    ).all()
+
+    return {
+        "today_succeeded": _count(AIGenerationJob.status == "succeeded", AIGenerationJob.created_at >= today),
+        "today_failed": _count(AIGenerationJob.status == "failed", AIGenerationJob.created_at >= today),
+        "today_processing": _count(AIGenerationJob.status.in_(["pending", "processing"]), AIGenerationJob.created_at >= today),
+        "total_succeeded": _count(AIGenerationJob.status == "succeeded"),
+        "total_failed": _count(AIGenerationJob.status == "failed"),
+        "by_type": [{"job_type": r.job_type, "count": r.cnt} for r in by_type_rows],
+        "by_trigger": [{"trigger_type": r.trigger_type, "count": r.cnt} for r in by_trigger_rows],
+    }
 
 
 @router.post("/ai-jobs/{job_id}/retry")

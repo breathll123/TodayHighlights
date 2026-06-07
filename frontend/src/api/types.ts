@@ -128,6 +128,16 @@ export interface AIJobListResponse {
   items: AIGenerationJob[];
 }
 
+export interface AIJobsStats {
+  today_succeeded: number;
+  today_failed: number;
+  today_processing: number;
+  total_succeeded: number;
+  total_failed: number;
+  by_type: { job_type: string; count: number }[];
+  by_trigger: { trigger_type: string; count: number }[];
+}
+
 export interface AITopicSummaryItem {
   title: string;
   reason: string;
