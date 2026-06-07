@@ -30,8 +30,8 @@ export function SectionHeading({
 }) {
   return (
     <div className={cn("flex min-w-0 items-center justify-between gap-3", className)}>
-      <h2 className="flex min-w-0 items-center gap-2 text-sm font-semibold text-foreground/85">
-        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-primary/20 bg-primary/10 text-primary">
+      <h2 className="flex min-w-0 items-center gap-2.5 text-sm font-semibold text-foreground/90">
+        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-primary/30 bg-primary/10 text-primary">
           <Icon data-testid="section-heading-icon" className="h-3.5 w-3.5" aria-hidden="true" />
         </span>
         <span className="truncate">{title}</span>

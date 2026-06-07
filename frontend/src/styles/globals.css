@@ -70,20 +70,20 @@
 .page-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 16px;
+  gap: 20px;
   max-width: 100%;
 }
 
 .page-grid > * {
   min-width: 0;
-  overflow: hidden;
+  overflow: visible;
 }
 
 @media (max-width: 768px) {
   .page-grid {
     display: flex;
     flex-direction: column;
-    gap: 14px;
+    gap: 16px;
   }
   .page-grid > * {
     width: 100% !important;
