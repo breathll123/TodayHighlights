@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
-import { AreaChart, Area, XAxis, YAxis, ResponsiveContainer, Tooltip } from "recharts";
+import { AreaChart, Area, XAxis, YAxis, ResponsiveContainer, Tooltip, ReferenceLine } from "recharts";
 import { fetchMarketIndices } from "@/api/client";
 import type { MarketIndex } from "@/api/types";
 
@@ -24,10 +24,11 @@ function TrendChart({ idx }: { idx: MarketIndex }) {
   const isUp = idx.change_pct >= 0;
   const color = isUp ? CHART_UP : CHART_DN;
   const points = idx.trend.points;
+  const prevClose = idx.trend.prev_close;
 
   return (
     <ResponsiveContainer width="100%" height={208}>
-      <AreaChart data={points} margin={{ top: 4, right: 0, bottom: 0, left: 0 }}>
+      <AreaChart data={points} margin={{ top: 4, right: 44, bottom: 0, left: 0 }}>
         <defs>
           <linearGradient id="idx-grad" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor={color} stopOpacity={0.18} />
@@ -35,24 +36,26 @@ function TrendChart({ idx }: { idx: MarketIndex }) {
           </linearGradient>
         </defs>
         <XAxis dataKey="time" hide />
-        <YAxis domain={["auto", "auto"]} hide />
+        <YAxis
+          orientation="right"
+          domain={["auto", "auto"]}
+          tick={{ fontSize: 10, fill: "#A1AAB5" }}
+          tickLine={false}
+          axisLine={false}
+          width={44}
+          tickFormatter={(v: number) => v.toFixed(0)}
+        />
         <Tooltip
           contentStyle={{ background: "#131A21", border: "1px solid #242E3A", borderRadius: 8, fontSize: 12 }}
           labelFormatter={(t) => `时间: ${t}`}
           formatter={(v: unknown) => [Number(v).toFixed(2), "价格"]}
         />
+        {prevClose > 0 && (
+          <ReferenceLine y={prevClose} stroke="#A1AAB5" strokeDasharray="4 3" strokeWidth={0.8} />
+        )}
         <Area type="monotone" dataKey="price" stroke={color} strokeWidth={1.5} fill="url(#idx-grad)" dot={false} isAnimationActive={false} />
       </AreaChart>
     </ResponsiveContainer>
-  );
-}
-
-function SideStat({ label, value, color }: { label: string; value: string; color?: string }) {
-  return (
-    <div className="flex justify-between items-baseline gap-2">
-      <span className="text-[11px] text-muted-foreground/70 shrink-0">{label}</span>
-      <span className="text-xs font-medium tabular-nums text-foreground text-right" style={color ? { color } : undefined}>{value}</span>
-    </div>
   );
 }
 
@@ -74,12 +77,7 @@ export function MarketIndexBar() {
             <div key={i} className="h-7 w-20 bg-muted rounded-md" />
           ))}
         </div>
-        <div className="flex gap-4">
-          <div className="w-36 space-y-2">
-            {Array.from({ length: 6 }).map((_, i) => (<div key={i} className="h-4 bg-muted rounded" />))}
-          </div>
-          <div className="flex-1 h-52 bg-muted/30 rounded-lg" />
-        </div>
+        <div className="h-52 bg-muted/30 rounded-lg" />
       </div>
     );
   }
@@ -114,10 +112,10 @@ export function MarketIndexBar() {
         )}
       </div>
 
-      {/* Body: sidebar stats + chart */}
+      {/* Body */}
       <div className="p-5">
         {/* Price header */}
-        <div className="flex items-baseline gap-3 mb-4">
+        <div className="flex items-baseline gap-3 mb-3">
           <span className="text-2xl font-bold tabular-nums text-foreground">{fmt(idx.current)}</span>
           <span className="text-sm font-semibold tabular-nums" style={{ color: accent }}>
             {isUp ? "+" : ""}{idx.change_pct.toFixed(2)}%
@@ -125,36 +123,26 @@ export function MarketIndexBar() {
           <span className="text-sm tabular-nums text-muted-foreground">
             {idx.change_amount >= 0 ? "+" : ""}{fmt(idx.change_amount)}
           </span>
+        </div>
+
+        {/* OHLC + Turnover row */}
+        <div className="flex flex-wrap gap-x-5 gap-y-1 mb-4 text-xs text-muted-foreground">
+          {idx.trend && (
+            <>
+              <span>今开 <span className="text-foreground tabular-nums font-medium">{fmt(idx.trend.points?.[0]?.price ?? 0)}</span></span>
+              <span>最高 <span className="tabular-nums font-medium" style={{ color: CHART_UP }}>{fmt(idx.trend.high)}</span></span>
+              <span>最低 <span className="tabular-nums font-medium" style={{ color: CHART_DN }}>{fmt(idx.trend.low)}</span></span>
+              <span>昨收 <span className="text-foreground tabular-nums font-medium">{fmt(idx.trend.prev_close)}</span></span>
+            </>
+          )}
+          <span>成交额 <span className="text-foreground tabular-nums font-medium">{fmtTurnover(idx.turnover)}</span></span>
           <div className="flex-1" />
-          <a
-            href={idx.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-xs text-muted-foreground hover:text-primary transition-colors shrink-0"
-          >
+          <a href={idx.url} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-primary transition-colors">
             详情 →
           </a>
         </div>
 
-        <div className="flex flex-col sm:flex-row gap-4">
-          {/* Sidebar */}
-          <div className="sm:w-36 shrink-0 space-y-2 py-1">
-            {idx.trend && (
-              <>
-                <SideStat label="今开" value={fmt(idx.trend.points?.[0]?.price ?? 0)} />
-                <SideStat label="最高" value={fmt(idx.trend.high)} color={CHART_UP} />
-                <SideStat label="最低" value={fmt(idx.trend.low)} color={CHART_DN} />
-                <SideStat label="昨收" value={fmt(idx.trend.prev_close)} />
-              </>
-            )}
-            <SideStat label="成交额" value={fmtTurnover(idx.turnover)} />
-          </div>
-
-          {/* Chart */}
-          <div className="flex-1 min-w-0">
-            <TrendChart idx={idx} />
-          </div>
-        </div>
+        <TrendChart idx={idx} />
       </div>
     </div>
   );
