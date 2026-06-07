@@ -216,3 +216,26 @@ export interface AuthResponse {
   token: string;
   user: AuthUser;
 }
+
+export interface AIPromptTemplate {
+  id: number;
+  topic_slug: string;
+  content_class: "news" | "rank" | "event";
+  topic_context: string;
+  extra_forbidden: string;
+  enabled: boolean;
+  template_version: number;
+  updated_by_user_id: number | null;
+  notes: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AIPromptTemplateWrite {
+  topic_slug: string;
+  content_class: "news" | "rank" | "event";
+  topic_context: string;
+  extra_forbidden: string;
+  enabled: boolean;
+  notes: string;
+}

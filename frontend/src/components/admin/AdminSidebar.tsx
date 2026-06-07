@@ -1,5 +1,5 @@
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { BrainCircuit, Clock, FileText, Gauge, LayoutDashboard, LogOut, Newspaper, RadioTower, Settings, Tag, Users } from "lucide-react";
+import { BrainCircuit, Clock, FileText, Gauge, LayoutDashboard, LogOut, Newspaper, RadioTower, ScrollText, Settings, Tag, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
 
@@ -10,6 +10,7 @@ const links = [
   { href: "/admin/ai-jobs", label: "AI 任务", icon: BrainCircuit },
   { href: "/admin/users", label: "用户", icon: Users },
   { href: "/admin/ai-usage", label: "AI 用量", icon: Gauge },
+  { href: "/admin/ai-prompts", label: "Prompt 模板", icon: ScrollText },
   { href: "/admin/highlights", label: "看点", icon: Newspaper },
   { href: "/admin/layout", label: "布局", icon: LayoutDashboard },
   { href: "/admin/settings", label: "设置", icon: Settings },

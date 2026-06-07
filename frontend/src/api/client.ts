@@ -1,5 +1,5 @@
 import axios from "axios";
-import type { AdminUser, AIModelConfig, AIModelConfigWrite, AIGenerationJob, AIJobListResponse, AITokenUsageListResponse, AITopicSummaryResponse, AuthResponse, AuthUser, Block, BlockAIAnalysis, CrawlJob, Highlight, JobListResponse, ModelSettings, PageBlocksResponse, Source, Topic } from "./types";
+import type { AdminUser, AIModelConfig, AIModelConfigWrite, AIGenerationJob, AIJobListResponse, AIPromptTemplate, AIPromptTemplateWrite, AITokenUsageListResponse, AITopicSummaryResponse, AuthResponse, AuthUser, Block, BlockAIAnalysis, CrawlJob, Highlight, JobListResponse, ModelSettings, PageBlocksResponse, Source, Topic } from "./types";
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE ?? "http://localhost:8000",
@@ -203,4 +203,22 @@ export function updateAdminUserStatus(id: number, status: "active" | "disabled")
 
 export function fetchAITokenUsages(page = 1, pageSize = 20): Promise<AITokenUsageListResponse> {
   return api.get<AITokenUsageListResponse>("/api/admin/ai/token-usages", { params: { page, page_size: pageSize } }).then((r) => r.data);
+}
+
+// --- Admin Prompt Templates ---
+
+export function fetchAIPromptTemplates(): Promise<AIPromptTemplate[]> {
+  return api.get<AIPromptTemplate[]>("/api/admin/ai-prompt-templates").then((r) => r.data);
+}
+
+export function createAIPromptTemplate(data: AIPromptTemplateWrite): Promise<AIPromptTemplate> {
+  return api.post<AIPromptTemplate>("/api/admin/ai-prompt-templates", data).then((r) => r.data);
+}
+
+export function updateAIPromptTemplate(id: number, data: AIPromptTemplateWrite): Promise<AIPromptTemplate> {
+  return api.put<AIPromptTemplate>(`/api/admin/ai-prompt-templates/${id}`, data).then((r) => r.data);
+}
+
+export function deleteAIPromptTemplate(id: number): Promise<{ deleted: boolean }> {
+  return api.delete(`/api/admin/ai-prompt-templates/${id}`).then((r) => r.data);
 }

@@ -52,6 +52,11 @@ vi.mock("../api/client", () => ({
   updateBlock: vi.fn(),
   deleteBlock: vi.fn(),
   reorderBlocks: vi.fn(),
+  generateBlockAIAnalysis: vi.fn(),
+  fetchAIPromptTemplates: vi.fn().mockResolvedValue([]),
+  createAIPromptTemplate: vi.fn(),
+  updateAIPromptTemplate: vi.fn(),
+  deleteAIPromptTemplate: vi.fn(),
 }));
 
 import { SummaryPage } from "../pages/SummaryPage";
