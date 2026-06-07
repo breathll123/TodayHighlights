@@ -1,5 +1,5 @@
 import axios from "axios";
-import type { AdminUser, AIModelConfig, AIModelConfigWrite, AIGenerationJob, AIJobListResponse, AIPromptTemplate, AIPromptTemplateWrite, AITokenUsageListResponse, AITopicSummaryResponse, AuthResponse, AuthUser, Block, BlockAIAnalysis, CrawlJob, Highlight, JobListResponse, ModelSettings, PageBlocksResponse, Source, Topic } from "./types";
+import type { AdminUser, AIModelConfig, AIModelConfigWrite, AIGenerationJob, AIJobListResponse, AIPromptTemplate, AIPromptTemplateWrite, AITokenUsageDetail, AITokenUsageListResponse, AITopicSummaryResponse, AIUsageStats, AuthResponse, AuthUser, Block, BlockAIAnalysis, CrawlJob, Highlight, JobListResponse, ModelSettings, PageBlocksResponse, Source, Topic } from "./types";
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE ?? "http://localhost:8000",
@@ -203,6 +203,14 @@ export function updateAdminUserStatus(id: number, status: "active" | "disabled")
 
 export function fetchAITokenUsages(page = 1, pageSize = 20): Promise<AITokenUsageListResponse> {
   return api.get<AITokenUsageListResponse>("/api/admin/ai/token-usages", { params: { page, page_size: pageSize } }).then((r) => r.data);
+}
+
+export function fetchAITokenUsageDetail(id: number): Promise<AITokenUsageDetail> {
+  return api.get<AITokenUsageDetail>(`/api/admin/ai/token-usages/${id}`).then((r) => r.data);
+}
+
+export function fetchAIUsageStats(): Promise<AIUsageStats> {
+  return api.get<AIUsageStats>("/api/admin/ai/token-usages/stats").then((r) => r.data);
 }
 
 // --- Admin Prompt Templates ---

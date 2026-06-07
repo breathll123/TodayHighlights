@@ -184,6 +184,14 @@ export interface AITokenUsage {
   estimated: boolean;
   request_status: string;
   created_at: string;
+  block_title: string;
+  topic: string;
+  finished_at: string | null;
+}
+
+export interface AITokenUsageDetail extends AITokenUsage {
+  prompt_text: string;
+  completion_text: string;
 }
 
 export interface AITokenUsageListResponse {
@@ -191,6 +199,15 @@ export interface AITokenUsageListResponse {
   page: number;
   page_size: number;
   items: AITokenUsage[];
+}
+
+export interface AIUsageStats {
+  today_tokens: number;
+  today_calls: number;
+  active_models: number;
+  daily_trend: { date: string; total_tokens: number; calls: number }[];
+  by_model: { model_name: string; total_tokens: number; calls: number }[];
+  by_topic: { topic_slug: string; total_tokens: number; calls: number }[];
 }
 
 export interface AIItemEnhancement {
