@@ -43,16 +43,19 @@ function StatCard({ label, value, color }: { label: string; value: number; color
 export function AdminAIJobsPage() {
   const queryClient = useQueryClient();
   const [page, setPage] = useState(1);
-  const [statusFilter, setStatusFilter] = useState<string>("");
-  const [triggerFilter, setTriggerFilter] = useState<string>("");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [triggerFilter, setTriggerFilter] = useState<string>("all");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
 
+  const statusParam = statusFilter === "all" ? undefined : statusFilter;
+  const triggerParam = triggerFilter === "all" ? undefined : triggerFilter;
+
   const { data: stats } = useQuery({ queryKey: ["ai-jobs-stats"], queryFn: fetchAIJobsStats });
   const { data, isLoading } = useQuery({
     queryKey: ["ai-jobs", page, statusFilter, triggerFilter, dateFrom, dateTo],
-    queryFn: () => fetchAIJobs({ page, page_size: 20, status: statusFilter || undefined, trigger_type: triggerFilter || undefined, date_from: dateFrom || undefined, date_to: dateTo || undefined }),
+    queryFn: () => fetchAIJobs({ page, page_size: 20, status: statusParam, trigger_type: triggerParam, date_from: dateFrom || undefined, date_to: dateTo || undefined }),
   });
 
   const retryMut = useMutation({
@@ -107,7 +110,7 @@ export function AdminAIJobsPage() {
             <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setPage(1); }}>
               <SelectTrigger className="h-8 w-[100px] text-xs"><SelectValue placeholder="全部" /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="" className="text-xs">全部</SelectItem>
+                <SelectItem value="all" className="text-xs">全部</SelectItem>
                 <SelectItem value="succeeded" className="text-xs">成功</SelectItem>
                 <SelectItem value="failed" className="text-xs">失败</SelectItem>
                 <SelectItem value="processing" className="text-xs">处理中</SelectItem>
@@ -119,7 +122,7 @@ export function AdminAIJobsPage() {
             <Select value={triggerFilter} onValueChange={(v) => { setTriggerFilter(v); setPage(1); }}>
               <SelectTrigger className="h-8 w-[110px] text-xs"><SelectValue placeholder="全部" /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="" className="text-xs">全部</SelectItem>
+                <SelectItem value="all" className="text-xs">全部</SelectItem>
                 <SelectItem value="crawl" className="text-xs">定时爬取</SelectItem>
                 <SelectItem value="manual" className="text-xs">手动触发</SelectItem>
                 <SelectItem value="retry" className="text-xs">重试</SelectItem>
