@@ -227,6 +227,8 @@ def analyze_block(
             request_status="success",
             related_job_id=job.id,
             related_block_analysis_id=analysis.id,
+            prompt_text=f"{system_prompt}\n\n---\n\n{prompt}",
+            completion_text=result.content_text,
         )
         session.add(usage)
         session.flush()

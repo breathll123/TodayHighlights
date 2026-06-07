@@ -188,6 +188,8 @@ class AITokenUsage(Base):
     request_status: Mapped[str] = mapped_column(String(30), default="success", nullable=False)
     related_job_id: Mapped[int | None] = mapped_column(ForeignKey("ai_generation_jobs.id"))
     related_block_analysis_id: Mapped[int | None] = mapped_column(ForeignKey("ai_block_analyses.id"))
+    prompt_text: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    completion_text: Mapped[str] = mapped_column(Text, default="", nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
 
 

@@ -12,6 +12,7 @@ PostJson = Callable[[dict], Awaitable[dict]]
 @dataclass(frozen=True)
 class AIJSONResult:
     content: dict
+    content_text: str
     usage: dict
     usage_estimated: bool
 
@@ -41,6 +42,7 @@ class AIClient:
         usage = extract_token_usage(response, f"{system_prompt}\n{user_prompt}", content_text)
         return AIJSONResult(
             content=json.loads(content_text),
+            content_text=content_text,
             usage={
                 "prompt_tokens": usage["prompt_tokens"],
                 "completion_tokens": usage["completion_tokens"],

@@ -253,31 +253,179 @@ def update_user_status(user_id: int, payload: dict, session: Session = Depends(g
     return {"id": user.id, "status": user.status}
 
 
+_TOPIC_LABELS: dict[str, str] = {
+    "stocks": "股票", "football": "足球", "ai": "AI", "summary": "首页",
+}
+
+
+def _resolve_topic(page_route: str | None) -> str:
+    if not page_route:
+        return "—"
+    for part in page_route.strip("/").split("/"):
+        if part in _TOPIC_LABELS:
+            return _TOPIC_LABELS[part]
+    return page_route
+
+
 @router.get("/ai/token-usages")
 def list_token_usages(page: int = 1, page_size: int = 20, session: Session = Depends(get_session)) -> dict:
     total = session.scalar(select(func.count()).select_from(AITokenUsage)) or 0
     usages = session.scalars(
         select(AITokenUsage).order_by(AITokenUsage.created_at.desc()).offset((page - 1) * page_size).limit(page_size)
     ).all()
+
+    # Batch-resolve context: block analysis + job
+    analysis_ids = [u.related_block_analysis_id for u in usages if u.related_block_analysis_id]
+    job_ids = [u.related_job_id for u in usages if u.related_job_id]
+    analysis_map = {}
+    job_map = {}
+    if analysis_ids:
+        analyses = session.scalars(select(AIBlockAnalysis).where(AIBlockAnalysis.id.in_(analysis_ids))).all()
+        analysis_map = {a.id: a for a in analyses}
+    if job_ids:
+        jobs = session.scalars(select(AIGenerationJob).where(AIGenerationJob.id.in_(job_ids))).all()
+        job_map = {j.id: j for j in jobs}
+
+    def _build_item(u: AITokenUsage) -> dict:
+        analysis = analysis_map.get(u.related_block_analysis_id) if u.related_block_analysis_id else None
+        job = job_map.get(u.related_job_id) if u.related_job_id else None
+
+        block_title = analysis.block_title if analysis else ""
+        topic = _resolve_topic(analysis.page_route if analysis else None)
+
+        return {
+            "id": u.id,
+            "user_id": u.user_id,
+            "model_name": u.model_name,
+            "usage_type": u.usage_type,
+            "prompt_tokens": u.prompt_tokens,
+            "completion_tokens": u.completion_tokens,
+            "total_tokens": u.total_tokens,
+            "estimated": u.estimated,
+            "request_status": u.request_status,
+            "created_at": u.created_at.isoformat() if u.created_at else None,
+            "block_title": block_title,
+            "topic": topic,
+            "finished_at": job.finished_at.isoformat() if (job and job.finished_at) else None,
+        }
+
     return {
         "total": total,
         "page": page,
         "page_size": page_size,
-        "items": [
-            {
-                "id": usage.id,
-                "user_id": usage.user_id,
-                "model_name": usage.model_name,
-                "usage_type": usage.usage_type,
-                "prompt_tokens": usage.prompt_tokens,
-                "completion_tokens": usage.completion_tokens,
-                "total_tokens": usage.total_tokens,
-                "estimated": usage.estimated,
-                "request_status": usage.request_status,
-                "created_at": usage.created_at,
-            }
-            for usage in usages
-        ],
+        "items": [_build_item(u) for u in usages],
+    }
+
+
+@router.get("/ai/token-usages/{usage_id}")
+def get_token_usage_detail(usage_id: int, session: Session = Depends(get_session)) -> dict:
+    usage = session.get(AITokenUsage, usage_id)
+    if usage is None:
+        raise HTTPException(status_code=404, detail="Token usage not found")
+
+    analysis = session.get(AIBlockAnalysis, usage.related_block_analysis_id) if usage.related_block_analysis_id else None
+
+    return {
+        "id": usage.id,
+        "user_id": usage.user_id,
+        "model_name": usage.model_name,
+        "usage_type": usage.usage_type,
+        "prompt_tokens": usage.prompt_tokens,
+        "completion_tokens": usage.completion_tokens,
+        "total_tokens": usage.total_tokens,
+        "estimated": usage.estimated,
+        "request_status": usage.request_status,
+        "created_at": usage.created_at.isoformat() if usage.created_at else None,
+        "block_title": analysis.block_title if analysis else "",
+        "topic": _resolve_topic(analysis.page_route if analysis else None),
+        "prompt_text": usage.prompt_text,
+        "completion_text": usage.completion_text,
+    }
+
+
+@router.get("/ai/token-usages/stats")
+def get_token_usage_stats(session: Session = Depends(get_session)) -> dict:
+    from datetime import date, timedelta
+    from sqlalchemy import func as sa_func, cast, Date
+
+    today = date.today()
+    today_start = datetime.combine(today, datetime.min.time())
+    days_ago_14 = today - timedelta(days=13)
+
+    # Today totals
+    today_tokens = session.scalar(
+        select(sa_func.coalesce(sa_func.sum(AITokenUsage.total_tokens), 0))
+        .where(AITokenUsage.created_at >= today_start)
+    ) or 0
+
+    today_calls = session.scalar(
+        select(sa_func.count()).select_from(AITokenUsage)
+        .where(AITokenUsage.created_at >= today_start)
+    ) or 0
+
+    # Daily trend (last 14 days)
+    daily_rows = session.execute(
+        select(
+            cast(AITokenUsage.created_at, Date).label("day"),
+            sa_func.sum(AITokenUsage.total_tokens).label("total_tokens"),
+            sa_func.count().label("calls"),
+        )
+        .where(AITokenUsage.created_at >= datetime.combine(days_ago_14, datetime.min.time()))
+        .group_by("day")
+        .order_by("day")
+    ).all()
+
+    daily_trend = [
+        {"date": str(row.day), "total_tokens": row.total_tokens, "calls": row.calls}
+        for row in daily_rows
+    ]
+
+    # By model
+    model_rows = session.execute(
+        select(
+            AITokenUsage.model_name,
+            sa_func.sum(AITokenUsage.total_tokens).label("total_tokens"),
+            sa_func.count().label("calls"),
+        )
+        .group_by(AITokenUsage.model_name)
+        .order_by(sa_func.sum(AITokenUsage.total_tokens).desc())
+    ).all()
+
+    by_model = [
+        {"model_name": row.model_name, "total_tokens": row.total_tokens, "calls": row.calls}
+        for row in model_rows
+    ]
+
+    # By topic (via AIBlockAnalysis join)
+    topic_rows = session.execute(
+        select(
+            AIBlockAnalysis.page_route,
+            sa_func.sum(AITokenUsage.total_tokens).label("total_tokens"),
+            sa_func.count().label("calls"),
+        )
+        .join(AIBlockAnalysis, AITokenUsage.related_block_analysis_id == AIBlockAnalysis.id)
+        .group_by(AIBlockAnalysis.page_route)
+        .order_by(sa_func.sum(AITokenUsage.total_tokens).desc())
+    ).all()
+
+    by_topic = [
+        {"topic_slug": _resolve_topic(row.page_route), "total_tokens": row.total_tokens, "calls": row.calls}
+        for row in topic_rows
+    ]
+
+    # Active models count
+    active_models = session.scalar(
+        select(sa_func.count(sa_func.distinct(AITokenUsage.model_name)))
+        .where(AITokenUsage.created_at >= today_start)
+    ) or 0
+
+    return {
+        "today_tokens": today_tokens,
+        "today_calls": today_calls,
+        "active_models": active_models,
+        "daily_trend": daily_trend,
+        "by_model": by_model,
+        "by_topic": by_topic,
     }
 
 
