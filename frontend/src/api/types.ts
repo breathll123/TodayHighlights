@@ -214,6 +214,7 @@ export interface MarketIndexTrend {
   prev_close: number;
   high: number;
   low: number;
+  date: string;
   points: { time: string; price: number }[];
 }
 

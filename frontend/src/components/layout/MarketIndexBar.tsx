@@ -79,20 +79,25 @@ export function MarketIndexBar() {
   return (
     <div className="mb-6 rounded-xl border border-border/70 bg-card/80">
       {/* Tab bar */}
-      <div className="flex items-center gap-1 border-b border-border/50 px-4 pt-3 pb-0 overflow-x-auto scrollbar-none">
-        {indices.map((i) => (
-          <button
-            key={i.code}
-            onClick={() => setActive(i.code)}
-            className={`shrink-0 px-3 py-1.5 text-xs font-medium rounded-t-md transition-colors border-b-2 -mb-[1px] ${
-              active === i.code
-                ? "border-primary text-primary bg-primary/5"
-                : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/30"
-            }`}
-          >
-            {i.name}
-          </button>
-        ))}
+      <div className="flex items-center border-b border-border/50 px-4 pt-3 pb-0 overflow-x-auto scrollbar-none">
+        <div className="flex items-center gap-1 flex-1 min-w-0">
+          {indices.map((i) => (
+            <button
+              key={i.code}
+              onClick={() => setActive(i.code)}
+              className={`shrink-0 px-3 py-1.5 text-xs font-medium rounded-t-md transition-colors border-b-2 -mb-[1px] ${
+                active === i.code
+                  ? "border-primary text-primary bg-primary/5"
+                  : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/30"
+              }`}
+            >
+              {i.name}
+            </button>
+          ))}
+        </div>
+        {idx.trend?.date && (
+          <span className="shrink-0 text-[11px] text-muted-foreground/60 tabular-nums ml-3 pb-1.5">{idx.trend.date}</span>
+        )}
       </div>
 
       {/* Data panel */}

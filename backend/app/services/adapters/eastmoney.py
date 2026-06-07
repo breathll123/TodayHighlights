@@ -240,16 +240,21 @@ def _fetch_one_trend(snapshot: dict) -> dict | None:
         trends = raw.get("trends", [])
         if not trends:
             return None
+        trend_date = ""
         points = []
         for row in trends:
             parts = row.split(",")
             if len(parts) >= 3:
+                full_time = parts[0]
+                if " " in full_time and not trend_date:
+                    trend_date = full_time.split(" ")[0]
                 points.append({
-                    "time": parts[0].split(" ")[-1][:5] if " " in parts[0] else parts[0],
+                    "time": full_time.split(" ")[-1][:5] if " " in full_time else full_time,
                     "price": float(parts[2]),
                 })
         return {
             "prev_close": raw.get("preClose", 0),
+            "date": trend_date,
             "points": points,
             "high": max(p["price"] for p in points) if points else 0,
             "low": min(p["price"] for p in points) if points else 0,
