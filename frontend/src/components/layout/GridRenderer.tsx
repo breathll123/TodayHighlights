@@ -200,6 +200,7 @@ export function GridRenderer({ blocks, isLoading, dataUpdatedAt }: { blocks: any
             <SectionHeading
               icon={sectionIcon(st)}
               title={block.title}
+              dataUpdatedAt={dataUpdatedAt}
               action={
                 <Button
                   variant="ghost"
