@@ -88,3 +88,59 @@ def test_build_block_system_prompt_without_template_uses_default_framework():
     assert "当前分析领域：football" in prompt
     assert "提取关键事实、时间、状态和结果" in prompt
     assert "【领域背景】" not in prompt
+
+
+from app.services.auth_service import create_token
+from app.models.entities import User
+
+
+def _admin_headers(session):
+    admin = User(username="template-admin", email=None, password_hash="hash", role="admin", status="active")
+    session.add(admin)
+    session.commit()
+    return {"Authorization": f"Bearer {create_token(admin)}"}
+
+
+def test_admin_prompt_template_crud(client):
+    session = next(client.app.dependency_overrides[get_session]())
+    headers = _admin_headers(session)
+
+    created = client.post(
+        "/api/admin/ai-prompt-templates",
+        json={
+            "topic_slug": "crypto",
+            "content_class": "rank",
+            "topic_context": "关注 BTC 主导率",
+            "extra_forbidden": "不得承诺收益",
+            "enabled": True,
+            "notes": "crypto rank",
+        },
+        headers=headers,
+    )
+    assert created.status_code == 200
+    template_id = created.json()["id"]
+    assert created.json()["template_version"] == 1
+
+    listed = client.get("/api/admin/ai-prompt-templates", headers=headers)
+    assert listed.status_code == 200
+    assert any(item["topic_slug"] == "crypto" for item in listed.json())
+
+    updated = client.put(
+        f"/api/admin/ai-prompt-templates/{template_id}",
+        json={
+            "topic_slug": "crypto",
+            "content_class": "rank",
+            "topic_context": "关注 BTC 主导率和链上数据",
+            "extra_forbidden": "不得承诺收益",
+            "enabled": False,
+            "notes": "updated",
+        },
+        headers=headers,
+    )
+    assert updated.status_code == 200
+    assert updated.json()["enabled"] is False
+    assert updated.json()["template_version"] == 2
+
+    deleted = client.delete(f"/api/admin/ai-prompt-templates/{template_id}", headers=headers)
+    assert deleted.status_code == 200
+    assert deleted.json() == {"deleted": True}

@@ -10,8 +10,9 @@ from app.core.auth import create_admin_token, get_current_user, verify_admin
 from app.core.config import settings
 from app.core.crypto import CryptoService
 from app.core.database import get_session
-from app.models.entities import AIGenerationJob, AIBlockAnalysis, AITokenUsage, CrawlJob, Highlight, PageBlock, Source, Topic, User
+from app.models.entities import AIGenerationJob, AIBlockAnalysis, AIPromptTemplate, AITokenUsage, CrawlJob, Highlight, PageBlock, Source, Topic, User
 from app.schemas.admin import AIJobListResponse, AIJobRead, AIModelConfigWrite, BlockCreate, BlockRead, BlockUpdate, HighlightUpdate, ReorderRequest, SourceCreate, SourceRead, SourceUpdate
+from app.schemas.ai_prompt_template import AIPromptTemplateRead, AIPromptTemplateWrite
 from app.schemas.auth import UserRead
 from app.services.ai_block_analysis import analyze_block
 from app.services.ai_enrichment import generate_topic_summary, retry_item_enrichment
@@ -294,6 +295,84 @@ def regenerate_block_analysis(analysis_id: int, session: Session = Depends(get_s
     )
     session.commit()
     return {"id": analysis.id, "status": analysis.status}
+
+
+def _serialize_prompt_template(template: AIPromptTemplate) -> AIPromptTemplateRead:
+    return AIPromptTemplateRead(
+        id=template.id,
+        topic_slug=template.topic_slug,
+        content_class=template.content_class,
+        topic_context=template.topic_context,
+        extra_forbidden=template.extra_forbidden,
+        enabled=template.enabled,
+        template_version=template.template_version,
+        updated_by_user_id=template.updated_by_user_id,
+        notes=template.notes,
+        created_at=template.created_at,
+        updated_at=template.updated_at,
+    )
+
+
+@router.get("/ai-prompt-templates", response_model=list[AIPromptTemplateRead])
+def list_prompt_templates(session: Session = Depends(get_session)) -> list[AIPromptTemplateRead]:
+    templates = session.scalars(
+        select(AIPromptTemplate).order_by(AIPromptTemplate.topic_slug, AIPromptTemplate.content_class)
+    ).all()
+    return [_serialize_prompt_template(template) for template in templates]
+
+
+@router.post("/ai-prompt-templates", response_model=AIPromptTemplateRead)
+def create_prompt_template(
+    payload: AIPromptTemplateWrite,
+    session: Session = Depends(get_session),
+    user: User = Depends(get_current_user),
+) -> AIPromptTemplateRead:
+    template = AIPromptTemplate(
+        topic_slug=payload.topic_slug.strip(),
+        content_class=payload.content_class,
+        topic_context=payload.topic_context.strip(),
+        extra_forbidden=payload.extra_forbidden.strip(),
+        enabled=payload.enabled,
+        updated_by_user_id=user.id,
+        notes=payload.notes.strip(),
+    )
+    session.add(template)
+    session.commit()
+    session.refresh(template)
+    return _serialize_prompt_template(template)
+
+
+@router.put("/ai-prompt-templates/{template_id}", response_model=AIPromptTemplateRead)
+def update_prompt_template(
+    template_id: int,
+    payload: AIPromptTemplateWrite,
+    session: Session = Depends(get_session),
+    user: User = Depends(get_current_user),
+) -> AIPromptTemplateRead:
+    template = session.get(AIPromptTemplate, template_id)
+    if template is None:
+        raise HTTPException(status_code=404, detail="Prompt template not found")
+    template.topic_slug = payload.topic_slug.strip()
+    template.content_class = payload.content_class
+    template.topic_context = payload.topic_context.strip()
+    template.extra_forbidden = payload.extra_forbidden.strip()
+    template.enabled = payload.enabled
+    template.notes = payload.notes.strip()
+    template.updated_by_user_id = user.id
+    template.template_version += 1
+    session.commit()
+    session.refresh(template)
+    return _serialize_prompt_template(template)
+
+
+@router.delete("/ai-prompt-templates/{template_id}")
+def delete_prompt_template(template_id: int, session: Session = Depends(get_session)) -> dict:
+    template = session.get(AIPromptTemplate, template_id)
+    if template is None:
+        raise HTTPException(status_code=404, detail="Prompt template not found")
+    session.delete(template)
+    session.commit()
+    return {"deleted": True}
 
 
 @router.get("/ai-models")
