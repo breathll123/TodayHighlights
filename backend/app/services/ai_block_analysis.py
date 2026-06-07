@@ -11,6 +11,12 @@ from app.core.config import settings
 from app.core.crypto import CryptoService
 from app.models.entities import AIGenerationJob, AIBlockAnalysis, AITokenUsage, PageBlock, User
 from app.schemas.ai_block_analysis import BlockAnalysisValidated
+from app.services.ai_block_prompts import (
+    build_block_system_prompt,
+    get_content_class,
+    get_enabled_prompt_template,
+    infer_topic_slug,
+)
 from app.services.ai_client import AIClient, PostJson
 from app.services.ai_models import get_default_ai_model
 from app.services.blocks import resolve_block_data
@@ -18,12 +24,6 @@ from app.services.blocks import resolve_block_data
 BLOCK_ANALYSIS_TTL_MINUTES = 60
 MAX_ANALYSIS_ITEMS = 10
 MAX_ITEM_SUMMARY_CHARS = 200
-
-BLOCK_ANALYSIS_SYSTEM_PROMPT = (
-    "你是 DataFlow 的区块级信息分析助手。只基于用户提供的方块内容分析，不能补充外部事实。"
-    "输出 JSON：summary_points, key_changes, risk_points, related_entities, confidence。"
-    "summary_points 根据复杂度输出 1-4 条。股票类不得给买入、卖出、持有建议。"
-)
 
 
 def _trim_list(values: object, max_items: int, max_chars: int) -> list[str]:
@@ -195,8 +195,12 @@ def analyze_block(
     try:
         crypto = CryptoService(settings.app_secret_key)
         client = AIClient(model_cfg.base_url, crypto.decrypt(model_cfg.api_key_encrypted), model_cfg.model, post_json=post_json)
+        topic_slug = infer_topic_slug(page_route)
+        content_class = get_content_class(block.source_type)
+        template = get_enabled_prompt_template(session, topic_slug, content_class)
+        system_prompt = build_block_system_prompt(topic_slug, content_class, template)
         prompt = block_user_prompt(block, data)
-        result = asyncio.run(client.complete_json_with_usage(BLOCK_ANALYSIS_SYSTEM_PROMPT, prompt))
+        result = asyncio.run(client.complete_json_with_usage(system_prompt, prompt))
         validated = validate_block_analysis_payload(result.content)
 
         analysis.summary_points_json = validated.summary_points

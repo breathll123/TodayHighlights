@@ -6,7 +6,7 @@ from sqlalchemy import inspect
 from app.core.config import settings
 from app.core.crypto import CryptoService
 from app.core.database import get_session
-from app.models.entities import AIBlockAnalysis, AIModelConfig, PageBlock, Topic, User
+from app.models.entities import AIBlockAnalysis, AIModelConfig, AIPromptTemplate, PageBlock, Topic, User
 from app.services.ai_block_analysis import analyze_block, build_block_data_hash, validate_block_analysis_payload
 from app.services.ai_client import AIClient
 from app.services.token_usage import estimate_tokens, extract_token_usage
@@ -211,3 +211,42 @@ def test_block_analysis_api_returns_cache_for_logged_in_user(client):
 
     assert response.status_code == 200
     assert response.json()["summary_points"] == ["缓存"]
+
+
+def test_analyze_block_uses_topic_prompt_template(client):
+    session = next(client.app.dependency_overrides[get_session]())
+    user, block = _seed_user_model_block(session)
+    block.page_route = "/topics/stocks"
+    block.source_type = "eastmoney_capital_flow"
+    session.add(
+        AIPromptTemplate(
+            topic_slug="stocks",
+            content_class="rank",
+            topic_context="关注资金集中度",
+            extra_forbidden="不得建议加仓",
+            enabled=True,
+        )
+    )
+    session.commit()
+    captured: dict = {}
+
+    async def fake_post(payload):
+        captured["system"] = payload["messages"][0]["content"]
+        return {
+            "choices": [{"message": {"content": "{\"summary_points\":[\"资金集中在少数方向\"],\"key_changes\":[],\"risk_points\":[],\"related_entities\":[],\"confidence\":0.8}"}}],
+            "usage": {"prompt_tokens": 20, "completion_tokens": 10, "total_tokens": 30},
+        }
+
+    analysis = analyze_block(
+        session,
+        user=user,
+        page_route="/topics/stocks",
+        block_id=block.id,
+        post_json=fake_post,
+        resolved_data=[{"id": 1, "title": "资金流", "summary": "主力资金净流入", "score": 88}],
+    )
+
+    assert analysis.status == "generated"
+    assert "关注资金集中度" in captured["system"]
+    assert "不得建议加仓" in captured["system"]
+    assert "识别数值、排名、资金、涨跌幅、积分等异常项" in captured["system"]
