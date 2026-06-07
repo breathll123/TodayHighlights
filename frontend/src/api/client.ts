@@ -1,5 +1,5 @@
 import axios from "axios";
-import type { AdminUser, AIModelConfig, AIModelConfigWrite, AIGenerationJob, AIJobListResponse, AIPromptTemplate, AIPromptTemplateWrite, AITokenUsageDetail, AITokenUsageListResponse, AITopicSummaryResponse, AIUsageStats, AuthResponse, AuthUser, Block, BlockAIAnalysis, CrawlJob, Highlight, JobListResponse, ModelSettings, PageBlocksResponse, Source, Topic } from "./types";
+import type { AdminUser, AIModelConfig, AIModelConfigWrite, AIGenerationJob, AIJobListResponse, AIPromptTemplate, AIPromptTemplateWrite, AITokenUsageDetail, AITokenUsageListResponse, AITopicSummaryResponse, AIUsageStats, AuthResponse, AuthUser, Block, BlockAIAnalysis, CrawlJob, Highlight, JobListResponse, MarketIndex, ModelSettings, PageBlocksResponse, Source, Topic } from "./types";
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE ?? "http://localhost:8000",
@@ -183,6 +183,10 @@ export function retryAIJob(jobId: number): Promise<{ id: number; status: string;
 
 export function fetchAITopicSummary(slug: string): Promise<AITopicSummaryResponse> {
   return api.get<AITopicSummaryResponse>(`/api/public/topics/${slug}/ai-summary`).then((r) => r.data);
+}
+
+export function fetchMarketIndices(): Promise<MarketIndex[]> {
+  return api.get<MarketIndex[]>("/api/public/market-indices").then((r) => r.data);
 }
 
 // --- Block AI Analysis ---

@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_session
 from app.models.entities import AITopicSummary, Highlight, Topic
 from app.schemas.public import AITopicSummaryItemRead, AITopicSummaryRead, HighlightRead, TopicRead
+from app.services.adapters.eastmoney import fetch_index_trends
 from app.services.blocks import get_page_blocks
 
 router = APIRouter(prefix="/api/public", tags=["public"])
@@ -59,6 +60,28 @@ def get_topic_ai_summary(slug: str, session: Session = Depends(get_session)) -> 
         generated_at=summary.generated_at,
         items=[AITopicSummaryItemRead(**item) for item in summary.items_json],
     )
+
+
+@router.get("/market-indices")
+def get_market_indices() -> list[dict]:
+    """6 大指数实时快照 + 当日分时趋势"""
+    indices = fetch_index_trends({}, 6)
+    if not indices:
+        return []
+    return [
+        {
+            "code": idx.get("symbols", [""])[0] if idx.get("symbols") else "",
+            "name": idx.get("title", ""),
+            "current": idx.get("current", 0),
+            "change_pct": idx.get("percent", 0),
+            "change_amount": idx.get("change_amount", 0),
+            "volume": idx.get("volume", 0),
+            "turnover": idx.get("turnover", 0),
+            "url": idx.get("url", ""),
+            "trend": idx.get("trend"),
+        }
+        for idx in indices
+    ]
 
 
 _IMAGE_CLIENT = httpx.Client(timeout=10, headers={"User-Agent": "Mozilla/5.0", "Referer": "https://www.qiumiwu.com/"})

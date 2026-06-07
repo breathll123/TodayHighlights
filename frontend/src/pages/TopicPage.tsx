@@ -5,6 +5,7 @@ import { usePageBlocks } from "@/hooks/use-page-blocks";
 import { DashboardShell } from "@/components/layout/DashboardShell";
 import { GridRenderer } from "@/components/layout/GridRenderer";
 import { AITopicSummary } from "@/components/layout/AITopicSummary";
+import { MarketIndexBar } from "@/components/layout/MarketIndexBar";
 import { fetchAITopicSummary } from "@/api/client";
 import { Button } from "@/components/ui/button";
 
@@ -87,6 +88,7 @@ export function TopicPage() {
             </div>
           )}
           {aiSummary && !aiLoading && <AITopicSummary summary={aiSummary} />}
+          {slug === "stocks" && <MarketIndexBar />}
 
           <GridRenderer blocks={data?.blocks ?? []} isLoading={isLoading} dataUpdatedAt={dataUpdatedAt} />
         </>

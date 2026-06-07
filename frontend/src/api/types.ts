@@ -210,6 +210,25 @@ export interface AIUsageStats {
   by_topic: { topic_slug: string; total_tokens: number; calls: number }[];
 }
 
+export interface MarketIndexTrend {
+  prev_close: number;
+  high: number;
+  low: number;
+  points: { time: string; price: number }[];
+}
+
+export interface MarketIndex {
+  code: string;
+  name: string;
+  current: number;
+  change_pct: number;
+  change_amount: number;
+  volume: number;
+  turnover: number;
+  url: string;
+  trend: MarketIndexTrend | null;
+}
+
 export interface AIItemEnhancement {
   status: string;
   summary: string;

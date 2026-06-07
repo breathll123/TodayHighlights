@@ -145,14 +145,14 @@ def fetch_indices(_config: dict, limit: int) -> list[dict]:
     try:
         import re
         index_map = [
-            ("s_sh000001", "000001"),
-            ("s_sz399001", "399001"),
-            ("s_sz399006", "399006"),
-            ("s_sh000688", "000688"),
-            ("s_sz399673", "399673"),
-            ("s_sh000300", "000300"),
+            ("s_sh000001", "000001", "1.000001"),
+            ("s_sz399001", "399001", "0.399001"),
+            ("s_sz399006", "399006", "0.399006"),
+            ("s_sh000688", "000688", "1.000688"),
+            ("s_sz399673", "399673", "0.399673"),
+            ("s_sh000300", "000300", "1.000300"),
         ]
-        codes = ",".join(c for c, _ in index_map[:limit])
+        codes = ",".join(c for c, _, _ in index_map[:limit])
         resp = httpx.get(
             f"https://hq.sinajs.cn/list={codes}",
             headers={"User-Agent": "Mozilla/5.0 DailyHighlights/0.1", "Referer": "https://finance.sina.com.cn/"},
@@ -161,7 +161,7 @@ def fetch_indices(_config: dict, limit: int) -> list[dict]:
         resp.raise_for_status()
         text = resp.content.decode("gbk")
         result = []
-        for symbol, code in index_map[:limit]:
+        for symbol, code, em_secid in index_map[:limit]:
             m = re.search(rf'hq_str_{symbol}="([^"]*)"', text)
             if not m:
                 continue
@@ -170,7 +170,10 @@ def fetch_indices(_config: dict, limit: int) -> list[dict]:
                 continue
             name = fields[0]
             current = float(fields[1])
+            change_amount = float(fields[2])
             percent = float(fields[3])
+            volume = int(fields[4]) if len(fields) > 4 and fields[4] else 0
+            turnover = float(fields[5]) if len(fields) > 5 and fields[5] else 0
             result.append({
                 "title": name,
                 "summary": f"{current:.2f} {percent:+.2f}%",
@@ -179,11 +182,80 @@ def fetch_indices(_config: dict, limit: int) -> list[dict]:
                 "source": "eastmoney_indices",
                 "percent": percent,
                 "current": current,
+                "change_amount": change_amount,
+                "volume": volume,
+                "turnover": turnover,
+                "em_secid": em_secid,
                 "url": f"https://quote.eastmoney.com/zs{code}.html",
             })
         return result
     except Exception:
         return []
+
+
+@ttl_cache(60, swr=300)
+def fetch_index_trends(_config: dict, limit: int) -> list[dict]:
+    """指数分时趋势 — 东方财富 trends2 接口，256 个分时点"""
+    snapshots = fetch_indices(_config, limit)
+    if not snapshots:
+        return []
+
+    trends_data = []
+    with ThreadPoolExecutor(max_workers=3) as pool:
+        futures = {}
+        for s in snapshots:
+            if s.get("em_secid"):
+                futures[pool.submit(_fetch_one_trend, s)] = s
+
+        for future in as_completed(futures):
+            s = futures[future]
+            try:
+                trend = future.result(timeout=10)
+            except Exception:
+                trend = None
+            item = dict(s)
+            item["trend"] = trend
+            trends_data.append(item)
+
+    return trends_data
+
+
+def _fetch_one_trend(snapshot: dict) -> dict | None:
+    """Fetch intraday trend for a single index."""
+    try:
+        resp = _http.get(
+            "https://push2.eastmoney.com/api/qt/stock/trends2/get",
+            params={
+                "fields1": "f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f11,f12,f13",
+                "fields2": "f51,f52,f53,f54,f55,f56,f57,f58",
+                "secid": snapshot["em_secid"],
+                "ndays": 1,
+            },
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        raw = data.get("data")
+        if not raw:
+            return None
+        trends = raw.get("trends", [])
+        if not trends:
+            return None
+        points = []
+        for row in trends:
+            parts = row.split(",")
+            if len(parts) >= 3:
+                points.append({
+                    "time": parts[0].split(" ")[-1][:5] if " " in parts[0] else parts[0],
+                    "price": float(parts[2]),
+                })
+        return {
+            "prev_close": raw.get("preClose", 0),
+            "points": points,
+            "high": max(p["price"] for p in points) if points else 0,
+            "low": min(p["price"] for p in points) if points else 0,
+        }
+    except Exception:
+        return None
 
 
 @ttl_cache(30, swr=300)
