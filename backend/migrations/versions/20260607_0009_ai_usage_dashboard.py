@@ -22,9 +22,9 @@ def upgrade() -> None:
     inspector = inspect(conn)
     existing_cols = {col["name"] for col in inspector.get_columns("ai_token_usages")}
     if "prompt_text" not in existing_cols:
-        op.add_column("ai_token_usages", sa.Column("prompt_text", sa.Text(), nullable=False, server_default=""))
+        op.add_column("ai_token_usages", sa.Column("prompt_text", sa.Text(), nullable=False))
     if "completion_text" not in existing_cols:
-        op.add_column("ai_token_usages", sa.Column("completion_text", sa.Text(), nullable=False, server_default=""))
+        op.add_column("ai_token_usages", sa.Column("completion_text", sa.Text(), nullable=False))
 
 
 def downgrade() -> None:
