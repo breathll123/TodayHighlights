@@ -224,7 +224,7 @@ def _fetch_one_trend(snapshot: dict) -> dict | None:
     """Fetch intraday trend for a single index."""
     try:
         resp = _http.get(
-            "https://push2.eastmoney.com/api/qt/stock/trends2/get",
+            "https://push2delay.eastmoney.com/api/qt/stock/trends2/get",
             params={
                 "fields1": "f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f11,f12,f13",
                 "fields2": "f51,f52,f53,f54,f55,f56,f57,f58",
