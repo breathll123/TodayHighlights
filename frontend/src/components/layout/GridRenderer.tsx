@@ -12,6 +12,7 @@ import { StandingsTable } from "./StandingsTable";
 import { LeaderboardTable } from "./LeaderboardTable";
 import { SectionHeading } from "./SectionHeading";
 import { BlockAIAnalysisDrawer } from "./BlockAIAnalysisDrawer";
+import { CollapsibleSection } from "./CollapsibleSection";
 import { FIELD_DEFS, DEFAULT_FIELDS } from "@/lib/field-defs";
 import { generateBlockAIAnalysis } from "@/api/client";
 import { Button } from "@/components/ui/button";
@@ -192,36 +193,39 @@ export function GridRenderer({ blocks, isLoading, dataUpdatedAt }: { blocks: any
         const displayFields = allFields.filter((f) => selectedKeys.includes(f.key));
 
         return (
-          <section
+          <CollapsibleSection
             key={block.id}
-            className="space-y-3"
+            blockId={block.id}
+            className="space-y-0"
             style={{ gridColumn: `span ${block.col_span || 1}`, gridRow: `span ${block.row_span || 1}` }}
+            heading={
+              <SectionHeading
+                icon={sectionIcon(st)}
+                title={block.title}
+                dataUpdatedAt={dataUpdatedAt}
+                action={
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 gap-1.5 px-2 text-xs"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedBlock(block);
+                      if (!isAuthenticated) {
+                        setRequiresLogin(true);
+                        return;
+                      }
+                      setRequiresLogin(false);
+                      analysisMutation.mutate({ page_route: block.page_route, block_id: block.id });
+                    }}
+                  >
+                    <BrainCircuit className="h-3.5 w-3.5" aria-hidden="true" />
+                    AI 分析
+                  </Button>
+                }
+              />
+            }
           >
-            <SectionHeading
-              icon={sectionIcon(st)}
-              title={block.title}
-              dataUpdatedAt={dataUpdatedAt}
-              action={
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 gap-1.5 px-2 text-xs"
-                  onClick={() => {
-                    setSelectedBlock(block);
-                    if (!isAuthenticated) {
-                      setRequiresLogin(true);
-                      return;
-                    }
-                    setRequiresLogin(false);
-                    analysisMutation.mutate({ page_route: block.page_route, block_id: block.id });
-                  }}
-                >
-                  <BrainCircuit className="h-3.5 w-3.5" aria-hidden="true" />
-                  AI 分析
-                </Button>
-              }
-            />
-
             {block.data?.length === 0 ? (
               <div className="bg-card border rounded-xl p-6 text-center text-sm text-muted-foreground">暂无数据</div>
             ) : block.source_type === "qiumiwu_matches" && block.display_style === "schedule" ? (
@@ -280,7 +284,7 @@ export function GridRenderer({ blocks, isLoading, dataUpdatedAt }: { blocks: any
                 ))}
               </div>
             )}
-          </section>
+          </CollapsibleSection>
         );
       })}
 
