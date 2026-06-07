@@ -204,6 +204,24 @@ class AIModelConfig(TimestampMixin, Base):
     notes: Mapped[str] = mapped_column(Text, default="", nullable=False)
 
 
+class AIPromptTemplate(TimestampMixin, Base):
+    __tablename__ = "ai_prompt_templates"
+    __table_args__ = (
+        UniqueConstraint("topic_slug", "content_class", name="uq_ai_prompt_template_topic_class"),
+        Index("ix_ai_prompt_templates_enabled", "topic_slug", "content_class", "enabled"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    topic_slug: Mapped[str] = mapped_column(String(80), nullable=False)
+    content_class: Mapped[str] = mapped_column(String(30), nullable=False)
+    topic_context: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    extra_forbidden: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    template_version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    updated_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    notes: Mapped[str] = mapped_column(Text, default="", nullable=False)
+
+
 class AIItemEnrichment(TimestampMixin, Base):
     __tablename__ = "ai_item_enrichments"
     __table_args__ = (
