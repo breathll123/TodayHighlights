@@ -12,10 +12,8 @@ import { AdminHighlightsPage } from "./pages/AdminHighlightsPage";
 import { AdminSettingsPage } from "./pages/AdminSettingsPage";
 import { AdminLayoutPage } from "./pages/AdminLayoutPage";
 import { AdminTopicsPage } from "./pages/AdminTopicsPage";
-import { AdminAIJobsPage } from "./pages/AdminAIJobsPage";
 import { AdminAIOpsPage } from "./pages/AdminAIOpsPage";
 import { AdminUsersPage } from "./pages/AdminUsersPage";
-import { AdminAIUsagePage } from "./pages/AdminAIUsagePage";
 import { AdminPromptTemplatesPage } from "./pages/AdminPromptTemplatesPage";
 
 const queryClient = new QueryClient();
@@ -77,7 +75,6 @@ export default function App() {
               <Route path="/admin/settings" element={<AdminSettingsPage />} />
               <Route path="/admin/layout" element={<AdminLayoutPage />} />
               <Route path="/admin/topics" element={<AdminTopicsPage />} />
-              <Route path="/admin/ai-jobs" element={<AdminAIJobsPage />} />
               <Route path="/admin/users" element={<AdminUsersPage />} />
               <Route path="/admin/ai-ops" element={<AdminAIOpsPage />} />
               <Route path="/admin/ai-prompts" element={<AdminPromptTemplatesPage />} />
