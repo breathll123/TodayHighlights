@@ -6,6 +6,8 @@ Create Date: 2026-06-07
 """
 from typing import Sequence, Union
 from alembic import op
+from sqlalchemy import inspect
+
 import sqlalchemy as sa
 
 
@@ -16,10 +18,20 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    op.add_column("ai_token_usages", sa.Column("prompt_text", sa.Text(), nullable=False, server_default=""))
-    op.add_column("ai_token_usages", sa.Column("completion_text", sa.Text(), nullable=False, server_default=""))
+    conn = op.get_bind()
+    inspector = inspect(conn)
+    existing_cols = {col["name"] for col in inspector.get_columns("ai_token_usages")}
+    if "prompt_text" not in existing_cols:
+        op.add_column("ai_token_usages", sa.Column("prompt_text", sa.Text(), nullable=False, server_default=""))
+    if "completion_text" not in existing_cols:
+        op.add_column("ai_token_usages", sa.Column("completion_text", sa.Text(), nullable=False, server_default=""))
 
 
 def downgrade() -> None:
-    op.drop_column("ai_token_usages", "completion_text")
-    op.drop_column("ai_token_usages", "prompt_text")
+    conn = op.get_bind()
+    inspector = inspect(conn)
+    existing_cols = {col["name"] for col in inspector.get_columns("ai_token_usages")}
+    if "completion_text" in existing_cols:
+        op.drop_column("ai_token_usages", "completion_text")
+    if "prompt_text" in existing_cols:
+        op.drop_column("ai_token_usages", "prompt_text")
