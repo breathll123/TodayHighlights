@@ -13,6 +13,7 @@ import { AdminSettingsPage } from "./pages/AdminSettingsPage";
 import { AdminLayoutPage } from "./pages/AdminLayoutPage";
 import { AdminTopicsPage } from "./pages/AdminTopicsPage";
 import { AdminAIJobsPage } from "./pages/AdminAIJobsPage";
+import { AdminAIOpsPage } from "./pages/AdminAIOpsPage";
 import { AdminUsersPage } from "./pages/AdminUsersPage";
 import { AdminAIUsagePage } from "./pages/AdminAIUsagePage";
 import { AdminPromptTemplatesPage } from "./pages/AdminPromptTemplatesPage";
@@ -78,7 +79,7 @@ export default function App() {
               <Route path="/admin/topics" element={<AdminTopicsPage />} />
               <Route path="/admin/ai-jobs" element={<AdminAIJobsPage />} />
               <Route path="/admin/users" element={<AdminUsersPage />} />
-              <Route path="/admin/ai-usage" element={<AdminAIUsagePage />} />
+              <Route path="/admin/ai-ops" element={<AdminAIOpsPage />} />
               <Route path="/admin/ai-prompts" element={<AdminPromptTemplatesPage />} />
               <Route path="/admin" element={<Navigate to="/admin/sources" replace />} />
             </Route>

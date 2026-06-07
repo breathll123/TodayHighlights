@@ -138,6 +138,17 @@ export interface AIJobsStats {
   by_trigger: { trigger_type: string; count: number }[];
 }
 
+export interface AIOpsStats {
+  today_tokens: number;
+  today_calls: number;
+  active_models: number;
+  today_succeeded: number;
+  today_failed: number;
+  daily_trend: { date: string; total_tokens: number; calls: number }[];
+  by_model: { model_name: string; total_tokens: number; calls: number }[];
+  job_status: { status: string; count: number }[];
+}
+
 export interface AITopicSummaryItem {
   title: string;
   reason: string;
@@ -197,6 +208,8 @@ export interface AITokenUsage {
   block_title: string;
   topic: string;
   finished_at: string | null;
+  job_status: string | null;
+  job_error: string | null;
 }
 
 export interface AITokenUsageDetail extends AITokenUsage {

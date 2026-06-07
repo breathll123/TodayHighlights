@@ -1,5 +1,5 @@
 import axios from "axios";
-import type { AdminUser, AIJobsStats, AIModelConfig, AIModelConfigWrite, AIGenerationJob, AIJobListResponse, AIPromptTemplate, AIPromptTemplateWrite, AITokenUsageDetail, AITokenUsageListResponse, AITopicSummaryResponse, AIUsageStats, AuthResponse, AuthUser, Block, BlockAIAnalysis, CrawlJob, Highlight, JobListResponse, MarketIndex, ModelSettings, PageBlocksResponse, Source, Topic } from "./types";
+import type { AdminUser, AIJobsStats, AIModelConfig, AIModelConfigWrite, AIOpsStats, AIGenerationJob, AIJobListResponse, AIPromptTemplate, AIPromptTemplateWrite, AITokenUsageDetail, AITokenUsageListResponse, AITopicSummaryResponse, AIUsageStats, AuthResponse, AuthUser, Block, BlockAIAnalysis, CrawlJob, Highlight, JobListResponse, MarketIndex, ModelSettings, PageBlocksResponse, Source, Topic } from "./types";
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE ?? "http://localhost:8000",
@@ -219,6 +219,10 @@ export function fetchAITokenUsageDetail(id: number): Promise<AITokenUsageDetail>
 
 export function fetchAIUsageStats(): Promise<AIUsageStats> {
   return api.get<AIUsageStats>("/api/admin/ai/token-usages/stats").then((r) => r.data);
+}
+
+export function fetchAIOpsStats(): Promise<AIOpsStats> {
+  return api.get<AIOpsStats>("/api/admin/ai/ops-stats").then((r) => r.data);
 }
 
 // --- Admin Prompt Templates ---
