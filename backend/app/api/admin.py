@@ -317,35 +317,9 @@ def list_token_usages(page: int = 1, page_size: int = 20, session: Session = Dep
     }
 
 
-@router.get("/ai/token-usages/{usage_id}")
-def get_token_usage_detail(usage_id: int, session: Session = Depends(get_session)) -> dict:
-    usage = session.get(AITokenUsage, usage_id)
-    if usage is None:
-        raise HTTPException(status_code=404, detail="Token usage not found")
-
-    analysis = session.get(AIBlockAnalysis, usage.related_block_analysis_id) if usage.related_block_analysis_id else None
-
-    return {
-        "id": usage.id,
-        "user_id": usage.user_id,
-        "model_name": usage.model_name,
-        "usage_type": usage.usage_type,
-        "prompt_tokens": usage.prompt_tokens,
-        "completion_tokens": usage.completion_tokens,
-        "total_tokens": usage.total_tokens,
-        "estimated": usage.estimated,
-        "request_status": usage.request_status,
-        "created_at": usage.created_at.isoformat() if usage.created_at else None,
-        "block_title": analysis.block_title if analysis else "",
-        "topic": _resolve_topic(analysis.page_route if analysis else None),
-        "prompt_text": usage.prompt_text,
-        "completion_text": usage.completion_text,
-    }
-
-
 @router.get("/ai/token-usages/stats")
 def get_token_usage_stats(session: Session = Depends(get_session)) -> dict:
-    from datetime import date, timedelta
+    from datetime import date, datetime, timedelta
     from sqlalchemy import func as sa_func, cast, Date
 
     today = date.today()
@@ -426,6 +400,32 @@ def get_token_usage_stats(session: Session = Depends(get_session)) -> dict:
         "daily_trend": daily_trend,
         "by_model": by_model,
         "by_topic": by_topic,
+    }
+
+
+@router.get("/ai/token-usages/{usage_id}")
+def get_token_usage_detail(usage_id: int, session: Session = Depends(get_session)) -> dict:
+    usage = session.get(AITokenUsage, usage_id)
+    if usage is None:
+        raise HTTPException(status_code=404, detail="Token usage not found")
+
+    analysis = session.get(AIBlockAnalysis, usage.related_block_analysis_id) if usage.related_block_analysis_id else None
+
+    return {
+        "id": usage.id,
+        "user_id": usage.user_id,
+        "model_name": usage.model_name,
+        "usage_type": usage.usage_type,
+        "prompt_tokens": usage.prompt_tokens,
+        "completion_tokens": usage.completion_tokens,
+        "total_tokens": usage.total_tokens,
+        "estimated": usage.estimated,
+        "request_status": usage.request_status,
+        "created_at": usage.created_at.isoformat() if usage.created_at else None,
+        "block_title": analysis.block_title if analysis else "",
+        "topic": _resolve_topic(analysis.page_route if analysis else None),
+        "prompt_text": usage.prompt_text,
+        "completion_text": usage.completion_text,
     }
 
 
