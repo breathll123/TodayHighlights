@@ -131,7 +131,7 @@ export function AdminAIOpsPage() {
             <table className="w-full text-sm">
               <thead className="bg-muted/40 text-muted-foreground">
                 <tr>
-                  <th className="px-4 py-2.5 text-left text-xs font-medium">时间 <button onClick={() => toggleSort("created_at")} className="hover:text-foreground"><SortIcon k="created_at" /></button></th>
+                  <th className="px-4 py-2.5 text-left text-xs font-medium cursor-pointer hover:text-foreground" onClick={() => toggleSort("created_at")}>时间 <SortIcon k="created_at" /></th>
                   <th className="px-4 py-2.5 text-left text-xs font-medium">主题/方块</th>
                   <th className="px-4 py-2.5 text-left text-xs font-medium">模型</th>
                   <th className="px-4 py-2.5 text-center text-xs font-medium">状态</th>
