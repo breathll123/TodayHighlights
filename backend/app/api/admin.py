@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.orm import Session, joinedload
 
 from pydantic import BaseModel
@@ -785,7 +785,7 @@ class LoginRequest(BaseModel):
 def publish_page(route: str, session: Session = Depends(get_session)) -> dict:
     route = "/" + route if not route.startswith("/") else route
 
-    # Clean up references in order: ai_token_usages → ai_generation_jobs → ai_block_analyses → page_blocks
+    # Cascade cleanup: null FK → delete children → delete parents
     old_ids = session.scalars(
         select(PageBlock.id).where(PageBlock.page_route == route, PageBlock.status == "published")
     ).all()
@@ -794,12 +794,19 @@ def publish_page(route: str, session: Session = Depends(get_session)) -> dict:
             select(AIBlockAnalysis.id).where(AIBlockAnalysis.block_id.in_(old_ids))
         ).all()
         if analysis_ids:
+            # 1. Break circular FK: ai_block_analyses.token_usage_id → ai_token_usages
+            session.execute(
+                update(AIBlockAnalysis).where(AIBlockAnalysis.id.in_(analysis_ids)).values(token_usage_id=None)
+            )
+            # 2. Delete ai_token_usages (FK → ai_block_analyses)
             session.execute(
                 delete(AITokenUsage).where(AITokenUsage.related_block_analysis_id.in_(analysis_ids))
             )
+            # 3. Delete ai_generation_jobs (FK → ai_block_analyses)
             session.execute(
                 delete(AIGenerationJob).where(AIGenerationJob.block_analysis_id.in_(analysis_ids))
             )
+            # 4. Delete ai_block_analyses
             session.execute(
                 delete(AIBlockAnalysis).where(AIBlockAnalysis.id.in_(analysis_ids))
             )
