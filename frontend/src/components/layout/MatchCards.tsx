@@ -5,12 +5,15 @@ interface MatchItem {
   id: string | number;
   league?: string;
   logo_league?: string;
+  logo_league_local?: string;
   status: string | number;
   status_name?: string;
   team_a?: string;
   team_b?: string;
   logo_a?: string;
+  logo_a_local?: string;
   logo_b?: string;
+  logo_b_local?: string;
   score_a?: string | number;
   score_b?: string | number;
   minute?: string | number;
@@ -24,9 +27,10 @@ interface Props {
 
 // ── helpers ──
 
-function proxyImg(url?: string): string {
-  if (!url) return "";
-  return `/api/public/proxy/image?url=${encodeURIComponent(url)}`;
+function logoSrc(localUrl?: string, remoteUrl?: string): string {
+  if (localUrl) return localUrl;
+  if (!remoteUrl) return "";
+  return `/api/public/proxy/image?url=${encodeURIComponent(remoteUrl)}`;
 }
 
 function statusCode(s: string | number): number | undefined {
@@ -43,6 +47,12 @@ function formatTime(startTime?: string): string {
   return startTime?.match(/[T ](\d{2}:\d{2})/)?.[1] ?? "";
 }
 
+function resolveImgUrl(url?: string): string {
+  if (!url) return "";
+  if (url.startsWith("/api/public/media/") || url.startsWith("/api/public/proxy/image")) return url;
+  return `/api/public/proxy/image?url=${encodeURIComponent(url)}`;
+}
+
 function TeamLogo({ url, name, size = "md" }: { url?: string; name?: string; size?: "sm" | "md" }) {
   const [failed, setFailed] = useState(false);
   const cls = size === "md" ? "h-8 w-8 text-[12px]" : "h-6 w-6 text-[10px]";
@@ -56,7 +66,7 @@ function TeamLogo({ url, name, size = "md" }: { url?: string; name?: string; siz
   }
   return (
     <img
-      src={proxyImg(url)}
+      src={resolveImgUrl(url)}
       alt=""
       className={`${cls} shrink-0 rounded-full object-contain`}
       loading="lazy"
@@ -89,7 +99,7 @@ function MatchCard({ m }: { m: MatchItem }) {
       <div className="flex items-center justify-between gap-2 mb-3">
         <div className="flex items-center gap-1 min-w-0">
           {m.logo_league ? (
-            <img src={proxyImg(m.logo_league)} alt="" className="h-3.5 w-3.5 shrink-0 rounded object-contain" loading="lazy" />
+            <img src={logoSrc(m.logo_league_local, m.logo_league)} alt="" className="h-3.5 w-3.5 shrink-0 rounded object-contain" loading="lazy" />
           ) : (
             <Dot className="h-3 w-3 shrink-0 text-muted-foreground/40" />
           )}
@@ -111,7 +121,7 @@ function MatchCard({ m }: { m: MatchItem }) {
       <div className="flex items-center gap-2">
         {/* Home */}
         <div className="flex flex-col items-center gap-1.5 flex-1 min-w-0">
-          <TeamLogo url={m.logo_a} name={m.team_a} size="md" />
+          <TeamLogo url={logoSrc(m.logo_a_local, m.logo_a)} name={m.team_a} size="md" />
           <span className="text-[11px] font-medium text-center truncate w-full leading-tight">{m.team_a || "—"}</span>
         </div>
 
@@ -127,7 +137,7 @@ function MatchCard({ m }: { m: MatchItem }) {
 
         {/* Away */}
         <div className="flex flex-col items-center gap-1.5 flex-1 min-w-0">
-          <TeamLogo url={m.logo_b} name={m.team_b} size="md" />
+          <TeamLogo url={logoSrc(m.logo_b_local, m.logo_b)} name={m.team_b} size="md" />
           <span className="text-[11px] font-medium text-center truncate w-full leading-tight">{m.team_b || "—"}</span>
         </div>
       </div>

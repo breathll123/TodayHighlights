@@ -11,6 +11,7 @@ interface StandingItem {
   rank?: number;
   team?: string;
   logo?: string;
+  logo_local?: string;
   gp?: string;
   pts?: string;
   wdl?: string;
@@ -27,8 +28,15 @@ interface Props {
   data: StandingItem[];
 }
 
-function proxyImg(url?: string): string {
+function logoSrc(localUrl?: string, remoteUrl?: string): string {
+  if (localUrl) return localUrl;
+  if (!remoteUrl) return "";
+  return `/api/public/proxy/image?url=${encodeURIComponent(remoteUrl)}`;
+}
+
+function resolveImgUrl(url?: string): string {
   if (!url) return "";
+  if (url.startsWith("/api/public/media/") || url.startsWith("/api/public/proxy/image")) return url;
   return `/api/public/proxy/image?url=${encodeURIComponent(url)}`;
 }
 
@@ -43,7 +51,7 @@ function TeamLogo({ url, name }: { url?: string; name?: string }) {
   }
   return (
     <img
-      src={proxyImg(url)}
+      src={resolveImgUrl(url)}
       alt=""
       className="h-5 w-5 shrink-0 rounded-full object-contain"
       loading="lazy"
@@ -194,7 +202,7 @@ export function StandingsTable({ data }: Props) {
             >
               <RankBadge rank={item.rank} className="justify-center" />
               <span className="flex items-center gap-1.5 truncate">
-                <TeamLogo url={item.logo} name={item.team} />
+                <TeamLogo url={logoSrc(item.logo_local, item.logo)} name={item.team} />
                 <span className="truncate font-medium">{item.team}</span>
               </span>
               <span className="text-center tabular-nums text-muted-foreground">{item.gp || "-"}</span>

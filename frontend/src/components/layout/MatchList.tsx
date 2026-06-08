@@ -9,12 +9,15 @@ interface MatchItem {
   url?: string;
   league?: string;
   logo_league?: string;
+  logo_league_local?: string;
   status: string | number;
   status_name?: string;
   team_a?: string;
   team_b?: string;
   logo_a?: string;
+  logo_a_local?: string;
   logo_b?: string;
+  logo_b_local?: string;
   score_a?: string | number;
   score_b?: string | number;
   minute?: string | number;
@@ -59,8 +62,15 @@ function formatClock(date: Date): string {
   return `${y}-${m}-${d} ${hms}`;
 }
 
-function proxyImg(url?: string): string {
+function logoSrc(localUrl?: string, remoteUrl?: string): string {
+  if (localUrl) return localUrl;
+  if (!remoteUrl) return "";
+  return `/api/public/proxy/image?url=${encodeURIComponent(remoteUrl)}`;
+}
+
+function resolveImgUrl(url?: string): string {
   if (!url) return "";
+  if (url.startsWith("/api/public/media/") || url.startsWith("/api/public/proxy/image")) return url;
   return `/api/public/proxy/image?url=${encodeURIComponent(url)}`;
 }
 
@@ -142,7 +152,7 @@ function TeamLogo({ url, name, size = "sm" }: { url?: string; name?: string; siz
 
   return (
     <img
-      src={proxyImg(url)}
+      src={resolveImgUrl(url)}
       alt=""
       className={`${dims} shrink-0 rounded-full object-contain`}
       loading="lazy"
@@ -175,13 +185,13 @@ function MatchRowContent({ match, showAffordance = false }: { match: MatchItem; 
         )}
       </span>
       <span className="flex min-w-0 items-center gap-1.5 font-medium">
-        <TeamLogo url={match.logo_a} name={match.team_a} />
+        <TeamLogo url={logoSrc(match.logo_a_local, match.logo_a)} name={match.team_a} />
         <span className="truncate">{match.team_a || "待定"}</span>
       </span>
       <span className="truncate text-center font-bold tabular-nums text-foreground">{scoreFor(match)}</span>
       <span className={`flex min-w-0 items-center justify-end gap-1.5 font-medium ${showAffordance ? "pr-3" : ""}`}>
         <span className="truncate">{match.team_b || "待定"}</span>
-        <TeamLogo url={match.logo_b} name={match.team_b} />
+        <TeamLogo url={logoSrc(match.logo_b_local, match.logo_b)} name={match.team_b} />
       </span>
       {showAffordance && (
         <ChevronRight
@@ -295,7 +305,7 @@ export function MatchList({ data, dataUpdatedAt, defaultFilter = "all" }: Props)
               <section key={`${dg.date}-${league}`} className="min-w-0">
                 <div className="flex items-center justify-between gap-2 border-b border-border/45 bg-muted/20 px-3 py-1 text-[10px] font-semibold text-muted-foreground">
                   <h4 className="flex min-w-0 items-center gap-1.5 truncate">
-                    <TeamLogo url={matches[0]?.logo_league} name={league} size="xs" />
+                    <TeamLogo url={logoSrc(matches[0]?.logo_league_local, matches[0]?.logo_league)} name={league} size="xs" />
                     {league}
                   </h4>
                   <span className="shrink-0 tabular-nums">{matches.length} 场</span>
