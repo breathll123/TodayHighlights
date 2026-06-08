@@ -172,21 +172,30 @@ def resolve_block_data(session: Session, block: PageBlock, cookie: str | None = 
             for ri in news_items
         ]
 
+    # Create media cache for football adapters (session may be None for live blocks)
+    media_cache = None
+    if session is not None:
+        try:
+            from app.services.media_cache import MediaCacheService
+            media_cache = MediaCacheService(session)
+        except Exception:
+            pass
+
     if source_type == "qiumiwu_matches":
         from app.services.adapters.qiumiwu import fetch_matches
-        return fetch_matches(config, limit)
+        return fetch_matches(config, limit, media_cache=media_cache)
 
     if source_type == "qiumiwu_fixtures":
         from app.services.adapters.qiumiwu import fetch_fixtures
-        return fetch_fixtures(config, limit)
+        return fetch_fixtures(config, limit, media_cache=media_cache)
 
     if source_type == "qiumiwu_schedule":
         from app.services.adapters.qiumiwu_schedule import fetch_competition_schedule
-        return fetch_competition_schedule(config, limit)
+        return fetch_competition_schedule(config, limit, media_cache=media_cache)
 
     if source_type == "qiumiwu_standings":
         from app.services.adapters.qiumiwu import fetch_standings
-        return fetch_standings(config, max(limit, 1000))
+        return fetch_standings(config, max(limit, 1000), media_cache=media_cache)
 
     if source_type == "datalearner_leaderboard":
         from app.services.adapters.datalearner import fetch_leaderboard

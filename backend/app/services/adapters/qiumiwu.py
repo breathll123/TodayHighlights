@@ -30,8 +30,22 @@ _PRIORITY_LEAGUES = {
 }
 
 
+def _cache_logo(media_cache, url: str, *, entity_type: str, entity_name: str, source_entity_id: str) -> str:
+    if not media_cache or not url:
+        return ""
+    return media_cache.cache_remote_image(
+        url,
+        provider="qiumiwu",
+        entity_type=entity_type,
+        entity_name=entity_name,
+        source_entity_id=source_entity_id,
+        asset_type="football_logo",
+        metadata={"adapter": "qiumiwu"},
+    )
+
+
 @ttl_cache(30, swr=300)
-def fetch_matches(_config: dict, limit: int) -> list[dict]:
+def fetch_matches(_config: dict, limit: int, media_cache=None) -> list[dict]:
     """Fetch live match data from qiumiwu schedule API."""
     try:
         resp = httpx.get(
@@ -94,12 +108,15 @@ def fetch_matches(_config: dict, limit: int) -> list[dict]:
                 "url": f"https://www.qiumiwu.com/game/{match_id}",
                 "league": league_name,
                 "logo_league": league.get("logo", ""),
+                "logo_league_local": _cache_logo(media_cache, league.get("logo", ""), entity_type="league", entity_name=league_name, source_entity_id=str(match_id)),
                 "status": status,
                 "status_name": status_name,
                 "team_a": home.get("name", ""),
                 "team_b": away.get("name", ""),
                 "logo_a": home.get("logo", ""),
+                "logo_a_local": _cache_logo(media_cache, home.get("logo", ""), entity_type="team", entity_name=home.get("name", ""), source_entity_id=str(match_id)),
                 "logo_b": away.get("logo", ""),
+                "logo_b_local": _cache_logo(media_cache, away.get("logo", ""), entity_type="team", entity_name=away.get("name", ""), source_entity_id=str(match_id)),
                 "score_a": home_score,
                 "score_b": away_score,
                 "score_ht_a": home_ht,
@@ -143,7 +160,7 @@ _standings_client = httpx.Client(
 )
 
 
-def _fetch_league(league_name: str, slug: str) -> list[dict]:
+def _fetch_league(league_name: str, slug: str, media_cache=None) -> list[dict]:
     """Fetch and parse standings for a single league. Thread-safe via shared client."""
     try:
         resp = _standings_client.get(
@@ -261,6 +278,7 @@ def _fetch_league(league_name: str, slug: str) -> list[dict]:
                 "rank": team["rank"],
                 "team": team["name"],
                 "logo": team["logo"],
+                "logo_local": _cache_logo(media_cache, team["logo"], entity_type="team", entity_name=team["name"], source_entity_id=team_id),
                 "gp": team.get("gp", ""),
                 "pts": team.get("pts", ""),
                 "wdl": team.get("wdl", ""),
@@ -278,21 +296,21 @@ def _fetch_league(league_name: str, slug: str) -> list[dict]:
 
 
 @ttl_cache(60)
-def fetch_fixtures(config: dict, limit: int) -> list[dict]:
+def fetch_fixtures(config: dict, limit: int, media_cache=None) -> list[dict]:
     """Fetch upcoming (fixture-only) matches, sorted by start time ascending."""
-    matches = fetch_matches(config, max(limit, 200))
+    matches = fetch_matches(config, max(limit, 200), media_cache=media_cache)
     fixtures = [m for m in matches if m.get("status") == 1]
     fixtures.sort(key=lambda x: x.get("start_time", ""))
     return fixtures[:limit]
 
 
 @ttl_cache(300, swr=3600)
-def fetch_standings(_config: dict, limit: int) -> list[dict]:
+def fetch_standings(_config: dict, limit: int, media_cache=None) -> list[dict]:
     """Fetch league standings from qiumiwu mobile pages — all leagues in parallel."""
     all_results = []
-    with ThreadPoolExecutor(max_workers=8) as pool:
+    with ThreadPoolExecutor(max_workers=min(len(_STANDINGS_LEAGUES), 8)) as pool:
         futures = {
-            pool.submit(_fetch_league, name, slug): slug
+            pool.submit(_fetch_league, name, slug, media_cache): slug
             for name, slug in _STANDINGS_LEAGUES.items()
         }
         for future in as_completed(futures):
