@@ -75,19 +75,12 @@ class MediaCacheService:
             headers={"User-Agent": "Mozilla/5.0 DailyHighlights/0.1"},
             follow_redirects=True,
         )
-        # Use an independent session so cache failures don't roll back the caller's transaction
-        self._caller_session = session
-        self._own_session: Session | None = None
+        self._bind = session.get_bind()
 
-    def _ensure_session(self) -> Session | None:
-        if self._own_session is not None:
-            return self._own_session
+    def _new_session(self) -> Session | None:
         try:
-            bind = self._caller_session.get_bind()
             from sqlalchemy.orm import sessionmaker
-            factory = sessionmaker(bind=bind)
-            self._own_session = factory()
-            return self._own_session
+            return sessionmaker(bind=self._bind)()
         except Exception:
             return None
 
@@ -106,34 +99,35 @@ class MediaCacheService:
         if not normalized or not is_safe_remote_url(normalized):
             return ""
 
-        sess = self._ensure_session()
+        sess = self._new_session()
         if sess is None:
-            return ""  # can't create session — skip caching, caller still gets remote URL
-        digest = url_hash(normalized)
-        existing = sess.scalar(select(MediaAsset).where(MediaAsset.url_hash == digest))
-        now = datetime.utcnow()
-        if existing and existing.status == "cached" and existing.local_path and Path(existing.local_path).exists():
-            existing.last_used_at = now
-            return existing.public_path
-
-        asset = existing or MediaAsset(
-            source_url=source_url,
-            normalized_url=normalized,
-            url_hash=digest,
-        )
-        asset.provider = provider
-        asset.asset_type = asset_type
-        asset.entity_type = entity_type
-        asset.entity_name = entity_name
-        asset.source_entity_id = source_entity_id
-        asset.last_used_at = now
-        asset.fetch_count = (asset.fetch_count or 0) + 1
-        asset.metadata_json = {**(asset.metadata_json or {}), **(metadata or {})}
-
-        if existing is None:
-            sess.add(asset)
-
+            return ""
         try:
+            digest = url_hash(normalized)
+            existing = sess.scalar(select(MediaAsset).where(MediaAsset.url_hash == digest))
+            now = datetime.utcnow()
+            if existing and existing.status == "cached" and existing.local_path and Path(existing.local_path).exists():
+                existing.last_used_at = now
+                sess.commit()
+                return existing.public_path
+
+            asset = existing or MediaAsset(
+                source_url=source_url,
+                normalized_url=normalized,
+                url_hash=digest,
+            )
+            asset.provider = provider
+            asset.asset_type = asset_type
+            asset.entity_type = entity_type
+            asset.entity_name = entity_name
+            asset.source_entity_id = source_entity_id
+            asset.last_used_at = now
+            asset.fetch_count = (asset.fetch_count or 0) + 1
+            asset.metadata_json = {**(asset.metadata_json or {}), **(metadata or {})}
+
+            if existing is None:
+                sess.add(asset)
+
             response = self.http_client.get(normalized)
             response.raise_for_status()
             body = response.content
@@ -166,3 +160,5 @@ class MediaCacheService:
             except Exception:
                 pass
             return ""
+        finally:
+            sess.close()
