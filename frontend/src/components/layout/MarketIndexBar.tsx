@@ -30,7 +30,7 @@ function TrendChart({ idx }: { idx: MarketIndex }) {
   const morning = raw.filter((p) => p.time >= "09:30" && p.time <= "11:30");
   const afternoon = raw.filter((p) => p.time >= "13:00" && p.time <= "15:00");
 
-  // Add a gap point (null price) between sessions to break the line
+  // Add a single gap point between sessions to break the line
   const chartData = [
     ...morning.map((p) => ({
       time: p.time,
@@ -38,7 +38,6 @@ function TrendChart({ idx }: { idx: MarketIndex }) {
       pct: prevClose > 0 ? ((p.price - prevClose) / prevClose) * 100 : 0,
     })),
     { time: "11:30", price: null as number | null, pct: null as number | null },
-    { time: "13:00", price: null as number | null, pct: null as number | null },
     ...afternoon.map((p) => ({
       time: p.time,
       price: p.price,
@@ -46,13 +45,12 @@ function TrendChart({ idx }: { idx: MarketIndex }) {
     })),
   ];
 
-  // Compute pct extremes
+  // Compute pct domain
   const pcts = chartData.filter((d) => d.pct != null).map((d) => d.pct!);
-  const pctMax = Math.max(...pcts, 0.01);
-  const pctMin = Math.min(...pcts, -0.01);
-  const pctPadding = Math.max(Math.abs(pctMax), Math.abs(pctMin)) * 0.3;
+  const pctAbsMax = Math.max(Math.abs(Math.max(...pcts, 0)), Math.abs(Math.min(...pcts, 0)), 0.1);
+  const pctDomain: [number, number] = [-pctAbsMax * 1.3, pctAbsMax * 1.3];
 
-  const timeTicks = new Set(["09:30", "10:00", "10:30", "11:00", "11:30", "13:00", "13:30", "14:00", "14:30", "15:00"]);
+  const tickLabels = new Set(["09:30", "10:00", "10:30", "11:00", "13:00", "13:30", "14:00", "14:30", "15:00"]);
 
   return (
     <ResponsiveContainer width="100%" height={220}>
@@ -69,7 +67,7 @@ function TrendChart({ idx }: { idx: MarketIndex }) {
           tickLine={false}
           axisLine={{ stroke: "#242E3A" }}
           interval={0}
-          tickFormatter={(t: string) => timeTicks.has(t) ? t : ""}
+          tickFormatter={(t: string) => tickLabels.has(t) ? t : ""}
         />
         <YAxis
           yAxisId="price"
@@ -84,11 +82,11 @@ function TrendChart({ idx }: { idx: MarketIndex }) {
         <YAxis
           yAxisId="pct"
           orientation="right"
-          domain={[pctMin - pctPadding, pctMax + pctPadding]}
+          domain={pctDomain}
           tick={{ fontSize: 10, fill: color }}
           tickLine={false}
           axisLine={false}
-          width={48}
+          width={52}
           tickFormatter={(v: number) => `${v > 0 ? "+" : ""}${v.toFixed(2)}%`}
         />
         <Tooltip
@@ -110,6 +108,8 @@ function TrendChart({ idx }: { idx: MarketIndex }) {
           isAnimationActive={false}
           connectNulls={false}
         />
+        {/* Invisible line to anchor the right YAxis */}
+        <Area yAxisId="pct" type="monotone" dataKey="pct" stroke="none" fill="none" dot={false} isAnimationActive={false} />
       </AreaChart>
     </ResponsiveContainer>
   );
