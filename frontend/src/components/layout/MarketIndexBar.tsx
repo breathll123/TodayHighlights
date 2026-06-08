@@ -25,25 +25,38 @@ function TrendChart({ idx }: { idx: MarketIndex }) {
   const color = isUp ? CHART_UP : CHART_DN;
   const prevClose = idx.trend.prev_close;
 
-  // Filter to trading hours only, add pct_change
-  const points = idx.trend.points
-    .filter((p) => {
-      const t = p.time;
-      // Remove pre-open (before 9:30) and lunch break (11:30-13:00)
-      if (t < "09:30") return false;
-      if (t >= "11:30" && t < "13:00") return false;
-      return true;
-    })
-    .map((p) => ({
-      ...p,
+  const raw = idx.trend.points;
+  // Split into morning (9:30-11:30) and afternoon (13:00-15:00), add gap marker
+  const morning = raw.filter((p) => p.time >= "09:30" && p.time <= "11:30");
+  const afternoon = raw.filter((p) => p.time >= "13:00" && p.time <= "15:00");
+
+  // Add a gap point (null price) between sessions to break the line
+  const chartData = [
+    ...morning.map((p) => ({
+      time: p.time,
+      price: p.price,
       pct: prevClose > 0 ? ((p.price - prevClose) / prevClose) * 100 : 0,
-    }));
+    })),
+    { time: "11:30", price: null as number | null, pct: null as number | null },
+    { time: "13:00", price: null as number | null, pct: null as number | null },
+    ...afternoon.map((p) => ({
+      time: p.time,
+      price: p.price,
+      pct: prevClose > 0 ? ((p.price - prevClose) / prevClose) * 100 : 0,
+    })),
+  ];
+
+  // Compute pct extremes
+  const pcts = chartData.filter((d) => d.pct != null).map((d) => d.pct!);
+  const pctMax = Math.max(...pcts, 0.01);
+  const pctMin = Math.min(...pcts, -0.01);
+  const pctPadding = Math.max(Math.abs(pctMax), Math.abs(pctMin)) * 0.3;
 
   const timeTicks = ["09:30", "10:00", "10:30", "11:00", "11:30", "13:00", "13:30", "14:00", "14:30", "15:00"];
 
   return (
     <ResponsiveContainer width="100%" height={220}>
-      <AreaChart data={points} margin={{ top: 4, right: 48, bottom: 0, left: 48 }}>
+      <AreaChart data={chartData} margin={{ top: 4, right: 52, bottom: 0, left: 48 }}>
         <defs>
           <linearGradient id="idx-grad" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor={color} stopOpacity={0.18} />
@@ -54,9 +67,8 @@ function TrendChart({ idx }: { idx: MarketIndex }) {
           dataKey="time"
           ticks={timeTicks}
           tick={{ fontSize: 10, fill: "#A1AAB5" }}
-          tickLine={false}
+          tickLine={{ stroke: "#242E3A" }}
           axisLine={{ stroke: "#242E3A" }}
-          interval={0}
         />
         <YAxis
           yAxisId="price"
@@ -71,22 +83,32 @@ function TrendChart({ idx }: { idx: MarketIndex }) {
         <YAxis
           yAxisId="pct"
           orientation="right"
-          domain={["auto", "auto"]}
-          tick={{ fontSize: 10, fill: "#A1AAB5" }}
+          domain={[pctMin - pctPadding, pctMax + pctPadding]}
+          tick={{ fontSize: 10, fill: color }}
           tickLine={false}
           axisLine={false}
-          width={44}
-          tickFormatter={(v: number) => `${v.toFixed(2)}%`}
+          width={48}
+          tickFormatter={(v: number) => `${v > 0 ? "+" : ""}${v.toFixed(2)}%`}
         />
         <Tooltip
           contentStyle={{ background: "#131A21", border: "1px solid #242E3A", borderRadius: 8, fontSize: 12 }}
           labelFormatter={(t) => `时间: ${t}`}
-          formatter={(v: unknown) => [typeof v === "number" ? v.toFixed(2) : String(v), ""]}
+          formatter={(v: unknown) => [typeof v === "number" ? v.toFixed(2) : "—", ""]}
         />
         {prevClose > 0 && (
           <ReferenceLine yAxisId="price" y={prevClose} stroke="#A1AAB5" strokeDasharray="4 3" strokeWidth={0.8} />
         )}
-        <Area yAxisId="price" type="monotone" dataKey="price" stroke={color} strokeWidth={1.5} fill="url(#idx-grad)" dot={false} isAnimationActive={false} />
+        <Area
+          yAxisId="price"
+          type="monotone"
+          dataKey="price"
+          stroke={color}
+          strokeWidth={1.5}
+          fill="url(#idx-grad)"
+          dot={false}
+          isAnimationActive={false}
+          connectNulls={false}
+        />
       </AreaChart>
     </ResponsiveContainer>
   );
