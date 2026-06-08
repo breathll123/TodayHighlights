@@ -69,13 +69,25 @@ class MediaCacheService:
         storage_root: Path | None = None,
         http_client: httpx.Client | None = None,
     ) -> None:
-        self.session = session
         self.storage_root = storage_root or DEFAULT_STORAGE_ROOT
         self.http_client = http_client or httpx.Client(
             timeout=10,
             headers={"User-Agent": "Mozilla/5.0 DailyHighlights/0.1"},
             follow_redirects=True,
         )
+        # Use an independent session so cache failures don't roll back the caller's transaction
+        self._caller_session = session
+        self._own_session: Session | None = None
+
+    def _ensure_session(self) -> Session:
+        if self._own_session is not None:
+            return self._own_session
+        # Use the caller's session bind to create a compatible session
+        bind = self._caller_session.get_bind()
+        from sqlalchemy.orm import sessionmaker
+        factory = sessionmaker(bind=bind)
+        self._own_session = factory()
+        return self._own_session
 
     def cache_remote_image(
         self,
@@ -92,8 +104,9 @@ class MediaCacheService:
         if not normalized or not is_safe_remote_url(normalized):
             return ""
 
+        sess = self._ensure_session()
         digest = url_hash(normalized)
-        existing = self.session.scalar(select(MediaAsset).where(MediaAsset.url_hash == digest))
+        existing = sess.scalar(select(MediaAsset).where(MediaAsset.url_hash == digest))
         now = datetime.utcnow()
         if existing and existing.status == "cached" and existing.local_path and Path(existing.local_path).exists():
             existing.last_used_at = now
@@ -114,7 +127,7 @@ class MediaCacheService:
         asset.metadata_json = {**(asset.metadata_json or {}), **(metadata or {})}
 
         if existing is None:
-            self.session.add(asset)
+            sess.add(asset)
 
         try:
             response = self.http_client.get(normalized)
@@ -139,10 +152,13 @@ class MediaCacheService:
             asset.status = "cached"
             asset.error_message = ""
             asset.last_fetched_at = now
-            self.session.flush()
+            sess.commit()
             return asset.public_path
         except Exception as exc:
             asset.status = "failed"
             asset.error_message = str(exc)[:500]
-            self.session.flush()
+            try:
+                sess.rollback()
+            except Exception:
+                pass
             return ""
