@@ -52,7 +52,7 @@ function TrendChart({ idx }: { idx: MarketIndex }) {
   const pctMin = Math.min(...pcts, -0.01);
   const pctPadding = Math.max(Math.abs(pctMax), Math.abs(pctMin)) * 0.3;
 
-  const timeTicks = ["09:30", "10:00", "10:30", "11:00", "11:30", "13:00", "13:30", "14:00", "14:30", "15:00"];
+  const timeTicks = new Set(["09:30", "10:00", "10:30", "11:00", "11:30", "13:00", "13:30", "14:00", "14:30", "15:00"]);
 
   return (
     <ResponsiveContainer width="100%" height={220}>
@@ -65,10 +65,11 @@ function TrendChart({ idx }: { idx: MarketIndex }) {
         </defs>
         <XAxis
           dataKey="time"
-          ticks={timeTicks}
-          tick={{ fontSize: 10, fill: "#A1AAB5" }}
-          tickLine={{ stroke: "#242E3A" }}
+          tick={{ fontSize: 9, fill: "#A1AAB5" }}
+          tickLine={false}
           axisLine={{ stroke: "#242E3A" }}
+          interval={0}
+          tickFormatter={(t: string) => timeTicks.has(t) ? t : ""}
         />
         <YAxis
           yAxisId="price"
