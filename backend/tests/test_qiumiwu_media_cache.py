@@ -1,4 +1,5 @@
 from app.services.adapters import qiumiwu
+from app.services.adapters.qiumiwu import set_media_cache
 
 
 class _FakeMediaCache:
@@ -40,8 +41,10 @@ def test_fetch_matches_adds_local_logo_paths(monkeypatch) -> None:
 
     monkeypatch.setattr(qiumiwu.httpx, "get", fake_get)
     media_cache = _FakeMediaCache()
+    set_media_cache(media_cache)
 
-    matches = qiumiwu.fetch_matches({}, 10, media_cache=media_cache)
+    qiumiwu.fetch_matches.cache_clear()
+    matches = qiumiwu.fetch_matches({}, 10)
 
     assert matches[0]["logo_league_local"] == "/api/public/media/local-1"
     assert matches[0]["logo_a_local"] == "/api/public/media/local-2"

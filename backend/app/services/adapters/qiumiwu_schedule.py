@@ -111,10 +111,12 @@ def _fill_logo_map(logo_map: dict[str, str], matches_info: list[dict]) -> dict[s
 
 
 @ttl_cache(600)
-def _cache_logo(media_cache, url: str, *, entity_type: str, entity_name: str, source_entity_id: str) -> str:
-    if not media_cache or not url:
+def _cache_logo(url: str, *, entity_type: str, entity_name: str, source_entity_id: str) -> str:
+    from app.services.adapters.qiumiwu import _media_cache
+    mc = _media_cache
+    if not mc or not url:
         return ""
-    return media_cache.cache_remote_image(
+    return mc.cache_remote_image(
         url,
         provider="qiumiwu",
         entity_type=entity_type,
@@ -125,7 +127,7 @@ def _cache_logo(media_cache, url: str, *, entity_type: str, entity_name: str, so
     )
 
 
-def fetch_competition_schedule(config: dict, limit: int, media_cache=None) -> list[dict]:
+def fetch_competition_schedule(config: dict, limit: int) -> list[dict]:
     """Fetch competition schedule from qiumiwu mobile HTML."""
     comp_name = (config or {}).get("competition", "男足世界杯")
     slug = _COMPETITIONS.get(comp_name)
@@ -201,15 +203,15 @@ def fetch_competition_schedule(config: dict, limit: int, media_cache=None) -> li
                     "url": f"https://m.qiumiwu.com/game/{match_id}" if match_id else "",
                     "league": stage_label,
                     "logo_league": league_logo,
-                    "logo_league_local": _cache_logo(media_cache, league_logo, entity_type="league", entity_name=comp_name, source_entity_id=str(match_id)),
+                    "logo_league_local": _cache_logo(league_logo, entity_type="league", entity_name=comp_name, source_entity_id=str(match_id)),
                     "status": 1,
                     "status_name": "未开赛",
                     "team_a": team_a,
                     "team_b": team_b,
                     "logo_a": logo_map.get(team_a, ""),
-                    "logo_a_local": _cache_logo(media_cache, logo_map.get(team_a, ""), entity_type="team", entity_name=team_a, source_entity_id=str(match_id)),
+                    "logo_a_local": _cache_logo(logo_map.get(team_a, ""), entity_type="team", entity_name=team_a, source_entity_id=str(match_id)),
                     "logo_b": logo_map.get(team_b, ""),
-                    "logo_b_local": _cache_logo(media_cache, logo_map.get(team_b, ""), entity_type="team", entity_name=team_b, source_entity_id=str(match_id)),
+                    "logo_b_local": _cache_logo(logo_map.get(team_b, ""), entity_type="team", entity_name=team_b, source_entity_id=str(match_id)),
                     "score_a": "",
                     "score_b": "",
                     "minute": "",

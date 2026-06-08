@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from app.models.entities import MediaAsset
 
 
-DEFAULT_STORAGE_ROOT = Path(__file__).resolve().parents[3] / "storage" / "media"
+DEFAULT_STORAGE_ROOT = Path(__file__).resolve().parents[2] / "storage" / "media"
 ALLOWED_CONTENT_TYPES = {
     "image/png": ".png",
     "image/jpeg": ".jpg",
