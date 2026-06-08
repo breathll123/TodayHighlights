@@ -785,6 +785,15 @@ class LoginRequest(BaseModel):
 def publish_page(route: str, session: Session = Depends(get_session)) -> dict:
     route = "/" + route if not route.startswith("/") else route
 
+    # Null out ai_block_analyses references before deleting published blocks
+    old_ids = session.scalars(
+        select(PageBlock.id).where(PageBlock.page_route == route, PageBlock.status == "published")
+    ).all()
+    if old_ids:
+        session.execute(
+            delete(AIBlockAnalysis).where(AIBlockAnalysis.block_id.in_(old_ids))
+        )
+
     session.execute(
         delete(PageBlock).where(
             PageBlock.page_route == route,
