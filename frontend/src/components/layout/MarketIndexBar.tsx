@@ -23,21 +23,44 @@ function TrendChart({ idx }: { idx: MarketIndex }) {
   }
   const isUp = idx.change_pct >= 0;
   const color = isUp ? CHART_UP : CHART_DN;
-  const points = idx.trend.points;
   const prevClose = idx.trend.prev_close;
 
+  // Filter to trading hours only, add pct_change
+  const points = idx.trend.points
+    .filter((p) => {
+      const t = p.time;
+      // Remove pre-open (before 9:30) and lunch break (11:30-13:00)
+      if (t < "09:30") return false;
+      if (t >= "11:30" && t < "13:00") return false;
+      return true;
+    })
+    .map((p) => ({
+      ...p,
+      pct: prevClose > 0 ? ((p.price - prevClose) / prevClose) * 100 : 0,
+    }));
+
+  const timeTicks = ["09:30", "10:00", "10:30", "11:00", "11:30", "13:00", "13:30", "14:00", "14:30", "15:00"];
+
   return (
-    <ResponsiveContainer width="100%" height={208}>
-      <AreaChart data={points} margin={{ top: 4, right: 44, bottom: 0, left: 0 }}>
+    <ResponsiveContainer width="100%" height={220}>
+      <AreaChart data={points} margin={{ top: 4, right: 48, bottom: 0, left: 48 }}>
         <defs>
           <linearGradient id="idx-grad" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor={color} stopOpacity={0.18} />
             <stop offset="100%" stopColor={color} stopOpacity={0} />
           </linearGradient>
         </defs>
-        <XAxis dataKey="time" hide />
+        <XAxis
+          dataKey="time"
+          ticks={timeTicks}
+          tick={{ fontSize: 10, fill: "#A1AAB5" }}
+          tickLine={false}
+          axisLine={{ stroke: "#242E3A" }}
+          interval={0}
+        />
         <YAxis
-          orientation="right"
+          yAxisId="price"
+          orientation="left"
           domain={["auto", "auto"]}
           tick={{ fontSize: 10, fill: "#A1AAB5" }}
           tickLine={false}
@@ -45,15 +68,25 @@ function TrendChart({ idx }: { idx: MarketIndex }) {
           width={44}
           tickFormatter={(v: number) => v.toFixed(0)}
         />
+        <YAxis
+          yAxisId="pct"
+          orientation="right"
+          domain={["auto", "auto"]}
+          tick={{ fontSize: 10, fill: "#A1AAB5" }}
+          tickLine={false}
+          axisLine={false}
+          width={44}
+          tickFormatter={(v: number) => `${v.toFixed(2)}%`}
+        />
         <Tooltip
           contentStyle={{ background: "#131A21", border: "1px solid #242E3A", borderRadius: 8, fontSize: 12 }}
           labelFormatter={(t) => `时间: ${t}`}
-          formatter={(v: unknown) => [Number(v).toFixed(2), "价格"]}
+          formatter={(v: unknown) => [typeof v === "number" ? v.toFixed(2) : String(v), ""]}
         />
         {prevClose > 0 && (
-          <ReferenceLine y={prevClose} stroke="#A1AAB5" strokeDasharray="4 3" strokeWidth={0.8} />
+          <ReferenceLine yAxisId="price" y={prevClose} stroke="#A1AAB5" strokeDasharray="4 3" strokeWidth={0.8} />
         )}
-        <Area type="monotone" dataKey="price" stroke={color} strokeWidth={1.5} fill="url(#idx-grad)" dot={false} isAnimationActive={false} />
+        <Area yAxisId="price" type="monotone" dataKey="price" stroke={color} strokeWidth={1.5} fill="url(#idx-grad)" dot={false} isAnimationActive={false} />
       </AreaChart>
     </ResponsiveContainer>
   );
