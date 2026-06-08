@@ -123,6 +123,40 @@ class Highlight(TimestampMixin, Base):
     raw_item: Mapped[RawItem] = relationship(back_populates="highlights")
 
 
+class MediaAsset(TimestampMixin, Base):
+    __tablename__ = "media_assets"
+    __table_args__ = (
+        UniqueConstraint("url_hash", name="uq_media_assets_url_hash"),
+        Index("ix_media_assets_status_asset", "status", "asset_type"),
+        Index("ix_media_assets_entity", "entity_type", "entity_name"),
+        Index("ix_media_assets_provider_last_used", "provider", "last_used_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    source_url: Mapped[str] = mapped_column(String(1000), nullable=False)
+    normalized_url: Mapped[str] = mapped_column(String(1000), nullable=False)
+    url_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    provider: Mapped[str] = mapped_column(String(80), default="", nullable=False)
+    asset_type: Mapped[str] = mapped_column(String(40), default="image", nullable=False)
+    entity_type: Mapped[str] = mapped_column(String(40), default="", nullable=False)
+    entity_name: Mapped[str] = mapped_column(String(160), default="", nullable=False)
+    source_entity_id: Mapped[str] = mapped_column(String(120), default="", nullable=False)
+    original_filename: Mapped[str] = mapped_column(String(255), default="", nullable=False)
+    content_type: Mapped[str] = mapped_column(String(120), default="", nullable=False)
+    extension: Mapped[str] = mapped_column(String(16), default="", nullable=False)
+    local_path: Mapped[str] = mapped_column(String(500), default="", nullable=False)
+    public_path: Mapped[str] = mapped_column(String(500), default="", nullable=False)
+    file_size: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    width: Mapped[int | None] = mapped_column(Integer)
+    height: Mapped[int | None] = mapped_column(Integer)
+    status: Mapped[str] = mapped_column(String(30), default="pending", nullable=False)
+    fetch_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    last_fetched_at: Mapped[datetime | None] = mapped_column(DateTime)
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime)
+    error_message: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    metadata_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+
+
 class User(TimestampMixin, Base):
     __tablename__ = "users"
     __table_args__ = (
