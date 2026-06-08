@@ -1,9 +1,11 @@
 from datetime import datetime
+from pathlib import Path
 
 from sqlalchemy import inspect
 
 from app.core.database import get_session
 from app.models.entities import MediaAsset
+from app.services.media_cache import MediaCacheService, is_safe_remote_url, url_hash
 
 
 def test_media_assets_table_has_rich_metadata_columns(client) -> None:
@@ -51,3 +53,54 @@ def test_media_asset_model_can_store_metadata(client) -> None:
     saved = session.query(MediaAsset).filter_by(url_hash="abc123").one()
     assert saved.entity_name == "阿森纳"
     assert saved.metadata_json == {"source": "test"}
+
+
+def test_is_safe_remote_url_blocks_internal_hosts() -> None:
+    assert is_safe_remote_url("https://file.qiumiwu.com/team/a.png") is True
+    assert is_safe_remote_url("http://127.0.0.1/a.png") is False
+    assert is_safe_remote_url("http://localhost/a.png") is False
+    assert is_safe_remote_url("http://192.168.1.2/a.png") is False
+
+
+class _FakeImageResponse:
+    headers = {"content-type": "image/png"}
+    content = b"\x89PNG\r\n\x1a\nfake"
+
+    def raise_for_status(self) -> None:
+        return None
+
+
+class _FakeClient:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def get(self, url: str):
+        self.calls += 1
+        return _FakeImageResponse()
+
+
+def test_media_cache_downloads_once_and_reuses_asset(client, tmp_path: Path) -> None:
+    session = next(client.app.dependency_overrides[get_session]())
+    fake_client = _FakeClient()
+    service = MediaCacheService(session, storage_root=tmp_path, http_client=fake_client)
+
+    first = service.cache_remote_image(
+        "https://file.qiumiwu.com/team/a.png",
+        provider="qiumiwu",
+        entity_type="team",
+        entity_name="阿森纳",
+        source_entity_id="match_1",
+    )
+    second = service.cache_remote_image(
+        "https://file.qiumiwu.com/team/a.png",
+        provider="qiumiwu",
+        entity_type="team",
+        entity_name="阿森纳",
+        source_entity_id="match_2",
+    )
+
+    assert first == second
+    assert first.startswith("/api/public/media/")
+    assert fake_client.calls == 1
+    asset_hash = url_hash("https://file.qiumiwu.com/team/a.png")
+    assert (tmp_path / "football" / f"{asset_hash}.png").exists()
