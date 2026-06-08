@@ -9,7 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.database import get_session
-from app.models.entities import AITopicSummary, Highlight, Topic
+from app.models.entities import AITopicSummary, Highlight, MediaAsset, Topic
 from app.schemas.public import AITopicSummaryItemRead, AITopicSummaryRead, HighlightRead, TopicRead
 from app.services.adapters.eastmoney import fetch_index_trends
 from app.services.blocks import get_page_blocks
@@ -82,6 +82,16 @@ def get_market_indices() -> list[dict]:
         }
         for idx in indices
     ]
+
+
+@router.get("/media/{url_hash}")
+def get_cached_media(url_hash: str, session: Session = Depends(get_session)):
+    asset = session.scalar(
+        select(MediaAsset).where(MediaAsset.url_hash == url_hash, MediaAsset.status == "cached")
+    )
+    if asset is None or not asset.local_path or not Path(asset.local_path).exists():
+        raise HTTPException(status_code=404, detail="Media not found")
+    return FileResponse(asset.local_path, media_type=asset.content_type or "application/octet-stream")
 
 
 _IMAGE_CLIENT = httpx.Client(timeout=10, headers={"User-Agent": "Mozilla/5.0", "Referer": "https://www.qiumiwu.com/"})

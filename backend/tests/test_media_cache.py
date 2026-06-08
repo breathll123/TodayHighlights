@@ -104,3 +104,35 @@ def test_media_cache_downloads_once_and_reuses_asset(client, tmp_path: Path) -> 
     assert fake_client.calls == 1
     asset_hash = url_hash("https://file.qiumiwu.com/team/a.png")
     assert (tmp_path / "football" / f"{asset_hash}.png").exists()
+
+
+def test_public_media_route_serves_cached_file(client, tmp_path: Path) -> None:
+    session = next(client.app.dependency_overrides[get_session]())
+    media_file = tmp_path / "football" / "abc123.png"
+    media_file.parent.mkdir(parents=True)
+    media_file.write_bytes(b"\x89PNG\r\n\x1a\nfake")
+    session.add(
+        MediaAsset(
+            source_url="https://file.qiumiwu.com/team/a.png",
+            normalized_url="https://file.qiumiwu.com/team/a.png",
+            url_hash="abc123",
+            provider="qiumiwu",
+            asset_type="football_logo",
+            entity_type="team",
+            entity_name="阿森纳",
+            content_type="image/png",
+            extension=".png",
+            local_path=str(media_file),
+            public_path="/api/public/media/abc123",
+            file_size=12,
+            status="cached",
+            metadata_json={},
+        )
+    )
+    session.commit()
+
+    response = client.get("/api/public/media/abc123")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("image/png")
+    assert response.content.startswith(b"\x89PNG")
