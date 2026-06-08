@@ -38,6 +38,7 @@ function TrendChart({ idx }: { idx: MarketIndex }) {
       pct: prevClose > 0 ? ((p.price - prevClose) / prevClose) * 100 : 0,
     })),
     { time: "11:30", price: null as number | null, pct: null as number | null },
+    { time: "13:00", price: null as number | null, pct: null as number | null },
     ...afternoon.map((p) => ({
       time: p.time,
       price: p.price,
@@ -50,7 +51,11 @@ function TrendChart({ idx }: { idx: MarketIndex }) {
   const pctAbsMax = Math.max(Math.abs(Math.max(...pcts, 0)), Math.abs(Math.min(...pcts, 0)), 0.1);
   const pctDomain: [number, number] = [-pctAbsMax * 1.3, pctAbsMax * 1.3];
 
-  const tickLabels = new Set(["09:30", "10:00", "10:30", "11:00", "13:00", "13:30", "14:00", "14:30", "15:00"]);
+  const tickLabels: Record<string, string> = {
+    "09:30": "09:30", "10:00": "10:00", "10:30": "10:30", "11:00": "11:00",
+    "11:30": "11:30/13:00",
+    "13:00": "13:00", "13:30": "13:30", "14:00": "14:00", "14:30": "14:30", "15:00": "15:00",
+  };
 
   return (
     <ResponsiveContainer width="100%" height={220}>
@@ -67,7 +72,7 @@ function TrendChart({ idx }: { idx: MarketIndex }) {
           tickLine={false}
           axisLine={{ stroke: "#242E3A" }}
           interval={0}
-          tickFormatter={(t: string) => tickLabels.has(t) ? t : ""}
+          tickFormatter={(t: string) => tickLabels[t] ?? ""}
         />
         <YAxis
           yAxisId="price"
@@ -91,7 +96,7 @@ function TrendChart({ idx }: { idx: MarketIndex }) {
         />
         <Tooltip
           contentStyle={{ background: "#131A21", border: "1px solid #242E3A", borderRadius: 8, fontSize: 12 }}
-          labelFormatter={(t) => `时间: ${t}`}
+          labelFormatter={(t) => `${t}`}
           formatter={(v: unknown) => [typeof v === "number" ? v.toFixed(2) : "—", ""]}
         />
         {prevClose > 0 && (
