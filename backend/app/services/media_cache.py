@@ -79,15 +79,17 @@ class MediaCacheService:
         self._caller_session = session
         self._own_session: Session | None = None
 
-    def _ensure_session(self) -> Session:
+    def _ensure_session(self) -> Session | None:
         if self._own_session is not None:
             return self._own_session
-        # Use the caller's session bind to create a compatible session
-        bind = self._caller_session.get_bind()
-        from sqlalchemy.orm import sessionmaker
-        factory = sessionmaker(bind=bind)
-        self._own_session = factory()
-        return self._own_session
+        try:
+            bind = self._caller_session.get_bind()
+            from sqlalchemy.orm import sessionmaker
+            factory = sessionmaker(bind=bind)
+            self._own_session = factory()
+            return self._own_session
+        except Exception:
+            return None
 
     def cache_remote_image(
         self,
@@ -105,6 +107,8 @@ class MediaCacheService:
             return ""
 
         sess = self._ensure_session()
+        if sess is None:
+            return ""  # can't create session — skip caching, caller still gets remote URL
         digest = url_hash(normalized)
         existing = sess.scalar(select(MediaAsset).where(MediaAsset.url_hash == digest))
         now = datetime.utcnow()
