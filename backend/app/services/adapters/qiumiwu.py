@@ -242,6 +242,8 @@ def _fetch_league(league_name: str, slug: str) -> list[dict]:
                 break
 
             group_letter = re.match(r"^([A-Z])组$", group_title)
+            if not group_letter and group_league:
+                continue  # Skip non-group sections only in group tournaments (e.g. "第3名队伍排名")
             group_label = group_letter.group(1) if group_letter else ""
 
             for m in re.finditer(
@@ -280,29 +282,62 @@ def _fetch_league(league_name: str, slug: str) -> list[dict]:
                     "source_type": "qiumiwu_standings",
                 })
 
-        # Attach stats from type="info" section
-        info_start = tab_html.find('type="info"')
-        if info_start >= 0:
-            info_html = tab_html[info_start:]
-            stat_values = re.findall(
-                r'<span[^>]*>\s*([0-9./\-]+[%]?)\s*</span>',
+        # Parse stats from each group's own type="info" block
+        for gi in range(0, len(blocks), 2):
+            group_title = blocks[gi].strip()
+            block_html = blocks[gi + 1]
+            is_group = bool(re.match(r"^([A-Z])组$", group_title))
+            if is_group:
+                # Skip the extra "第3名队伍排名" block
+                pass
+            elif not is_group and group_league:
+                continue  # In group tournaments, skip non-letter blocks
+            # else: regular league — process the single block
+            info_start = block_html.find('type="info"')
+            if info_start < 0:
+                continue
+            info_html = block_html[info_start:]
+            # Find stat rows: each <div class="stats__table__list"> with exactly 10 numeric/- spans
+            stat_blocks = re.findall(
+                r'<div class="stats__table__list">((?:\s*<span[^>]*>\s*[0-9./\-%]+\s*</span>\s*)+)</div>',
                 info_html,
             )
-            stat_idx = 0
-            for item in result:
-                if stat_idx + 10 <= len(stat_values):
-                    item["gp"] = stat_values[stat_idx]
-                    item["pts"] = stat_values[stat_idx + 1]
-                    item["wdl"] = stat_values[stat_idx + 2]
-                    item["gf"] = stat_values[stat_idx + 3]
-                    item["ga"] = stat_values[stat_idx + 4]
-                    item["gd"] = stat_values[stat_idx + 5]
-                    item["score"] = int(stat_values[stat_idx + 1]) if stat_values[stat_idx + 1].strip("- ").isdigit() else 0
-                    # Update summary
-                    parts = item["summary"].split(" · ")
-                    group_part = parts[1] if len(parts) > 1 else ""
-                    item["summary"] = f"{league_name} · {group_part}{season} · {item['pts']}分 {item['wdl']}"
-                    stat_idx += 10
+            stat_values_for_group = []
+            for sb in stat_blocks:
+                vals = re.findall(r'<span[^>]*>\s*([0-9./\-%]+)\s*</span>', sb)
+                if len(vals) >= 10:
+                    stat_values_for_group.append(vals[:10])
+
+            # Filter header row (first span value is non-numeric like "场次" is not matched)
+            # Actually the regex already filters non-numeric, so stat_blocks only has data rows
+
+            # Match stats to teams in this group/block
+            if is_group:
+                gl = re.match(r"^([A-Z])组$", group_title).group(1)
+                block_teams = [item for item in result if item.get("group") == gl]
+            else:
+                block_teams = [item for item in result if not item.get("group")]
+            group_teams = block_teams
+            for ti, team_item in enumerate(group_teams):
+                if ti < len(stat_values_for_group):
+                    sv = stat_values_for_group[ti]
+                    team_item["gp"] = sv[0].strip()
+                    team_item["pts"] = sv[1].strip() if sv[1].strip().replace("-", "").replace(".", "").isdigit() else "0"
+                    team_item["wdl"] = sv[2].strip()
+                    team_item["gf"] = sv[3].strip()
+                    team_item["ga"] = sv[4].strip()
+                    team_item["gd"] = sv[5].strip()
+                    pts_val = team_item["pts"].replace("-", "0").replace("%", "")
+                    try:
+                        team_item["score"] = int(float(pts_val))
+                    except ValueError:
+                        team_item["score"] = 0
+
+        # Update summaries with stats
+        for item in result:
+            g = item.get("group", "")
+            gd = f"{g}组 · " if g else ""
+            item["summary"] = f"{item['league']} · {gd}{season} · {item.get('pts','0')}分 {item.get('wdl','—')}"
 
         return result
 
