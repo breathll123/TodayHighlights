@@ -60,6 +60,16 @@ def test_second_bootstrap_is_rejected(client):
     assert response.json()["detail"] == "Administrator already initialized"
 
 
+def test_bootstrap_rejects_whitespace_only_username(client):
+    response = client.post(
+        "/api/auth/bootstrap-admin",
+        json={"username": "  ", "email": "", "password": "secret123"},
+    )
+
+    assert response.status_code == 422
+    assert client.get("/api/auth/setup-status").json() == {"setup_required": True}
+
+
 def test_public_registration_route_is_removed(client):
     response = client.post(
         "/api/auth/register",

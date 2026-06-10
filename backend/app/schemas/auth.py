@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class RegisterRequest(BaseModel):
@@ -6,10 +6,20 @@ class RegisterRequest(BaseModel):
     email: str = Field(default="", max_length=160)
     password: str = Field(min_length=6, max_length=128)
 
+    @field_validator("username", "email", mode="before")
+    @classmethod
+    def strip_text_fields(cls, value: str) -> str:
+        return value.strip() if isinstance(value, str) else value
+
 
 class LoginRequest(BaseModel):
     login: str = Field(min_length=2, max_length=160)
     password: str = Field(min_length=6, max_length=128)
+
+    @field_validator("login", mode="before")
+    @classmethod
+    def strip_login(cls, value: str) -> str:
+        return value.strip() if isinstance(value, str) else value
 
 
 class UserRead(BaseModel):
