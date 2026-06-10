@@ -21,13 +21,58 @@ def test_users_table_columns_exist(client):
     }.issubset(columns)
 
 
-def test_register_login_and_me(client):
-    register = client.post(
+def test_setup_status_requires_bootstrap_for_empty_database(client):
+    response = client.get("/api/auth/setup-status")
+
+    assert response.status_code == 200
+    assert response.json() == {"setup_required": True}
+
+
+def test_bootstrap_admin_creates_first_admin_and_closes_setup(client):
+    response = client.post(
+        "/api/auth/bootstrap-admin",
+        json={"username": "owner", "email": "owner@example.com", "password": "secret123"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["user"]["role"] == "admin"
+    assert client.get("/api/auth/setup-status").json() == {"setup_required": False}
+
+    token = response.json()["token"]
+    me = client.get("/api/auth/me", headers={"Authorization": f"Bearer {token}"})
+    assert me.status_code == 200
+    assert me.json()["username"] == "owner"
+    assert me.json()["role"] == "admin"
+
+
+def test_second_bootstrap_is_rejected(client):
+    payload = {"username": "owner", "email": "", "password": "secret123"}
+    assert client.post("/api/auth/bootstrap-admin", json=payload).status_code == 200
+
+    response = client.post(
+        "/api/auth/bootstrap-admin",
+        json={"username": "other", "email": "", "password": "secret456"},
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "Administrator already initialized"
+
+
+def test_public_registration_route_is_removed(client):
+    response = client.post(
         "/api/auth/register",
+        json={"username": "alice", "email": "", "password": "secret123"},
+    )
+
+    assert response.status_code == 404
+
+
+def test_login_and_me(client):
+    bootstrap = client.post(
+        "/api/auth/bootstrap-admin",
         json={"username": "alice", "email": "alice@example.com", "password": "secret123"},
     )
-    assert register.status_code == 200
-    assert register.json()["user"]["role"] == "user"
+    assert bootstrap.status_code == 200
 
     login = client.post("/api/auth/login", json={"login": "alice", "password": "secret123"})
     assert login.status_code == 200
@@ -36,11 +81,14 @@ def test_register_login_and_me(client):
     me = client.get("/api/auth/me", headers={"Authorization": f"Bearer {token}"})
     assert me.status_code == 200
     assert me.json()["username"] == "alice"
-    assert me.json()["role"] == "user"
+    assert me.json()["role"] == "admin"
 
 
 def test_disabled_user_cannot_login(client):
-    client.post("/api/auth/register", json={"username": "bob", "email": "", "password": "secret123"})
+    client.post(
+        "/api/auth/bootstrap-admin",
+        json={"username": "bob", "email": "", "password": "secret123"},
+    )
     session = next(client.app.dependency_overrides[get_session]())
     user = session.query(User).filter(User.username == "bob").one()
     user.status = "disabled"

@@ -23,3 +23,7 @@ class UserRead(BaseModel):
 class AuthResponse(BaseModel):
     token: str
     user: UserRead
+
+
+class SetupStatusResponse(BaseModel):
+    setup_required: bool
