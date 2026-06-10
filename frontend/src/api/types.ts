@@ -270,6 +270,10 @@ export interface AuthResponse {
   user: AuthUser;
 }
 
+export interface SetupStatus {
+  setup_required: boolean;
+}
+
 export interface AIPromptTemplate {
   id: number;
   topic_slug: string;

@@ -1,5 +1,5 @@
 import axios from "axios";
-import type { AdminUser, AIJobsStats, AIModelConfig, AIModelConfigWrite, AIOpsStats, AIGenerationJob, AIJobListResponse, AIPromptTemplate, AIPromptTemplateWrite, AITokenUsageDetail, AITokenUsageListResponse, AITopicSummaryResponse, AIUsageStats, AuthResponse, AuthUser, Block, BlockAIAnalysis, CrawlJob, Highlight, JobListResponse, MarketIndex, PageBlocksResponse, Source, Topic } from "./types";
+import type { AdminUser, AIJobsStats, AIModelConfig, AIModelConfigWrite, AIOpsStats, AIGenerationJob, AIJobListResponse, AIPromptTemplate, AIPromptTemplateWrite, AITokenUsageDetail, AITokenUsageListResponse, AITopicSummaryResponse, AIUsageStats, AuthResponse, AuthUser, Block, BlockAIAnalysis, CrawlJob, Highlight, JobListResponse, MarketIndex, PageBlocksResponse, SetupStatus, Source, Topic } from "./types";
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE ?? "http://localhost:8000",
@@ -11,7 +11,9 @@ api.interceptors.response.use(
   (res) => res,
   (err) => {
     const message = err.response?.data?.detail ?? err.message;
-    return Promise.reject(new Error(message));
+    const error = new Error(message) as Error & { status?: number };
+    error.status = err.response?.status;
+    return Promise.reject(error);
   }
 );
 
@@ -33,8 +35,12 @@ export function fetchPageBlocks(route: string): Promise<PageBlocksResponse> {
 
 // --- Auth APIs ---
 
-export function registerUser(data: { username: string; email: string; password: string }): Promise<AuthResponse> {
-  return api.post<AuthResponse>("/api/auth/register", data).then((r) => r.data);
+export function fetchSetupStatus(): Promise<SetupStatus> {
+  return api.get<SetupStatus>("/api/auth/setup-status").then((r) => r.data);
+}
+
+export function bootstrapAdmin(data: { username: string; email: string; password: string }): Promise<AuthResponse> {
+  return api.post<AuthResponse>("/api/auth/bootstrap-admin", data).then((r) => r.data);
 }
 
 export function loginUser(data: { login: string; password: string }): Promise<AuthResponse> {
