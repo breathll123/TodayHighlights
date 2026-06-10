@@ -1,7 +1,9 @@
 from sqlalchemy import inspect
 
+import app.main as main_module
 from app.core.database import get_session
 from app.models.entities import User
+from app.services.auth_service import create_user, verify_password
 
 
 def test_users_table_columns_exist(client):
@@ -97,3 +99,75 @@ def test_disabled_user_cannot_login(client):
     response = client.post("/api/auth/login", json={"login": "bob", "password": "secret123"})
     assert response.status_code == 403
     assert response.json()["detail"] == "User disabled"
+
+
+def test_legacy_default_admin_does_not_close_setup(client):
+    session = next(client.app.dependency_overrides[get_session]())
+    create_user(session, "admin", "", "admin123", role="admin")
+    session.commit()
+
+    response = client.get("/api/auth/setup-status")
+
+    assert response.status_code == 200
+    assert response.json() == {"setup_required": True}
+
+
+def test_bootstrap_replaces_legacy_admin_in_place(client):
+    session = next(client.app.dependency_overrides[get_session]())
+    legacy = create_user(session, "admin", "", "admin123", role="admin")
+    session.commit()
+    legacy_id = legacy.id
+
+    response = client.post(
+        "/api/auth/bootstrap-admin",
+        json={"username": "admin", "email": "owner@example.com", "password": "new-secret"},
+    )
+
+    assert response.status_code == 200
+    session.expire_all()
+    replaced = session.get(User, legacy_id)
+    assert replaced is not None
+    assert replaced.email == "owner@example.com"
+    assert verify_password("new-secret", replaced.password_hash)
+    assert not verify_password("admin123", replaced.password_hash)
+
+
+def test_bootstrap_disables_legacy_admin_when_using_new_username(client):
+    session = next(client.app.dependency_overrides[get_session]())
+    legacy = create_user(session, "admin", "", "admin123", role="admin")
+    session.commit()
+    legacy_id = legacy.id
+
+    response = client.post(
+        "/api/auth/bootstrap-admin",
+        json={"username": "owner", "email": "", "password": "new-secret"},
+    )
+
+    assert response.status_code == 200
+    session.expire_all()
+    replaced = session.get(User, legacy_id)
+    assert replaced is not None
+    assert replaced.username == f"__legacy_admin_{legacy_id}"
+    assert replaced.status == "disabled"
+    assert response.json()["user"]["username"] == "owner"
+
+
+def test_changed_admin_password_is_treated_as_initialized(client):
+    session = next(client.app.dependency_overrides[get_session]())
+    create_user(session, "admin", "", "changed-secret", role="admin")
+    session.commit()
+
+    response = client.get("/api/auth/setup-status")
+
+    assert response.status_code == 200
+    assert response.json() == {"setup_required": False}
+
+
+def test_legacy_admin_login_route_is_removed(client):
+    response = client.post("/api/admin/login", json={"password": "admin123"})
+
+    assert response.status_code == 404
+
+
+def test_application_startup_has_no_database_seed_function():
+    assert not hasattr(main_module, "_seed_defaults")

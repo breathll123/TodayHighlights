@@ -6,7 +6,7 @@ from pydantic import BaseModel
 
 from fastapi import Request
 
-from app.core.auth import create_admin_token, get_current_user, verify_admin
+from app.core.auth import get_current_user, verify_admin
 from app.core.config import settings
 from app.core.crypto import CryptoService
 from app.core.database import get_session
@@ -22,7 +22,6 @@ from app.services.jobs import run_crawl_job
 from app.services.settings import get_plain_setting, get_secret_setting, set_plain_setting, set_secret_setting
 
 router = APIRouter(prefix="/api/admin", tags=["admin"], dependencies=[Depends(verify_admin)])
-auth_router = APIRouter(prefix="/api/admin", tags=["auth"])
 
 
 @router.get("/sources")
@@ -777,10 +776,6 @@ def delete_topic(topic_id: int, session: Session = Depends(get_session)) -> dict
     return {"deleted": True}
 
 
-class LoginRequest(BaseModel):
-    password: str
-
-
 @router.post("/pages/{route:path}/publish")
 def publish_page(route: str, session: Session = Depends(get_session)) -> dict:
     route = "/" + route if not route.startswith("/") else route
@@ -849,9 +844,3 @@ def publish_page(route: str, session: Session = Depends(get_session)) -> dict:
 
     session.commit()
     return {"published": True, "blocks": count}
-
-
-@auth_router.post("/login")
-def login(payload: LoginRequest, session: Session = Depends(get_session)) -> dict:
-    token = create_admin_token(payload.password, session)
-    return {"token": token}
