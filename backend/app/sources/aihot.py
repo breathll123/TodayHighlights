@@ -8,7 +8,7 @@ import httpx
 from app.core.config import SH_TZ
 from app.sources.base import RawItemDraft
 
-_headers = {"User-Agent": "Mozilla/5.0 DailyHighlights/0.1", "Accept": "application/xml"}
+_headers = {"User-Agent": "Mozilla/5.0 TodayHighlights/0.1", "Accept": "application/xml"}
 
 
 class AihotAdapter:

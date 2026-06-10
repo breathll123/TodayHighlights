@@ -32,7 +32,7 @@ class SummarizerClient:
                 {
                     "role": "user",
                     "content": (
-                        "基于以下雪球内容生成每日看点。输出字段：title, summary, "
+                        "基于以下雪球内容生成今日看点。输出字段：title, summary, "
                         "related_symbols, tags, score。"
                         f"\n标题：{title}\n正文：{body}"
                     ),

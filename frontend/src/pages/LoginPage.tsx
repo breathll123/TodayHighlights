@@ -45,7 +45,7 @@ export function LoginPage() {
             <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl border border-primary/25 bg-primary/10 text-primary">
               <RadioTower className="h-5 w-5" aria-hidden="true" />
             </div>
-            <h1 className="text-2xl font-semibold">DataFlow</h1>
+            <h1 className="text-2xl font-semibold">今日看点</h1>
             <p className="mt-2 text-sm leading-6 text-muted-foreground">
               {mode === "register" ? "注册新账户" : "多主题实时信息聚合平台"}
             </p>

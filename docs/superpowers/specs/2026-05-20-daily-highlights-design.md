@@ -1,4 +1,4 @@
-# Daily Highlights Design
+# 今日看点 Design
 
 ## Context
 

@@ -1,5 +1,8 @@
 import { BrainCircuit, AlertTriangle, Lightbulb } from "lucide-react";
+import { motion } from "framer-motion";
 import type { AITopicSummaryResponse } from "@/api/types";
+
+const easeOutQuint = [0.22, 1, 0.36, 1] as const;
 
 interface Props {
   summary: AITopicSummaryResponse;
@@ -12,11 +15,25 @@ function formatTime(iso?: string | null): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
+const itemVariants = {
+  hidden: { opacity: 0, x: -12 },
+  visible: (i: number) => ({
+    opacity: 1,
+    x: 0,
+    transition: { duration: 0.35, ease: easeOutQuint, delay: i * 0.06 },
+  }),
+};
+
 export function AITopicSummary({ summary }: Props) {
   if (!summary || !summary.items || summary.items.length === 0) return null;
 
   return (
-    <div className="rounded-xl border border-primary/20 bg-primary/5 shadow-sm mb-6">
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.35, ease: easeOutQuint }}
+      className="rounded-xl border border-primary/20 bg-primary/5 shadow-sm mb-6"
+    >
       <div className="px-5 py-3.5 border-b border-primary/15 flex items-center justify-between gap-3">
         <div className="flex items-center gap-2.5 min-w-0">
           <BrainCircuit className="h-5 w-5 text-primary shrink-0" />
@@ -32,7 +49,14 @@ export function AITopicSummary({ summary }: Props) {
 
       <div className="px-5 py-3.5 space-y-3">
         {summary.items.map((item, i) => (
-          <div key={i} className="flex items-start gap-3 group">
+          <motion.div
+            key={i}
+            custom={i}
+            variants={itemVariants}
+            initial="hidden"
+            animate="visible"
+            className="flex items-start gap-3 group"
+          >
             <span className="shrink-0 mt-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-primary/10 text-[10px] font-bold text-primary">
               {i + 1}
             </span>
@@ -55,13 +79,13 @@ export function AITopicSummary({ summary }: Props) {
                 )}
               </div>
             </div>
-          </div>
+          </motion.div>
         ))}
       </div>
 
-      <div className="px-5 py-2 border-t border-primary/10 text-[10px] text-muted-foreground/50 text-right">
+            <div className="px-5 py-2 border-t border-primary/10 text-[10px] text-muted-foreground/50 text-right">
         AI 摘要，仅供信息参考
       </div>
-    </div>
+    </motion.div>
   );
 }

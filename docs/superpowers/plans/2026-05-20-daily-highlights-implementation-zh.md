@@ -1,8 +1,8 @@
-# 每日看点 MVP 实现计划
+# 今日看点 MVP 实现计划
 
 > **面向 agentic 开发者：** 必须使用子技能：superpowers:subagent-driven-development（推荐）或 superpowers:executing-plans 来逐任务实现此计划。步骤使用复选框 (`- [ ]`) 语法进行跟踪。
 
-**目标：** 构建一个基于雪球股票的每日看点系统的全栈 MVP，包含手动 Cookie 配置、爬取任务、AI 摘要、MySQL 持久化、React 公开页面和 React 管理后台页面。
+**目标：** 构建一个基于雪球股票的今日看点系统的全栈 MVP，包含手动 Cookie 配置、爬取任务、AI 摘要、MySQL 持久化、React 公开页面和 React 管理后台页面。
 
 **架构：** 采用模块化单体架构：一个 FastAPI 后端负责 API、数据库访问、雪球适配器、调度器和摘要器接口；一个 Vite React 应用负责公开阅读和管理后台工作流。将爬虫、摘要器、内容和后台模块分开，以便后续可将其他网站作为新的适配器加入。
 
@@ -150,7 +150,7 @@ def test_invalid_key_raises_clear_error() -> None:
 
 ```toml
 [project]
-name = "daily-highlights-backend"
+name = "today-highlights-backend"
 version = "0.1.0"
 requires-python = ">=3.11"
 dependencies = [
@@ -231,7 +231,7 @@ class CryptoService:
 ```python
 from fastapi import FastAPI
 
-app = FastAPI(title="Daily Highlights API")
+app = FastAPI(title="今日看点 API")
 
 
 @app.get("/health")
@@ -602,7 +602,7 @@ class XueqiuAdapter:
     def fetch(self, entry_url: str, cookie: str) -> list[RawItemDraft]:
         headers = {
             "Cookie": cookie,
-            "User-Agent": "Mozilla/5.0 DailyHighlights/0.1",
+            "User-Agent": "Mozilla/5.0 TodayHighlights/0.1",
             "Accept": "application/json,text/plain,*/*",
         }
         with httpx.Client(timeout=15, follow_redirects=True, headers=headers) as client:
@@ -858,7 +858,7 @@ class SummarizerClient:
                 {
                     "role": "user",
                     "content": (
-                        "基于以下雪球内容生成每日看点。输出字段：title, summary, "
+                        "基于以下雪球内容生成今日看点。输出字段：title, summary, "
                         "related_symbols, tags, score。"
                         f"\n标题：{title}\n正文：{body}"
                     ),
@@ -1161,7 +1161,7 @@ from fastapi import FastAPI
 
 from app.api import admin, public
 
-app = FastAPI(title="Daily Highlights API")
+app = FastAPI(title="今日看点 API")
 app.include_router(public.router)
 app.include_router(admin.router)
 
@@ -1324,7 +1324,7 @@ from app.api import admin, public
 from app.core.config import settings
 from app.core.scheduler import create_scheduler
 
-app = FastAPI(title="Daily Highlights API")
+app = FastAPI(title="今日看点 API")
 app.include_router(public.router)
 app.include_router(admin.router)
 
@@ -1517,7 +1517,7 @@ git commit -m "feat: add model settings and ai summaries"
 
 ```json
 {
-  "name": "daily-highlights-frontend",
+  "name": "today-highlights-frontend",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -1777,9 +1777,9 @@ git commit -m "feat: add frontend admin pages"
 创建 `README.md`，内容如下：
 
 ```markdown
-# 每日看点 Daily Highlights
+# 今日看点 今日看点
 
-Daily Highlights 是一个 Python + React MVP，用于采集雪球股票内容、生成 AI 摘要并审核每日阅读页面的看点。
+今日看点 是一个 Python + React MVP，用于采集雪球股票内容、生成 AI 摘要并审核每日阅读页面的看点。
 
 ## 后端
 

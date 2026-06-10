@@ -1,4 +1,4 @@
-# DataFlow — 多源实时信息看板
+# 今日看点 — 多源实时信息看板
 
 聚合雪球、东方财富、同花顺三大财经平台数据，以可定制的方块看板形式展示。支持沪深港美股热度、概念/行业板块、龙虎榜、财经快讯等多维度数据。
 
@@ -29,6 +29,9 @@ cd backend
 conda activate daily_highlights
 cp .env.example .env  # 编辑数据库连接和密钥
 uvicorn app.main:app --reload
+
+新启动方式
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 ### 前端
@@ -37,6 +40,9 @@ uvicorn app.main:app --reload
 cd frontend
 npm install
 npm run dev
+
+新启动方式
+npm run dev -- --host 0.0.0.0 --port 5175
 ```
 
 ### 环境变量 (`backend/.env`)

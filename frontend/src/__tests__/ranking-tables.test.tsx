@@ -1,4 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import type { ReactElement } from "react";
 import { describe, expect, it } from "vitest";
 
 import { CompactTable } from "../components/layout/CompactTable";
@@ -10,6 +12,16 @@ const fields = [
   { key: "title", label: "模型", type: "text" as const },
   { key: "score", label: "智能指数", type: "number" as const },
 ];
+
+function renderWithQueryClient(ui: ReactElement) {
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false },
+      mutations: { retry: false },
+    },
+  });
+  return render(<QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>);
+}
 
 describe("CompactTable rankings", () => {
   it("renders an optional rank column with top-three medals", () => {
@@ -66,8 +78,33 @@ it("renders medals in football standings but keeps fourth place plain", () => {
   expect(screen.queryByTestId("rank-medal-4")).not.toBeInTheDocument();
 });
 
+it("falls back to team initial when a standings logo fails", () => {
+  const { container } = render(
+    <StandingsTable
+      data={[
+        {
+          id: 1,
+          title: "",
+          summary: "",
+          league: "英超",
+          rank: 1,
+          team: "阿森纳",
+          logo_local: "/api/public/media/missing",
+        },
+      ]}
+    />,
+  );
+
+  const logo = container.querySelector("img");
+  expect(logo).not.toBeNull();
+
+  fireEvent.error(logo!);
+
+  expect(screen.getByText("阿")).toBeInTheDocument();
+});
+
 it("re-ranks the domestic AA intelligence view after filtering", () => {
-  render(
+  renderWithQueryClient(
     <GridRenderer
       isLoading={false}
       blocks={[

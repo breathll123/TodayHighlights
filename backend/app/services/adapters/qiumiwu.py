@@ -5,7 +5,7 @@ import httpx
 from app.core.cache import ttl_cache
 
 _headers = {
-    "User-Agent": "Mozilla/5.0 DailyHighlights/0.1",
+    "User-Agent": "Mozilla/5.0 TodayHighlights/0.1",
     "Accept": "application/json",
     "Referer": "https://www.qiumiwu.com/",
 }

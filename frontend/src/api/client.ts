@@ -1,5 +1,5 @@
 import axios from "axios";
-import type { AdminUser, AIJobsStats, AIModelConfig, AIModelConfigWrite, AIOpsStats, AIGenerationJob, AIJobListResponse, AIPromptTemplate, AIPromptTemplateWrite, AITokenUsageDetail, AITokenUsageListResponse, AITopicSummaryResponse, AIUsageStats, AuthResponse, AuthUser, Block, BlockAIAnalysis, CrawlJob, Highlight, JobListResponse, MarketIndex, ModelSettings, PageBlocksResponse, Source, Topic } from "./types";
+import type { AdminUser, AIJobsStats, AIModelConfig, AIModelConfigWrite, AIOpsStats, AIGenerationJob, AIJobListResponse, AIPromptTemplate, AIPromptTemplateWrite, AITokenUsageDetail, AITokenUsageListResponse, AITopicSummaryResponse, AIUsageStats, AuthResponse, AuthUser, Block, BlockAIAnalysis, CrawlJob, Highlight, JobListResponse, MarketIndex, PageBlocksResponse, Source, Topic } from "./types";
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE ?? "http://localhost:8000",
@@ -65,12 +65,11 @@ export function createSource(data: {
   cookie: string;
   enabled: boolean;
   crawl_interval_minutes: number;
-  enable_highlight?: boolean;
 }): Promise<Source> {
   return api.post<Source>("/api/admin/sources", data).then((r) => r.data);
 }
 
-export function updateSource(sourceId: number, data: { name?: string; entry_url?: string; cookie?: string; enabled?: boolean; crawl_interval_minutes?: number; enable_highlight?: boolean }): Promise<Source> {
+export function updateSource(sourceId: number, data: { name?: string; entry_url?: string; cookie?: string; enabled?: boolean; crawl_interval_minutes?: number }): Promise<Source> {
   return api.put<Source>(`/api/admin/sources/${sourceId}`, data).then((r) => r.data);
 }
 
@@ -84,29 +83,6 @@ export function deleteSource(sourceId: number): Promise<{ deleted: boolean }> {
 
 export function fetchJobs(page = 1, pageSize = 20): Promise<JobListResponse> {
   return api.get<JobListResponse>("/api/admin/jobs", { params: { page, page_size: pageSize } }).then((r) => r.data);
-}
-
-export function fetchModelSettings(): Promise<ModelSettings> {
-  return api.get<ModelSettings>("/api/admin/settings/model").then((r) => r.data);
-}
-
-export function saveModelSettings(data: {
-  base_url: string;
-  api_key: string;
-  model: string;
-}): Promise<{ saved: boolean; has_api_key: boolean }> {
-  return api.put("/api/admin/settings/model", data).then((r) => r.data);
-}
-
-export function updateHighlight(
-  id: number,
-  data: { title: string; summary: string; is_pinned: boolean; is_hidden: boolean }
-): Promise<{ id: number; review_status: string }> {
-  return api.patch(`/api/admin/highlights/${id}`, data).then((r) => r.data);
-}
-
-export function deleteHighlight(highlightId: number): Promise<{ deleted: boolean }> {
-  return api.delete(`/api/admin/highlights/${highlightId}`).then((r) => r.data);
 }
 
 // --- Block APIs ---

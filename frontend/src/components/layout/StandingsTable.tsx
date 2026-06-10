@@ -41,7 +41,8 @@ function resolveImgUrl(url?: string): string {
 }
 
 function TeamLogo({ url, name }: { url?: string; name?: string }) {
-  if (!url) {
+  const [failed, setFailed] = useState(false);
+  if (!url || failed) {
     const initial = (name || "?").charAt(0);
     return (
       <span className="h-5 w-5 shrink-0 rounded-full bg-muted flex items-center justify-center text-[10px] font-bold text-muted-foreground">
@@ -55,6 +56,7 @@ function TeamLogo({ url, name }: { url?: string; name?: string }) {
       alt=""
       className="h-5 w-5 shrink-0 rounded-full object-contain"
       loading="lazy"
+      onError={() => setFailed(true)}
     />
   );
 }

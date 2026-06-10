@@ -30,3 +30,6 @@ build/
 # Test artifacts
 backend/tests/*.json
 backend/tests/*.xlsx
+
+# Runtime media cache
+backend/storage/

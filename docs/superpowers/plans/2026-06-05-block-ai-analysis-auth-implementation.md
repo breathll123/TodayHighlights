@@ -1108,7 +1108,7 @@ from app.services.blocks import resolve_block_data
 
 BLOCK_ANALYSIS_TTL_MINUTES = 60
 BLOCK_ANALYSIS_SYSTEM_PROMPT = (
-    "你是 DataFlow 的区块级信息分析助手。只基于用户提供的方块内容分析，不能补充外部事实。"
+    "你是今日看点的区块级信息分析助手。只基于用户提供的方块内容分析，不能补充外部事实。"
     "输出 JSON：summary_points, key_changes, risk_points, related_entities, confidence。"
     "summary_points 根据复杂度输出 1-4 条。股票类不得给买入、卖出、持有建议。"
 )

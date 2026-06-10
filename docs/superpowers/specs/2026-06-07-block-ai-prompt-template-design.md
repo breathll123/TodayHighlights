@@ -1,4 +1,4 @@
-# DataFlow 区块 AI Prompt 模板设计
+# 今日看点 区块 AI Prompt 模板设计
 
 Date: 2026-06-07
 Status: Written spec awaiting user review
@@ -6,7 +6,7 @@ Scope: 区块级 AI 分析的克制版 Prompt 模板架构
 
 ## 背景
 
-DataFlow 的区块级 AI 分析会覆盖股票、AI、足球等不同主题，也会覆盖新闻、榜单、赛事等不同内容形态。如果只维护一个很长的 `BLOCK_ANALYSIS_SYSTEM_PROMPT`，后续每增加一个主题都要继续往提示词里追加规则，最终会变得难以维护。
+今日看点的区块级 AI 分析会覆盖股票、AI、足球等不同主题，也会覆盖新闻、榜单、赛事等不同内容形态。如果只维护一个很长的 `BLOCK_ANALYSIS_SYSTEM_PROMPT`，后续每增加一个主题都要继续往提示词里追加规则，最终会变得难以维护。
 
 本设计采用三层架构：
 

@@ -1,6 +1,9 @@
 import { CalendarDays, Layers3, Radar, RefreshCw } from "lucide-react";
+import { motion } from "framer-motion";
 import type { LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
+
+const easeOutQuint = [0.22, 1, 0.36, 1] as const;
 
 interface DashboardShellProps {
   eyebrow: string;
@@ -29,9 +32,24 @@ export function DashboardShell({
   isLoading = false,
   children,
 }: DashboardShellProps) {
+  const tileVariants = {
+    hidden: { opacity: 0, y: 8, scale: 0.97 },
+    visible: (i: number) => ({
+      opacity: 1,
+      y: 0,
+      scale: 1,
+      transition: { duration: 0.3, ease: easeOutQuint, delay: 0.2 + i * 0.08 },
+    }),
+  };
+
   return (
     <div className="space-y-6">
-      <section className="rounded-2xl border border-border/80 bg-card/72 p-5 shadow-sm sm:p-6 lg:p-7">
+      <motion.section
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, ease: easeOutQuint }}
+               className="rounded-2xl border border-border/80 bg-card/72 p-5 shadow-sm sm:p-6 lg:p-7"
+      >
         <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
           <div className="max-w-3xl">
             <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-primary/25 bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
@@ -47,13 +65,30 @@ export function DashboardShell({
           </div>
 
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:min-w-[520px]">
-            <StatusTile icon={Layers3} label="当前主题" value={activeTopic} />
-            <StatusTile icon={CalendarDays} label="观测时间" value={formatter.format(new Date())} />
-            <StatusTile icon={RefreshCw} label="内容模块" value={isLoading ? "同步中" : `${blockCount} 个`} />
-            <StatusTile icon={Radar} label="平台状态" value={isLoading ? "连接中" : "运行中"} tone="primary" />
+            {[
+              { icon: Layers3, label: "当前主题", value: activeTopic, tone: "default" as const },
+              { icon: CalendarDays, label: "观测时间", value: formatter.format(new Date()), tone: "default" as const },
+              { icon: RefreshCw, label: "内容模块", value: isLoading ? "同步中" : `${blockCount} 个`, tone: "default" as const },
+              { icon: Radar, label: "平台状态", value: isLoading ? "连接中" : "运行中", tone: "primary" as const },
+            ].map((tile, i) => (
+              <motion.div
+                key={tile.label}
+                custom={i}
+                variants={tileVariants}
+                initial="hidden"
+                animate="visible"
+                className="rounded-xl border border-border/70 bg-background/45 p-3"
+              >
+                <div className="mb-2 flex items-center gap-2 text-[11px] font-medium uppercase text-muted-foreground">
+                  <tile.icon className={tile.tone === "primary" ? "h-3.5 w-3.5 text-primary" : "h-3.5 w-3.5"} aria-hidden={true} />
+                  {tile.label}
+                </div>
+                <div className="truncate text-sm font-semibold text-foreground">{tile.value}</div>
+              </motion.div>
+            ))}
           </div>
         </div>
-      </section>
+      </motion.section>
 
       {children}
     </div>

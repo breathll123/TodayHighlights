@@ -2,6 +2,8 @@ from datetime import datetime
 from pathlib import Path
 
 from sqlalchemy import inspect
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session as SASession
 
 from app.core.database import get_session
 from app.models.entities import MediaAsset
@@ -136,3 +138,89 @@ def test_public_media_route_serves_cached_file(client, tmp_path: Path) -> None:
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("image/png")
     assert response.content.startswith(b"\x89PNG")
+
+
+def test_media_cache_removes_file_when_commit_fails(client, tmp_path: Path, monkeypatch) -> None:
+    session = next(client.app.dependency_overrides[get_session]())
+    service = MediaCacheService(session, storage_root=tmp_path, http_client=_FakeClient())
+
+    def fail_commit(self):
+        raise RuntimeError("commit failed")
+
+    monkeypatch.setattr(SASession, "commit", fail_commit)
+
+    result = service.cache_remote_image(
+        "https://file.qiumiwu.com/team/cleanup.png",
+        provider="qiumiwu",
+        entity_type="team",
+        entity_name="清理测试",
+        source_entity_id="match_cleanup",
+    )
+
+    assert result == ""
+    assert not list(tmp_path.rglob("*.png"))
+
+
+def test_media_cache_returns_existing_asset_after_unique_race(client, tmp_path: Path, monkeypatch) -> None:
+    session = next(client.app.dependency_overrides[get_session]())
+    service = MediaCacheService(session, storage_root=tmp_path, http_client=_FakeClient())
+    source_url = "https://file.qiumiwu.com/team/race.png"
+    digest = url_hash(source_url)
+    existing_file = tmp_path / "football" / f"{digest}.png"
+    existing_file.parent.mkdir(parents=True)
+    existing_file.write_bytes(b"\x89PNG\r\n\x1a\nwinner")
+    original_commit = SASession.commit
+    original_rollback = SASession.rollback
+    raised = False
+    inserted = False
+
+    def race_commit(self):
+        nonlocal raised
+        if raised:
+            return original_commit(self)
+        raised = True
+        raise IntegrityError("insert media asset", {}, Exception("unique constraint"))
+
+    def rollback_then_insert_winner(self):
+        nonlocal inserted
+        original_rollback(self)
+        if inserted:
+            return None
+        inserted = True
+        competing = SASession(bind=self.get_bind())
+        try:
+            competing.add(
+                MediaAsset(
+                    source_url=source_url,
+                    normalized_url=source_url,
+                    url_hash=digest,
+                    provider="qiumiwu",
+                    asset_type="football_logo",
+                    entity_type="team",
+                    entity_name="竞态测试",
+                    content_type="image/png",
+                    extension=".png",
+                    local_path=str(existing_file),
+                    public_path=f"/api/public/media/{digest}",
+                    file_size=existing_file.stat().st_size,
+                    status="cached",
+                    metadata_json={},
+                )
+            )
+            original_commit(competing)
+        finally:
+            competing.close()
+        return None
+
+    monkeypatch.setattr(SASession, "commit", race_commit)
+    monkeypatch.setattr(SASession, "rollback", rollback_then_insert_winner)
+
+    result = service.cache_remote_image(
+        source_url,
+        provider="qiumiwu",
+        entity_type="team",
+        entity_name="竞态测试",
+        source_entity_id="match_race",
+    )
+
+    assert result == f"/api/public/media/{digest}"

@@ -23,10 +23,6 @@ vi.mock("../api/client", () => ({
   triggerCrawl: vi.fn(),
   deleteSource: vi.fn(),
   fetchJobs: vi.fn().mockResolvedValue([]),
-  fetchModelSettings: vi.fn(),
-  saveModelSettings: vi.fn(),
-  updateHighlight: vi.fn(),
-  deleteHighlight: vi.fn(),
   fetchPageBlocks: vi.fn().mockResolvedValue({
     blocks: [
       {
@@ -147,7 +143,7 @@ describe("FootballTopicPage", () => {
 
     expect(await screen.findByText("今日赛程")).toBeInTheDocument();
     expect(screen.getByText("足球主题看板")).toBeInTheDocument();
-    expect(screen.getByText("全球足球联赛实时比分、赛程、积分榜，球迷屋数据源。")).toBeInTheDocument();
+    expect(screen.getByText("比分、赛程、积分榜")).toBeInTheDocument();
     expect(screen.getByText("当前主题")).toBeInTheDocument();
     expect(screen.getByText("观测时间")).toBeInTheDocument();
     expect(screen.getByText("内容模块")).toBeInTheDocument();
@@ -178,6 +174,6 @@ describe("sourceNameFor", () => {
 
   it("uses item source before block source and falls back for unknown sources", () => {
     expect(sourceNameFor({ source: "hot_events" }, "topic")).toBe("雪球话题");
-    expect(sourceNameFor({}, "unknown")).toBe("DataFlow");
+    expect(sourceNameFor({}, "unknown")).toBe("今日看点");
   });
 });

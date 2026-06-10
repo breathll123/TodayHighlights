@@ -30,7 +30,7 @@ export function PublicNavbar() {
               <RadioTower className="h-4 w-4" aria-hidden="true" />
             </span>
             <span className="leading-tight">
-              <span className="block text-base font-semibold">DataFlow</span>
+              <span className="block text-base font-semibold">今日看点</span>
               <span className="hidden text-[11px] font-medium uppercase text-muted-foreground sm:block">Signal Hub</span>
             </span>
           </Link>

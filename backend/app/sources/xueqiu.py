@@ -15,7 +15,7 @@ class XueqiuAdapter:
     def fetch(self, entry_url: str, cookie: str) -> list[RawItemDraft]:
         headers = {
             "Cookie": cookie,
-            "User-Agent": "Mozilla/5.0 DailyHighlights/0.1",
+            "User-Agent": "Mozilla/5.0 TodayHighlights/0.1",
             "Accept": "application/json,text/plain,*/*",
         }
         with httpx.Client(timeout=15, follow_redirects=True, headers=headers) as client:

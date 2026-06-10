@@ -40,9 +40,16 @@ def shutdown_executor():
         _BLOCK_EXECUTOR = None
 
 
-def resolve_block_data(session: Session, block: PageBlock, cookie: str | None = None) -> list[dict]:
+def resolve_block_data(
+    session: Session | None,
+    block: PageBlock,
+    cookie: str | None = None,
+    media_cache=None,
+) -> list[dict]:
     source_type = block.source_type
     config = block.source_config or {}
+    if media_cache is not None and source_type.startswith("qiumiwu_"):
+        config = {**config, "_media_cache": media_cache}
     limit = block.display_count
 
     if source_type == "topic":
@@ -216,11 +223,10 @@ def get_page_blocks(session: Session, route: str) -> list[dict]:
     )
     blocks = session.scalars(stmt).all()
 
-    # Set up media cache for football adapters
+    media_cache = None
     try:
         from app.services.media_cache import MediaCacheService
-        from app.services.adapters.qiumiwu import set_media_cache
-        set_media_cache(MediaCacheService(session))
+        media_cache = MediaCacheService(session)
     except Exception:
         pass
 
@@ -242,12 +248,15 @@ def get_page_blocks(session: Session, route: str) -> list[dict]:
             "data": resolve_block_data(session, b),
         })
 
-    # Pre-fetch cookie for live blocks
-    cookie = get_cookie(session)
+    # Pre-fetch cookie for live blocks (may fail if key changed)
+    try:
+        cookie = get_cookie(session)
+    except Exception:
+        cookie = None
 
     # Resolve live-API blocks in parallel using shared executor
     if live_blocks:
-        futures = {_get_executor().submit(resolve_block_data, None, b, cookie): b for b in live_blocks}
+        futures = {_get_executor().submit(resolve_block_data, None, b, cookie, media_cache): b for b in live_blocks}
         for future in as_completed(futures):
             b = futures[future]
             try:

@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { BrainCircuit, Check, Pencil, Plus, Star } from "lucide-react";
-import { fetchModelSettings, saveModelSettings, fetchAIModels, createAIModel, updateAIModel, setDefaultAIModel } from "../api/client";
+import { fetchAIModels, createAIModel, updateAIModel, setDefaultAIModel } from "../api/client";
 import type { AIModelConfig, AIModelConfigWrite } from "../api/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -74,22 +74,6 @@ function ModelForm({
 export function AdminSettingsPage() {
   const queryClient = useQueryClient();
 
-  // Legacy LLM settings (kept for backward compat)
-  const { data: settings, isLoading } = useQuery({ queryKey: ["model-settings"], queryFn: fetchModelSettings });
-  const [legacyForm, setLegacyForm] = useState({ base_url: "", api_key: "", model: "" });
-  const [legacyInit, setLegacyInit] = useState(false);
-  if (settings && !legacyInit) {
-    setLegacyForm({ base_url: settings.base_url, api_key: "", model: settings.model });
-    setLegacyInit(true);
-  }
-  const legacySave = useMutation({
-    mutationFn: saveModelSettings,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["model-settings"] });
-      setLegacyForm((f) => ({ ...f, api_key: "" }));
-    },
-  });
-
   // AI Model configs
   const { data: aiModels } = useQuery({ queryKey: ["ai-models"], queryFn: fetchAIModels });
   const [showForm, setShowForm] = useState(false);
@@ -147,8 +131,6 @@ export function AdminSettingsPage() {
   };
 
   const isPending = createMut.isPending || updateMut.isPending;
-
-  if (isLoading) return <div className="text-center py-12 text-muted-foreground">加载中...</div>;
 
   return (
     <div className="space-y-6">
@@ -231,36 +213,6 @@ export function AdminSettingsPage() {
         )}
       </div>
 
-      {/* Legacy LLM Settings */}
-      <div className="space-y-4 pt-4 border-t border-border/50">
-        <h3 className="text-sm font-semibold text-muted-foreground">旧版 LLM 设置 (兼容)</h3>
-        <form
-          className="space-y-4 rounded-xl border border-border/75 bg-card/80 p-6 shadow-sm"
-          onSubmit={(e) => { e.preventDefault(); legacySave.mutate(legacyForm); }}
-        >
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <label className="flex flex-col gap-1.5 text-sm font-medium">
-              API Base URL
-              <Input value={legacyForm.base_url} onChange={(e) => setLegacyForm({ ...legacyForm, base_url: e.target.value })} placeholder="https://api.openai.com/v1" required />
-            </label>
-            <label className="flex flex-col gap-1.5 text-sm font-medium">
-              模型名称
-              <Input value={legacyForm.model} onChange={(e) => setLegacyForm({ ...legacyForm, model: e.target.value })} placeholder="gpt-4o" required />
-            </label>
-          </div>
-          <label className="flex flex-col gap-1.5 text-sm font-medium">
-            API Key
-            <Input type="password" value={legacyForm.api_key} onChange={(e) => setLegacyForm({ ...legacyForm, api_key: e.target.value })} placeholder={settings?.has_api_key ? "已配置，留空则不修改" : "输入 API Key"} />
-          </label>
-          <div className="flex items-center gap-2 text-sm">
-            <span>API Key 状态:</span>
-            {settings?.has_api_key ? <Badge variant="default">已配置</Badge> : <Badge variant="secondary">未配置</Badge>}
-          </div>
-          <Button type="submit" size="sm" disabled={legacySave.isPending}>
-            {legacySave.isPending ? "保存中..." : "保存旧版设置"}
-          </Button>
-        </form>
-      </div>
     </div>
   );
 }

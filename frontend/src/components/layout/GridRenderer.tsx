@@ -19,6 +19,8 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/use-auth";
 import type { AIItemEnhancement } from "@/api/types";
 
+const easeOutQuint: [number, number, number, number] = [0.22, 1, 0.36, 1];
+
 function buildAIEnrichment(item: any): AIItemEnhancement | undefined {
   if (!item.generated_by_model) return undefined;
   return {
@@ -48,7 +50,7 @@ const SOURCE_NAMES: Record<string, string> = {
 };
 
 export function sourceNameFor(item: any, sourceType: string): string {
-  return SOURCE_NAMES[item.source ?? sourceType] ?? "DataFlow";
+  return SOURCE_NAMES[item.source ?? sourceType] ?? "今日看点";
 }
 
 function fmtTitle(item: any): string {
@@ -185,7 +187,7 @@ export function GridRenderer({ blocks, isLoading, dataUpdatedAt }: { blocks: any
 
   return (
     <div className="page-grid">
-      {blocks.map((block) => {
+      {blocks.map((block, blockIdx) => {
         const st = block.source_type as string;
         const allFields = FIELD_DEFS[st] || [];
         const cfgFields: string[] | undefined = block.source_config?.display_fields;
@@ -193,6 +195,17 @@ export function GridRenderer({ blocks, isLoading, dataUpdatedAt }: { blocks: any
         const displayFields = allFields.filter((f) => selectedKeys.includes(f.key));
 
         return (
+          <motion.div
+            key={block.id}
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{
+              duration: 0.25,
+              ease: easeOutQuint,
+              delay: Math.min(blockIdx, 8) * 0.025,
+            }}
+            style={{ gridColumn: `span ${block.col_span || 1}`, gridRow: `span ${block.row_span || 1}` }}
+          >
           <CollapsibleSection
             key={block.id}
             blockId={block.id}
@@ -285,6 +298,7 @@ export function GridRenderer({ blocks, isLoading, dataUpdatedAt }: { blocks: any
               </div>
             )}
           </CollapsibleSection>
+          </motion.div>
         );
       })}
 

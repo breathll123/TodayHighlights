@@ -43,7 +43,7 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
     shutdown_swr_executor()
 
 
-app = FastAPI(title="Daily Highlights API", lifespan=lifespan)
+app = FastAPI(title="今日看点 API", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins.split(","),

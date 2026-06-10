@@ -32,7 +32,7 @@ def fetch_hot_events(cookie: str, limit: int) -> list[dict]:
     try:
         resp = httpx.get(
             "https://xueqiu.com/hot_event/list.json",
-            headers={"Cookie": cookie, "User-Agent": "Mozilla/5.0 DailyHighlights/0.1", "Accept": "application/json", "Referer": "https://xueqiu.com/"},
+            headers={"Cookie": cookie, "User-Agent": "Mozilla/5.0 TodayHighlights/0.1", "Accept": "application/json", "Referer": "https://xueqiu.com/"},
             timeout=15,
         )
         resp.raise_for_status()
@@ -58,7 +58,7 @@ def fetch_hot_stocks(cookie: str, config: dict, limit: int) -> list[dict]:
         stock_type = config.get("type", 10)
         resp = httpx.get(
             f"https://stock.xueqiu.com/v5/stock/hot_stock/list.json?type={stock_type}&size={limit}",
-            headers={"Cookie": cookie, "User-Agent": "Mozilla/5.0 DailyHighlights/0.1", "Accept": "application/json", "Referer": "https://xueqiu.com/"},
+            headers={"Cookie": cookie, "User-Agent": "Mozilla/5.0 TodayHighlights/0.1", "Accept": "application/json", "Referer": "https://xueqiu.com/"},
             timeout=15,
         )
         resp.raise_for_status()
@@ -99,7 +99,7 @@ def _fetch_hot_stocks_typed(cookie: str, stock_type: int, source: str, limit: in
     try:
         resp = httpx.get(
             f"https://stock.xueqiu.com/v5/stock/hot_stock/list.json?type={stock_type}&size={limit}",
-            headers={"Cookie": cookie, "User-Agent": "Mozilla/5.0 DailyHighlights/0.1", "Accept": "application/json", "Referer": "https://xueqiu.com/"},
+            headers={"Cookie": cookie, "User-Agent": "Mozilla/5.0 TodayHighlights/0.1", "Accept": "application/json", "Referer": "https://xueqiu.com/"},
             timeout=15,
         )
         resp.raise_for_status()
@@ -127,7 +127,7 @@ def fetch_screener(cookie: str, config: dict, limit: int) -> list[dict]:
         order_by = config.get("order_by", "percent")
         resp = httpx.get(
             f"https://xueqiu.com/service/screener/quote/list?page=1&size={limit}&order=desc&order_by={order_by}&type=stock&exchange=CN&market=CN",
-            headers={"Cookie": cookie, "User-Agent": "Mozilla/5.0 DailyHighlights/0.1", "Accept": "application/json", "Referer": "https://xueqiu.com/"},
+            headers={"Cookie": cookie, "User-Agent": "Mozilla/5.0 TodayHighlights/0.1", "Accept": "application/json", "Referer": "https://xueqiu.com/"},
             timeout=15,
         )
         resp.raise_for_status()

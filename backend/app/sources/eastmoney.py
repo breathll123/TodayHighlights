@@ -11,7 +11,7 @@ _proxy = settings.eastmoney_proxy
 
 _PUSH2_HOSTS = ["push2.eastmoney.com", "push2delay.eastmoney.com"]
 
-_headers = {"User-Agent": "Mozilla/5.0 DailyHighlights/0.1", "Referer": "https://quote.eastmoney.com/"}
+_headers = {"User-Agent": "Mozilla/5.0 TodayHighlights/0.1", "Referer": "https://quote.eastmoney.com/"}
 
 
 def _push2_get(path: str, params: dict) -> httpx.Response:
@@ -157,7 +157,7 @@ class EastmoneyAdapter:
         codes = ",".join(c for c, _ in index_map)
         resp = httpx.get(
             f"https://hq.sinajs.cn/list={codes}",
-            headers={"User-Agent": "Mozilla/5.0 DailyHighlights/0.1", "Referer": "https://finance.sina.com.cn/"},
+            headers={"User-Agent": "Mozilla/5.0 TodayHighlights/0.1", "Referer": "https://finance.sina.com.cn/"},
             timeout=10,
         )
         resp.raise_for_status()

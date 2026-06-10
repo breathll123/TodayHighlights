@@ -1,4 +1,4 @@
-# Daily Highlights MVP Implementation Plan
+# 今日看点 MVP Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -152,7 +152,7 @@ Create `backend/pyproject.toml`:
 
 ```toml
 [project]
-name = "daily-highlights-backend"
+name = "today-highlights-backend"
 version = "0.1.0"
 requires-python = ">=3.11"
 dependencies = [
@@ -182,7 +182,7 @@ asyncio_mode = "auto"
 Create `backend/environment.yml`:
 
 ```yaml
-name: daily-highlights
+name: today-highlights
 channels:
   - conda-forge
 dependencies:
@@ -246,7 +246,7 @@ Create `backend/app/main.py`:
 ```python
 from fastapi import FastAPI
 
-app = FastAPI(title="Daily Highlights API")
+app = FastAPI(title="今日看点 API")
 
 
 @app.get("/health")
@@ -617,7 +617,7 @@ class XueqiuAdapter:
     def fetch(self, entry_url: str, cookie: str) -> list[RawItemDraft]:
         headers = {
             "Cookie": cookie,
-            "User-Agent": "Mozilla/5.0 DailyHighlights/0.1",
+            "User-Agent": "Mozilla/5.0 TodayHighlights/0.1",
             "Accept": "application/json,text/plain,*/*",
         }
         with httpx.Client(timeout=15, follow_redirects=True, headers=headers) as client:
@@ -873,7 +873,7 @@ class SummarizerClient:
                 {
                     "role": "user",
                     "content": (
-                        "基于以下雪球内容生成每日看点。输出字段：title, summary, "
+                        "基于以下雪球内容生成今日看点。输出字段：title, summary, "
                         "related_symbols, tags, score。"
                         f"\n标题：{title}\n正文：{body}"
                     ),
@@ -1176,7 +1176,7 @@ from fastapi import FastAPI
 
 from app.api import admin, public
 
-app = FastAPI(title="Daily Highlights API")
+app = FastAPI(title="今日看点 API")
 app.include_router(public.router)
 app.include_router(admin.router)
 
@@ -1339,7 +1339,7 @@ from app.api import admin, public
 from app.core.config import settings
 from app.core.scheduler import create_scheduler
 
-app = FastAPI(title="Daily Highlights API")
+app = FastAPI(title="今日看点 API")
 app.include_router(public.router)
 app.include_router(admin.router)
 
@@ -1532,7 +1532,7 @@ Create `frontend/package.json`:
 
 ```json
 {
-  "name": "daily-highlights-frontend",
+  "name": "today-highlights-frontend",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -1792,16 +1792,16 @@ git commit -m "feat: add frontend admin pages"
 Create `README.md` with:
 
 ```markdown
-# Daily Highlights
+# 今日看点
 
-Daily Highlights is a Python + React MVP for collecting Xueqiu stock content, generating AI summaries, and reviewing highlights for a daily reading page.
+今日看点 is a Python + React MVP for collecting Xueqiu stock content, generating AI summaries, and reviewing highlights for a daily reading page.
 
 ## Backend
 
 ```bash
 cd backend
 conda env create -f environment.yml
-conda activate daily-highlights
+conda activate today-highlights
 alembic upgrade head
 uvicorn app.main:app --reload
 ```
@@ -1811,7 +1811,7 @@ For an existing environment, update it with:
 ```bash
 cd backend
 conda env update -f environment.yml --prune
-conda activate daily-highlights
+conda activate today-highlights
 ```
 
 ## Frontend

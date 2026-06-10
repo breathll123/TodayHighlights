@@ -7,7 +7,7 @@ from app.core.config import SH_TZ
 from app.sources.base import RawItemDraft
 
 _headers = {
-    "User-Agent": "Mozilla/5.0 DailyHighlights/0.1",
+    "User-Agent": "Mozilla/5.0 TodayHighlights/0.1",
     "Accept": "application/json",
     "Referer": "https://www.qiumiwu.com/",
 }

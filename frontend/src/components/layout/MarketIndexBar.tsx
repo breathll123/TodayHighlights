@@ -1,8 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
+import { motion } from "framer-motion";
 import { AreaChart, Area, XAxis, YAxis, ResponsiveContainer, Tooltip, ReferenceLine } from "recharts";
 import { fetchMarketIndices } from "@/api/client";
-import type { MarketIndex } from "@/api/types";
+import type { MarketIndex, MarketIndexTrend } from "@/api/types";
+
+const easeOutQuint = [0.22, 1, 0.36, 1] as const;
 
 function fmt(n: number, decimals = 2): string {
   return n.toLocaleString("zh-CN", { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
@@ -16,107 +19,181 @@ function fmtTurnover(n: number): string {
 
 const CHART_UP = "#ef4444";
 const CHART_DN = "#10b981";
+const CHART_LINE = "#38bdf8";
+
+export type MarketIndexChartDatum = {
+  x: number;
+  time: string;
+  price: number;
+  pct: number;
+};
+
+export const MARKET_TIME_TICKS = [0, 30, 60, 90, 120, 150, 180, 210, 240];
+
+const MARKET_TIME_LABELS: Record<number, string> = {
+  0: "09:30",
+  30: "10:00",
+  60: "10:30",
+  90: "11:00",
+  120: "13:00",
+  150: "13:30",
+  180: "14:00",
+  210: "14:30",
+  240: "15:00",
+};
+
+function toMarketMinute(time: string): number | null {
+  const [hourText, minuteText] = time.split(":");
+  const hour = Number(hourText);
+  const minute = Number(minuteText);
+  if (!Number.isFinite(hour) || !Number.isFinite(minute)) return null;
+
+  const total = hour * 60 + minute;
+  const morningStart = 9 * 60 + 30;
+  const afternoonStart = 13 * 60;
+  if (total >= morningStart && total <= 11 * 60 + 30) return total - morningStart;
+  if (total >= afternoonStart && total <= 15 * 60) return 120 + (total - afternoonStart);
+  return null;
+}
+
+export function buildMarketIndexChartData(points: MarketIndexTrend["points"], referencePrice: number): MarketIndexChartDatum[] {
+  return points
+    .flatMap((p) => {
+      const x = toMarketMinute(p.time);
+      if (x == null) return [];
+      return [{
+        x,
+        time: p.time,
+        price: p.price,
+        pct: referencePrice > 0 ? ((p.price - referencePrice) / referencePrice) * 100 : 0,
+      }];
+    })
+    .sort((a, b) => a.x - b.x);
+}
+
+export function priceToReferencePct(price: number, referencePrice: number): number {
+  return referencePrice > 0 ? ((price - referencePrice) / referencePrice) * 100 : 0;
+}
+
+export function buildPriceDomain(chartData: MarketIndexChartDatum[], openPrice: number, high: number, low: number): [number, number] {
+  const prices = chartData.map((d) => d.price).filter((price) => Number.isFinite(price));
+  const baseMin = Math.min(...prices, openPrice, high || openPrice, low || openPrice);
+  const baseMax = Math.max(...prices, openPrice, high || openPrice, low || openPrice);
+  const padding = Math.max((baseMax - baseMin) * 0.08, openPrice * 0.0005, 1);
+  return [baseMin - padding, baseMax + padding];
+}
+
+function PercentAxisTick({ x, y, payload, referencePrice }: { x?: number; y?: number; payload?: { value?: number }; referencePrice: number }) {
+  const price = payload?.value ?? referencePrice;
+  const value = priceToReferencePct(price, referencePrice);
+  const color = price > referencePrice ? CHART_UP : price < referencePrice ? CHART_DN : "#A1AAB5";
+  return (
+    <text x={x} y={y} dy={4} textAnchor="start" fill={color} fontSize={10} className="tabular-nums">
+      {`${value > 0 ? "+" : ""}${value.toFixed(2)}%`}
+    </text>
+  );
+}
+
+function TrendTooltip({
+  active,
+  payload,
+}: {
+  active?: boolean;
+  payload?: Array<{ dataKey?: string | number; value?: unknown; payload?: MarketIndexChartDatum }>;
+}) {
+  if (!active || !payload?.length) return null;
+  const datum = payload.find((item) => item.payload)?.payload;
+  if (!datum) return null;
+
+  return (
+    <div className="rounded-lg border border-border bg-popover px-3 py-2 text-xs text-popover-foreground shadow-lg">
+      <div className="mb-1 font-medium tabular-nums">{datum.time}</div>
+      <div className="flex min-w-28 items-center justify-between gap-4 text-muted-foreground">
+        <span>指数</span>
+        <span className="text-popover-foreground tabular-nums">{datum.price.toFixed(2)}</span>
+      </div>
+      <div className="mt-1 flex min-w-28 items-center justify-between gap-4 text-muted-foreground">
+        <span>涨幅</span>
+        <span className="tabular-nums" style={{ color: datum.pct >= 0 ? CHART_UP : CHART_DN }}>
+          {datum.pct >= 0 ? "+" : ""}
+          {datum.pct.toFixed(2)}%
+        </span>
+      </div>
+    </div>
+  );
+}
 
 function TrendChart({ idx }: { idx: MarketIndex }) {
   if (!idx.trend?.points || idx.trend.points.length < 2) {
     return <div className="h-52 rounded-lg bg-muted/30 flex items-center justify-center text-xs text-muted-foreground">暂无分时数据</div>;
   }
-  const isUp = idx.change_pct >= 0;
-  const color = isUp ? CHART_UP : CHART_DN;
-  const prevClose = idx.trend.prev_close;
+  const openPrice = idx.trend.points[0]?.price ?? idx.current;
 
-  const raw = idx.trend.points;
-  // Split into morning (9:30-11:30) and afternoon (13:00-15:00), add gap marker
-  const morning = raw.filter((p) => p.time >= "09:30" && p.time <= "11:30");
-  const afternoon = raw.filter((p) => p.time >= "13:00" && p.time <= "15:00");
-
-  // Add a single gap point between sessions to break the line
-  const chartData = [
-    ...morning.map((p) => ({
-      time: p.time,
-      price: p.price,
-      pct: prevClose > 0 ? ((p.price - prevClose) / prevClose) * 100 : 0,
-    })),
-    { time: "11:30", price: null as number | null, pct: null as number | null },
-    { time: "13:00", price: null as number | null, pct: null as number | null },
-    ...afternoon.map((p) => ({
-      time: p.time,
-      price: p.price,
-      pct: prevClose > 0 ? ((p.price - prevClose) / prevClose) * 100 : 0,
-    })),
-  ];
-
-  // Compute pct domain
-  const pcts = chartData.filter((d) => d.pct != null).map((d) => d.pct!);
-  const pctAbsMax = Math.max(Math.abs(Math.max(...pcts, 0)), Math.abs(Math.min(...pcts, 0)), 0.1);
-  const pctDomain: [number, number] = [-pctAbsMax * 1.3, pctAbsMax * 1.3];
-
-  const tickLabels: Record<string, string> = {
-    "09:30": "09:30", "10:00": "10:00", "10:30": "10:30", "11:00": "11:00",
-    "11:30": "11:30/13:00",
-    "13:00": "13:00", "13:30": "13:30", "14:00": "14:00", "14:30": "14:30", "15:00": "15:00",
-  };
+  const chartData = buildMarketIndexChartData(idx.trend.points, openPrice);
+  const priceDomain = buildPriceDomain(chartData, openPrice, idx.trend.high, idx.trend.low);
 
   return (
-    <ResponsiveContainer width="100%" height={220}>
-      <AreaChart data={chartData} margin={{ top: 4, right: 52, bottom: 0, left: 48 }}>
-        <defs>
-          <linearGradient id="idx-grad" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={color} stopOpacity={0.18} />
-            <stop offset="100%" stopColor={color} stopOpacity={0} />
-          </linearGradient>
-        </defs>
-        <XAxis
-          dataKey="time"
-          tick={{ fontSize: 9, fill: "#A1AAB5" }}
-          tickLine={false}
-          axisLine={{ stroke: "#242E3A" }}
-          interval={0}
-          tickFormatter={(t: string) => tickLabels[t] ?? ""}
-        />
-        <YAxis
-          yAxisId="price"
-          orientation="left"
-          domain={["auto", "auto"]}
-          tick={{ fontSize: 10, fill: "#A1AAB5" }}
-          tickLine={false}
-          axisLine={false}
-          width={44}
-          tickFormatter={(v: number) => v.toFixed(0)}
-        />
-        <YAxis
-          yAxisId="pct"
-          orientation="right"
-          domain={pctDomain}
-          tick={{ fontSize: 10, fill: color }}
-          tickLine={false}
-          axisLine={false}
-          width={52}
-          tickFormatter={(v: number) => `${v > 0 ? "+" : ""}${v.toFixed(2)}%`}
-        />
-        <Tooltip
-          contentStyle={{ background: "#131A21", border: "1px solid #242E3A", borderRadius: 8, fontSize: 12 }}
-          labelFormatter={(t) => `${t}`}
-          formatter={(v: unknown) => [typeof v === "number" ? v.toFixed(2) : "—", ""]}
-        />
-        {prevClose > 0 && (
-          <ReferenceLine yAxisId="price" y={prevClose} stroke="#A1AAB5" strokeDasharray="4 3" strokeWidth={0.8} />
-        )}
-        <Area
-          yAxisId="price"
-          type="monotone"
-          dataKey="price"
-          stroke={color}
-          strokeWidth={1.5}
-          fill="url(#idx-grad)"
-          dot={false}
-          isAnimationActive={false}
-          connectNulls={false}
-        />
-        {/* Invisible line to anchor the right YAxis */}
-        <Area yAxisId="pct" type="monotone" dataKey="pct" stroke="none" fill="none" dot={false} isAnimationActive={false} />
-      </AreaChart>
-    </ResponsiveContainer>
+    <div className="relative">
+      <div className="pointer-events-none absolute left-14 top-1 z-10 rounded bg-card/85 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground shadow-sm">
+        开盘 {fmt(openPrice)}
+      </div>
+      <ResponsiveContainer width="100%" height={220}>
+        <AreaChart data={chartData} margin={{ top: 18, right: 56, bottom: 0, left: 56 }}>
+          <defs>
+            <linearGradient id="idx-grad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={CHART_LINE} stopOpacity={0.2} />
+              <stop offset="100%" stopColor={CHART_LINE} stopOpacity={0} />
+            </linearGradient>
+          </defs>
+          <XAxis
+            dataKey="x"
+            type="number"
+            domain={[0, 240]}
+            ticks={MARKET_TIME_TICKS}
+            tick={{ fontSize: 9, fill: "#A1AAB5" }}
+            tickLine={false}
+            axisLine={{ stroke: "#242E3A" }}
+            interval={0}
+            tickFormatter={(t: number) => MARKET_TIME_LABELS[t] ?? ""}
+          />
+          <YAxis
+            yAxisId="price"
+            orientation="left"
+            domain={priceDomain}
+            tick={{ fontSize: 10, fill: "#A1AAB5" }}
+            tickLine={false}
+            axisLine={false}
+            width={52}
+            tickFormatter={(v: number) => v.toFixed(0)}
+          />
+          <YAxis
+            yAxisId="pct"
+            orientation="right"
+            domain={priceDomain}
+            tick={<PercentAxisTick referencePrice={openPrice} />}
+            tickLine={false}
+            axisLine={false}
+            width={52}
+          />
+          <Tooltip content={<TrendTooltip />} cursor={{ stroke: "#4B5563", strokeWidth: 1, strokeDasharray: "3 3" }} />
+          {openPrice > 0 && (
+            <ReferenceLine yAxisId="price" y={openPrice} stroke="#A1AAB5" strokeDasharray="4 3" strokeWidth={0.8} />
+          )}
+          <Area
+            yAxisId="price"
+            type="monotone"
+            dataKey="price"
+            stroke={CHART_LINE}
+            strokeWidth={1.5}
+            fill="url(#idx-grad)"
+            dot={false}
+            isAnimationActive={false}
+          />
+          {/* Invisible line keeps the right axis on the same price scale as the visible chart. */}
+          <Area yAxisId="pct" type="monotone" dataKey="price" stroke="none" fill="none" dot={false} isAnimationActive={false} />
+        </AreaChart>
+      </ResponsiveContainer>
+    </div>
   );
 }
 
@@ -174,7 +251,13 @@ export function MarketIndexBar() {
       </div>
 
       {/* Body */}
-      <div className="p-5">
+      <motion.div
+        key={active}
+        initial={{ opacity: 0, y: 4 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.15, ease: easeOutQuint }}
+        className="p-5"
+      >
         {/* Price header */}
         <div className="flex items-baseline gap-3 mb-3">
           <span className="text-2xl font-bold tabular-nums text-foreground">{fmt(idx.current)}</span>
@@ -204,7 +287,7 @@ export function MarketIndexBar() {
         </div>
 
         <TrendChart idx={idx} />
-      </div>
+      </motion.div>
     </div>
   );
 }

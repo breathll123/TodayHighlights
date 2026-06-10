@@ -776,7 +776,7 @@ export function Navbar() {
       <div className="flex h-14 items-center justify-between px-6 max-w-6xl mx-auto">
         <div className="flex items-center gap-8">
           <Link to="/" className="text-lg font-bold tracking-tight">
-            每日看点
+            今日看点
           </Link>
           <nav className="flex items-center gap-1">
             <Link

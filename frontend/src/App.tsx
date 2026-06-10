@@ -8,7 +8,6 @@ import { TopicPage } from "./pages/TopicPage";
 import { LoginPage } from "./pages/LoginPage";
 import { AdminSourcesPage } from "./pages/AdminSourcesPage";
 import { AdminJobsPage } from "./pages/AdminJobsPage";
-import { AdminHighlightsPage } from "./pages/AdminHighlightsPage";
 import { AdminSettingsPage } from "./pages/AdminSettingsPage";
 import { AdminLayoutPage } from "./pages/AdminLayoutPage";
 import { AdminTopicsPage } from "./pages/AdminTopicsPage";
@@ -71,7 +70,6 @@ export default function App() {
             <Route element={<ProtectedRoute />}>
               <Route path="/admin/sources" element={<AdminSourcesPage />} />
               <Route path="/admin/jobs" element={<AdminJobsPage />} />
-              <Route path="/admin/highlights" element={<AdminHighlightsPage />} />
               <Route path="/admin/settings" element={<AdminSettingsPage />} />
               <Route path="/admin/layout" element={<AdminLayoutPage />} />
               <Route path="/admin/topics" element={<AdminTopicsPage />} />

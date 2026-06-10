@@ -1,5 +1,5 @@
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { BrainCircuit, Clock, FileText, LayoutDashboard, LogOut, Newspaper, RadioTower, ScrollText, Settings, Tag, Users } from "lucide-react";
+import { BrainCircuit, Clock, FileText, LayoutDashboard, LogOut, RadioTower, ScrollText, Settings, Tag, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
 
@@ -10,7 +10,6 @@ const links = [
   { href: "/admin/ai-ops", label: "AI 运营", icon: BrainCircuit },
   { href: "/admin/users", label: "用户", icon: Users },
   { href: "/admin/ai-prompts", label: "Prompt 模板", icon: ScrollText },
-  { href: "/admin/highlights", label: "看点", icon: Newspaper },
   { href: "/admin/layout", label: "布局", icon: LayoutDashboard },
   { href: "/admin/settings", label: "设置", icon: Settings },
 ];
@@ -28,7 +27,7 @@ export function AdminSidebar() {
             <RadioTower className="h-4 w-4" aria-hidden="true" />
           </span>
           <span className="hidden md:block">
-            <span className="block text-sm font-semibold text-foreground">DataFlow</span>
+            <span className="block text-sm font-semibold text-foreground">今日看点</span>
             <span className="block text-[11px] font-medium uppercase text-muted-foreground">Ops Console</span>
           </span>
         </Link>

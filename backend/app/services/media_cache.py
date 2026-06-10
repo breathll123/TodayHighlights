@@ -7,6 +7,7 @@ from urllib.parse import urlparse, urlunparse
 
 import httpx
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.models.entities import MediaAsset
@@ -72,7 +73,7 @@ class MediaCacheService:
         self.storage_root = storage_root or DEFAULT_STORAGE_ROOT
         self.http_client = http_client or httpx.Client(
             timeout=10,
-            headers={"User-Agent": "Mozilla/5.0 DailyHighlights/0.1"},
+            headers={"User-Agent": "Mozilla/5.0 TodayHighlights/0.1"},
             follow_redirects=True,
         )
         self._bind = session.get_bind()
@@ -102,6 +103,7 @@ class MediaCacheService:
         sess = self._new_session()
         if sess is None:
             return ""
+        local_file: Path | None = None
         try:
             digest = url_hash(normalized)
             existing = sess.scalar(select(MediaAsset).where(MediaAsset.url_hash == digest))
@@ -152,13 +154,47 @@ class MediaCacheService:
             asset.last_fetched_at = now
             sess.commit()
             return asset.public_path
-        except Exception as exc:
-            asset.status = "failed"
-            asset.error_message = str(exc)[:500]
+        except IntegrityError:
             try:
                 sess.rollback()
             except Exception:
                 pass
+            existing_path = self._return_existing_cached(sess, url_hash(normalized), datetime.utcnow())
+            if existing_path:
+                return existing_path
+            if local_file is not None:
+                self._remove_file(local_file)
+            return ""
+        except Exception:
+            try:
+                sess.rollback()
+            except Exception:
+                pass
+            if local_file is not None:
+                self._remove_file(local_file)
             return ""
         finally:
             sess.close()
+
+    @staticmethod
+    def _remove_file(path: Path) -> None:
+        try:
+            if path.exists():
+                path.unlink()
+        except OSError:
+            pass
+
+    def _return_existing_cached(self, sess: Session, digest: str, used_at: datetime) -> str:
+        try:
+            existing = sess.scalar(select(MediaAsset).where(MediaAsset.url_hash == digest))
+            if existing and existing.status == "cached" and existing.local_path and Path(existing.local_path).exists():
+                existing.last_used_at = used_at
+                sess.commit()
+                return existing.public_path
+            sess.rollback()
+        except Exception:
+            try:
+                sess.rollback()
+            except Exception:
+                pass
+        return ""

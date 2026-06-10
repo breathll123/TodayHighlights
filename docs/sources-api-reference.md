@@ -233,7 +233,7 @@ GET https://stock.xueqiu.com/v5/stock/quote.json
 ### 通用请求头
 
 ```
-User-Agent: Mozilla/5.0 DailyHighlights/0.1
+User-Agent: Mozilla/5.0 TodayHighlights/0.1
 Referer: https://quote.eastmoney.com/
 ```
 
@@ -483,7 +483,7 @@ User-Agent: Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X)
 ### 通用请求头
 
 ```
-User-Agent: Mozilla/5.0 DailyHighlights/0.1
+User-Agent: Mozilla/5.0 TodayHighlights/0.1
 Accept: application/json
 Referer: https://www.qiumiwu.com/
 ```

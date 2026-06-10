@@ -97,7 +97,7 @@ def get_cached_media(url_hash: str, session: Session = Depends(get_session)):
 _IMAGE_CLIENT = httpx.Client(timeout=10, headers={"User-Agent": "Mozilla/5.0", "Referer": "https://www.qiumiwu.com/"})
 
 # Disk cache for proxied images
-_IMG_CACHE_DIR = Path("/tmp/dataflow-img-cache")
+_IMG_CACHE_DIR = Path("/tmp/today-highlights-img-cache")
 _IMG_CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
 

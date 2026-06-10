@@ -451,7 +451,7 @@ def build_block_system_prompt(
 ) -> str:
     framework = _FRAMEWORKS.get(content_class, _FRAMEWORK_NEWS)
     sections = [
-        f"你是 DataFlow 的内容分析助手，当前分析领域：{topic_slug}。",
+        f"你是今日看点的内容分析助手，当前分析领域：{topic_slug}。",
     ]
     if template is not None and template.topic_context.strip():
         sections.append(f"【领域背景】\n{template.topic_context.strip()}")

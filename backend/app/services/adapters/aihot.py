@@ -7,7 +7,7 @@ import httpx
 from app.core.cache import ttl_cache
 
 _CST = timezone(timedelta(hours=8))
-_headers = {"User-Agent": "Mozilla/5.0 DailyHighlights/0.1", "Accept": "application/xml"}
+_headers = {"User-Agent": "Mozilla/5.0 TodayHighlights/0.1", "Accept": "application/xml"}
 
 
 def _parse_feed(xml_text: str) -> list[dict]:

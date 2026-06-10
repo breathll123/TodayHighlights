@@ -1,5 +1,5 @@
 ---
-name: DataFlow
+name: 今日看点
 description: Multi-source real-time information dashboard with professional terminal aesthetics
 colors:
   deep-teal: "#1DB8A8"
@@ -73,7 +73,7 @@ components:
     padding: "8px 12px"
 ---
 
-# Design System: DataFlow
+# Design System: 今日看点
 
 ## 1. Overview
 

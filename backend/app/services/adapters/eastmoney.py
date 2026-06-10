@@ -9,7 +9,7 @@ from app.core.config import settings
 _proxy = settings.eastmoney_proxy
 _http = httpx.Client(
     timeout=15,
-    headers={"User-Agent": "Mozilla/5.0 DailyHighlights/0.1", "Referer": "https://quote.eastmoney.com/"},
+    headers={"User-Agent": "Mozilla/5.0 TodayHighlights/0.1", "Referer": "https://quote.eastmoney.com/"},
     mounts={"http://": httpx.HTTPTransport(proxy=_proxy), "https://": httpx.HTTPTransport(proxy=_proxy)} if _proxy else None,
 )
 
@@ -155,7 +155,7 @@ def fetch_indices(_config: dict, limit: int) -> list[dict]:
         codes = ",".join(c for c, _, _ in index_map[:limit])
         resp = httpx.get(
             f"https://hq.sinajs.cn/list={codes}",
-            headers={"User-Agent": "Mozilla/5.0 DailyHighlights/0.1", "Referer": "https://finance.sina.com.cn/"},
+            headers={"User-Agent": "Mozilla/5.0 TodayHighlights/0.1", "Referer": "https://finance.sina.com.cn/"},
             timeout=10,
         )
         resp.raise_for_status()
@@ -242,22 +242,31 @@ def _fetch_one_trend(snapshot: dict) -> dict | None:
             return None
         trend_date = ""
         points = []
+        highs = []
+        lows = []
         for row in trends:
             parts = row.split(",")
             if len(parts) >= 3:
                 full_time = parts[0]
                 if " " in full_time and not trend_date:
                     trend_date = full_time.split(" ")[0]
+                price = float(parts[2])
                 points.append({
                     "time": full_time.split(" ")[-1][:5] if " " in full_time else full_time,
-                    "price": float(parts[2]),
+                    "price": price,
                 })
+                if len(parts) >= 5:
+                    highs.append(float(parts[3]))
+                    lows.append(float(parts[4]))
+                else:
+                    highs.append(price)
+                    lows.append(price)
         return {
             "prev_close": raw.get("preClose", 0),
             "date": trend_date,
             "points": points,
-            "high": max(p["price"] for p in points) if points else 0,
-            "low": min(p["price"] for p in points) if points else 0,
+            "high": max(highs) if highs else 0,
+            "low": min(lows) if lows else 0,
         }
     except Exception:
         return None
@@ -297,7 +306,7 @@ def fetch_announcements(_config: dict, limit: int) -> list[dict]:
             "https://np-anotice-stock.eastmoney.com/api/security/ann",
             params={"page_index": 1, "page_size": limit, "ann_type": "A",
                     "sort_name": "notice_date", "sort_type": "desc"},
-            headers={"User-Agent": "Mozilla/5.0 DailyHighlights/0.1", "Referer": "https://data.eastmoney.com/"},
+            headers={"User-Agent": "Mozilla/5.0 TodayHighlights/0.1", "Referer": "https://data.eastmoney.com/"},
             timeout=15,
         )
         resp.raise_for_status()
