@@ -3,6 +3,7 @@
 .claude/
 .codex/
 .impeccable/
+**/.agents/
 
 # Python
 __pycache__/
