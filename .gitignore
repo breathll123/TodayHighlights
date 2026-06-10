@@ -2,6 +2,7 @@
 .worktrees/
 .claude/
 .codex/
+.impeccable/
 
 # Python
 __pycache__/
