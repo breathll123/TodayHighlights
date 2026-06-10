@@ -28,20 +28,19 @@
 cd backend
 conda activate daily_highlights
 cp .env.example .env  # 编辑数据库连接和密钥
-uvicorn app.main:app --reload
-
-新启动方式
+python scripts/init_db.py
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
+
+`init_db.py` 会执行全部数据库迁移，但不会创建默认管理员或默认密码。后端和前端启动后，首次访问 `http://localhost:5175/login`，按照页面提示创建首个管理员。创建成功后，公开管理员注册入口会自动关闭。
+
+升级旧版本时也应先运行一次 `python scripts/init_db.py`。如果数据库中仍是历史版本自动创建的默认管理员，登录页会要求重新设置安全的管理员账号和密码。
 
 ### 前端
 
 ```bash
 cd frontend
 npm install
-npm run dev
-
-新启动方式
 npm run dev -- --host 0.0.0.0 --port 5175
 ```
 
@@ -84,7 +83,7 @@ npm run dev -- --host 0.0.0.0 --port 5175
 ## 运行测试
 
 ```bash
-cd backend && APP_SECRET_KEY=test-key python3 -m pytest tests/ -v
+cd backend && APP_SECRET_KEY=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA= python3 -m pytest tests/ -v
 cd frontend && npx vitest run
 ```
 

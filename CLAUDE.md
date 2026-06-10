@@ -12,10 +12,10 @@ cd backend && uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 cd frontend && npm run dev -- --host 0.0.0.0 --port 5175
 
 # 运行全部后端测试（SQLite 内存数据库，无需 MySQL）
-cd backend && APP_SECRET_KEY=test-key python3 -m pytest tests/ -v
+cd backend && APP_SECRET_KEY=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA= python3 -m pytest tests/ -v
 
 # 运行单个后端测试文件
-cd backend && APP_SECRET_KEY=test-key python3 -m pytest tests/test_media_cache.py -v
+cd backend && APP_SECRET_KEY=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA= python3 -m pytest tests/test_media_cache.py -v
 
 # 运行全部前端测试
 cd frontend && npx vitest run
@@ -25,6 +25,9 @@ cd frontend && npx vitest run src/__tests__/market-index-bar.test.tsx
 
 # 生成新的 Alembic 迁移（使用短格式 revision ID）
 cd backend && alembic revision --autogenerate -m "描述"
+
+# 初始化或升级数据库（启动应用前执行）
+cd backend && python scripts/init_db.py
 ```
 
 ## 架构
@@ -79,7 +82,7 @@ def set_media_cache(mc):
 
 ### 认证
 
-基于密码的简单认证。管理员密码明文存储在 `settings` 表中。用户 Token 为 JWT 风格，使用 `app_secret_key` 签名。管理员专属路由使用 `verify_admin` 依赖。
+用户密码通过 PBKDF2-SHA256 加盐哈希存储在 `users.password_hash`。新部署先运行 `python scripts/init_db.py`，再由登录页调用 `/api/auth/bootstrap-admin` 创建首个管理员；创建完成后公开注册关闭，仓库和数据库中均不保存默认管理员密码。用户 Token 使用 `app_secret_key` 加密并包含有效期，管理员专属路由使用 `verify_admin` 依赖。
 
 ## 设计约束
 
