@@ -1,6 +1,7 @@
 .superpowers/
 .worktrees/
 .claude/
+.codex/
 
 # Python
 __pycache__/
@@ -33,3 +34,6 @@ backend/tests/*.xlsx
 
 # Runtime media cache
 backend/storage/
+
+# Project docs (design plans, specs)
+docs/

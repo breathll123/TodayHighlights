@@ -1,6 +1,7 @@
 import { AnimatePresence, motion } from "framer-motion";
-import { BrainCircuit, ChevronDown, Loader2, X } from "lucide-react";
+import { ArrowRight, BrainCircuit, ChevronDown, Loader2, LogIn, X } from "lucide-react";
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import type { BlockAIAnalysis } from "@/api/types";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -49,7 +50,27 @@ export function BlockAIAnalysisDrawer({
             </header>
 
             <div className="flex-1 space-y-5 overflow-y-auto px-5 py-4">
-              {requiresLogin ? <p className="rounded-lg border bg-muted/40 p-4 text-sm">登录后可使用 AI 分析</p> : null}
+              {requiresLogin ? (
+                <div className="space-y-4">
+                  <div className="rounded-xl border-2 border-primary/20 bg-primary/5 p-6">
+                    <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-full bg-primary/10">
+                      <LogIn className="h-5 w-5 text-primary" />
+                    </div>
+                    <h3 className="mb-1.5 text-base font-semibold">需要登录</h3>
+                    <p className="mb-4 text-sm leading-relaxed text-muted-foreground">
+                      登录后即可使用 AI 分析功能，获取区块内容的智能摘要、关键变化和风险评估。
+                    </p>
+                    <Link
+                      to="/login"
+                      className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                      onClick={onClose}
+                    >
+                      去登录
+                      <ArrowRight className="h-4 w-4" />
+                    </Link>
+                  </div>
+                </div>
+              ) : null}
               {isLoading ? <div className="space-y-3"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /><div className="h-4 w-2/3 animate-pulse rounded bg-muted" /><div className="h-20 animate-pulse rounded bg-muted" /></div> : null}
               {error ? <p className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">{error}</p> : null}
               {analysis ? (
