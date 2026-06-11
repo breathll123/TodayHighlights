@@ -11,8 +11,22 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.core.auth import verify_admin
+from app.core.cache import (
+    MemoryCacheBackend,
+    configure_cache_backend_for_tests,
+    reset_cache_backend_for_tests,
+)
 from app.core.database import Base, get_session
 from app.main import app
+
+
+@pytest.fixture(autouse=True)
+def _init_cache_backend() -> Generator[None, None, None]:
+    """Ensure every test has a memory cache backend available."""
+    backend = MemoryCacheBackend(maxsize=256)
+    configure_cache_backend_for_tests(backend)
+    yield
+    reset_cache_backend_for_tests()
 
 
 @pytest.fixture

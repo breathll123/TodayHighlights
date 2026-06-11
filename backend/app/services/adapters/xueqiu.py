@@ -10,7 +10,7 @@ from app.core.crypto import CryptoService
 from app.models.entities import Source
 
 
-@ttl_cache(300)
+@ttl_cache(300, shared=False)
 def _decrypt_cookie(cookie_encrypted: str) -> str:
     """Cached decryption of xueqiu cookie. Keyed on encrypted string."""
     if not cookie_encrypted:
