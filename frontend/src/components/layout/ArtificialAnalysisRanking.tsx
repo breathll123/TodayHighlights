@@ -9,9 +9,19 @@ const DATASET_LABELS: Record<string, string> = {
   text_to_image: "文生图",
   text_to_video: "文生视频",
   image_to_video: "图生视频",
-  text_to_speech: "文生语音",
+  text_to_speech: "文本转语音",
   speech_to_text: "语音转文本",
 };
+
+const DATASET_ORDER = [
+  "language_global",
+  "language_china",
+  "text_to_image",
+  "text_to_video",
+  "image_to_video",
+  "text_to_speech",
+  "speech_to_text",
+];
 
 const SCORE_LABELS: Record<string, string> = {
   intelligence_index: "智能指数",
@@ -48,16 +58,8 @@ function fmtReleaseDate(iso: string | null | undefined): string {
 
 export function ArtificialAnalysisRanking({ data, meta }: Props) {
   const keys = useMemo(() => {
-    const seen = new Set<string>();
-    const result: string[] = [];
-    for (const item of data) {
-      const k = item.dataset_key ?? "language_global";
-      if (!seen.has(k)) {
-        seen.add(k);
-        result.push(k);
-      }
-    }
-    return result;
+    const seen = new Set(data.map((item) => item.dataset_key ?? "language_global"));
+    return DATASET_ORDER.filter((k) => seen.has(k));
   }, [data]);
 
   const [activeKey, setActiveKey] = useState(keys[0] ?? "language_global");
