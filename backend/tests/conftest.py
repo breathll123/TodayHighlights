@@ -1,3 +1,7 @@
+import os
+
+os.environ.setdefault("REDIS_ENABLED", "false")
+
 from collections.abc import Generator
 
 import pytest

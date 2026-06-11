@@ -12,10 +12,10 @@ cd backend && uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 cd frontend && npm run dev -- --host 0.0.0.0 --port 5175
 
 # 运行全部后端测试（SQLite 内存数据库，无需 MySQL）
-cd backend && APP_SECRET_KEY=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA= python3 -m pytest tests/ -v
+cd backend && APP_SECRET_KEY=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA= REDIS_ENABLED=false python3 -m pytest tests/ -v
 
 # 运行单个后端测试文件
-cd backend && APP_SECRET_KEY=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA= python3 -m pytest tests/test_media_cache.py -v
+cd backend && APP_SECRET_KEY=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA= REDIS_ENABLED=false python3 -m pytest tests/test_media_cache.py -v
 
 # 运行全部前端测试
 cd frontend && npx vitest run
