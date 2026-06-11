@@ -29,11 +29,21 @@ interface RankingItem {
   score: number | null;
   score_type?: string;
   dataset_key?: string;
+  release_date?: string | null;
 }
 
 interface Props {
   data: RankingItem[];
   meta?: BlockMeta | null;
+}
+
+function fmtReleaseDate(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return iso.slice(0, 4);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  return `${y}-${m}`;
 }
 
 export function ArtificialAnalysisRanking({ data, meta }: Props) {
@@ -72,6 +82,7 @@ export function ArtificialAnalysisRanking({ data, meta }: Props) {
     title: item.title ?? item.model ?? "",
     subtitle: item.creator ?? item.subtitle ?? "",
     score: item.score ?? undefined,
+    release: fmtReleaseDate(item.release_date),
     url: undefined,
     percent: undefined,
   }));
@@ -79,20 +90,21 @@ export function ArtificialAnalysisRanking({ data, meta }: Props) {
   const fields = [
     { key: "title" as const, label: "模型", type: "text" as const },
     { key: "subtitle" as const, label: "厂商", type: "text" as const },
+    { key: "release" as const, label: "Released", type: "text" as const },
     { key: "score" as const, label: scoreLabel, type: "number" as const },
   ];
 
   return (
     <div className="border rounded-lg bg-card overflow-hidden">
       {keys.length > 1 && (
-        <div className="flex items-center gap-1 border-b border-border/50 bg-muted/30 px-4 py-2">
+        <div className="flex items-center gap-1.5 border-b border-border/50 bg-muted/30 px-4 py-2.5">
           {keys.map((key) => (
             <button
               key={key}
               onClick={() => setActiveKey(key)}
-              className={`rounded px-2.5 py-0.5 text-[10px] transition-[color,background-color,transform] active:scale-[0.97] ${
+              className={`rounded-md px-3 py-1 text-xs font-medium transition-[color,background-color,transform] active:scale-[0.97] ${
                 activeKey === key
-                  ? "bg-primary text-primary-foreground font-medium"
+                  ? "bg-primary text-primary-foreground"
                   : "text-muted-foreground hover:text-foreground"
               }`}
             >
@@ -110,7 +122,7 @@ export function ArtificialAnalysisRanking({ data, meta }: Props) {
         <CompactTable showRank data={mapped} fields={fields} />
       </motion.div>
       <div className="border-t border-border/50 bg-muted/20 px-4 py-2.5 space-y-1">
-        <div className="flex items-center justify-between gap-3 text-[10px] text-muted-foreground">
+        <div className="flex items-center justify-between gap-3 text-[11px] text-muted-foreground">
           <span>
             <a
               href="https://artificialanalysis.ai/"
@@ -128,17 +140,17 @@ export function ArtificialAnalysisRanking({ data, meta }: Props) {
               </time>
             )}
             {meta?.is_stale && (
-              <span className="ml-2 inline-flex items-center rounded bg-yellow-500/10 px-1.5 py-0.5 text-[9px] font-medium text-yellow-400">
+              <span className="ml-2 inline-flex items-center rounded bg-yellow-500/10 px-1.5 py-0.5 text-[11px] font-medium text-yellow-400">
                 数据较旧
               </span>
             )}
           </span>
         </div>
         {isWer && (
-          <p className="text-[9px] text-muted-foreground/60">WER 越低越好</p>
+          <p className="text-[10px] text-muted-foreground/60">WER 越低越好</p>
         )}
         {meta?.scope_note && (
-          <p className="text-[9px] text-muted-foreground/60">{meta.scope_note}</p>
+          <p className="text-[10px] text-muted-foreground/60">{meta.scope_note}</p>
         )}
       </div>
     </div>

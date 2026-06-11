@@ -174,7 +174,7 @@ export function BlockConfigPanel({ form, onChange, onSave, onCancel }: Props) {
                         : [...selected, ds.value];
                       update("source_config", {
                         dataset_keys: next.length > 0 ? next : ["language_global"],
-                        display_fields: ["title", "subtitle", "score"],
+                        display_fields: ["title", "subtitle", "release", "score"],
                       });
                     }}
                     className="h-3.5 w-3.5 rounded border-border accent-primary"

@@ -139,6 +139,7 @@ def _serialize_entry(entry: AARankingEntry) -> dict:
         "score": float(entry.score) if entry.score is not None else None,
         "score_type": entry.score_type,
         "ci_95": float(entry.ci_95) if entry.ci_95 is not None else None,
+        "release_date": entry.release_date.isoformat() if entry.release_date else None,
         "metrics": entry.metrics_json or {},
     }
 
