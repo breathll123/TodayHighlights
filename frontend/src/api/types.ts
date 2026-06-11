@@ -55,7 +55,7 @@ export interface Block {
   page_route: string;
   title: string;
   sort_order: number;
-  source_type: "topic" | "raw" | "hot_stocks" | "hot_events" | "xueqiu_hot_cn" | "xueqiu_hot_hk" | "xueqiu_hot_us" | "screener" | "eastmoney_sectors" | "eastmoney_longhu" | "eastmoney_industry" | "eastmoney_indices" | "eastmoney_capital_flow" | "eastmoney_announcements" | "tonghuashun_news" | "qiumiwu_matches" | "qiumiwu_fixtures" | "qiumiwu_standings" | "qiumiwu_schedule" | "datalearner_leaderboard" | "datalearner_aa_index" | "aihot_news";
+  source_type: "topic" | "raw" | "hot_stocks" | "hot_events" | "xueqiu_hot_cn" | "xueqiu_hot_hk" | "xueqiu_hot_us" | "screener" | "eastmoney_sectors" | "eastmoney_longhu" | "eastmoney_industry" | "eastmoney_indices" | "eastmoney_capital_flow" | "eastmoney_announcements" | "tonghuashun_news" | "qiumiwu_matches" | "qiumiwu_fixtures" | "qiumiwu_standings" | "qiumiwu_schedule" | "datalearner_leaderboard" | "datalearner_aa_index" | "aihot_news" | "artificial_analysis_ranking";
   source_config: Record<string, unknown>;
   display_style: "card" | "list" | "timeline" | "schedule";
   display_count: number;
@@ -71,8 +71,31 @@ export interface Block {
   status: "draft" | "published";
 }
 
+export interface BlockMeta {
+  dataset_key?: string;
+  score_type?: string;
+  captured_at?: string;
+  source_name?: string;
+  source_url?: string;
+  scope_note?: string | null;
+  is_stale?: boolean;
+}
+
+export interface ArtificialAnalysisRankingItem {
+  id: number;
+  rank: number | null;
+  model: string;
+  title: string;
+  creator: string;
+  subtitle: string;
+  score: number | null;
+  score_type: string;
+  ci_95: number | null;
+  metrics: Record<string, unknown>;
+}
+
 export interface PageBlocksResponse {
-  blocks: (Block & { data: unknown[] })[];
+  blocks: (Block & { data: unknown[]; meta?: BlockMeta | null })[];
 }
 
 export interface AIModelConfig {

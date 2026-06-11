@@ -10,6 +10,7 @@ import { MatchList } from "./MatchList";
 import { NewsTimeline } from "./NewsTimeline";
 import { StandingsTable } from "./StandingsTable";
 import { LeaderboardTable } from "./LeaderboardTable";
+import { ArtificialAnalysisRanking } from "./ArtificialAnalysisRanking";
 import { SectionHeading } from "./SectionHeading";
 import { BlockAIAnalysisDrawer } from "./BlockAIAnalysisDrawer";
 import { CollapsibleSection } from "./CollapsibleSection";
@@ -255,6 +256,8 @@ export function GridRenderer({ blocks, isLoading, dataUpdatedAt }: { blocks: any
               <AAIndexBlock block={block} displayFields={displayFields} />
             ) : block.source_type === "datalearner_leaderboard" ? (
               <LeaderboardTable data={block.data} />
+            ) : block.source_type === "artificial_analysis_ranking" ? (
+              <ArtificialAnalysisRanking data={block.data} meta={block.meta} />
             ) : block.source_type === "aihot_news" ? (
               <NewsTimeline data={block.data.map((item: any) => ({
                 id: item.id,

@@ -382,7 +382,7 @@ class AASyncRun(Base):
     id: Mapped[int] = mapped_column(BIGINT_PK, primary_key=True, autoincrement=True)
     trigger_type: Mapped[str] = mapped_column(String(30), nullable=False)
     status: Mapped[str] = mapped_column(String(30), default="pending", nullable=False)
-    requested_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    requested_by_user_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
     requested_datasets_json: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
     completed_datasets_json: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
     failed_datasets_json: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list, nullable=False)

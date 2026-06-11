@@ -56,8 +56,19 @@ const SOURCE_TYPE_OPTIONS_QMW: { value: Block["source_type"]; label: string }[] 
 
 const SOURCE_TYPE_OPTIONS_AI: { value: Block["source_type"]; label: string }[] = [
   { value: "datalearner_aa_index", label: "AI模型智能指数排行榜" },
+  { value: "artificial_analysis_ranking", label: "Artificial Analysis 排行榜" },
   { value: "aihot_news", label: "AI 资讯快讯" },
 ];
+
+const ARTIFICIAL_ANALYSIS_DATASETS = [
+  { value: "language_global", label: "全球大语言模型" },
+  { value: "language_china", label: "中国大语言模型" },
+  { value: "text_to_image", label: "文生图" },
+  { value: "text_to_video", label: "文生视频" },
+  { value: "image_to_video", label: "图生视频" },
+  { value: "text_to_speech", label: "文本转语音" },
+  { value: "speech_to_text", label: "语音转文本" },
+] as const;
 
 const DISPLAY_STYLE_OPTIONS = [
   { value: "card", label: "卡片" },
@@ -142,6 +153,24 @@ export function BlockConfigPanel({ form, onChange, onSave, onCancel }: Props) {
       </div>
 
       {/* Source-specific config */}
+      {form.source_type === "artificial_analysis_ranking" && (
+        <div className="space-y-1.5">
+          <Label className="text-xs">排名数据</Label>
+          <Select
+            value={String(form.source_config?.dataset_key ?? "language_global")}
+            onValueChange={(v) =>
+              update("source_config", { dataset_key: v, display_fields: ["title", "subtitle", "score"] })
+            }
+          >
+            <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {ARTIFICIAL_ANALYSIS_DATASETS.map((ds) => (
+                <SelectItem key={ds.value} value={ds.value} className="text-xs">{ds.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
       {form.source_type === "topic" && (
         <div className="space-y-1.5">
           <Label className="text-xs">话题 ID</Label>
@@ -214,7 +243,7 @@ export function BlockConfigPanel({ form, onChange, onSave, onCancel }: Props) {
       )}
 
       {/* Display Style — hidden for AA index (list only) */}
-      {form.source_type !== "datalearner_aa_index" && (
+      {form.source_type !== "datalearner_aa_index" && form.source_type !== "artificial_analysis_ranking" && (
         <div className="space-y-1.5">
           <Label className="text-xs">展示样式</Label>
           <Select value={form.display_style} onValueChange={(v) => update("display_style", v as Block["display_style"])}>
