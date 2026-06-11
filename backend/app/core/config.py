@@ -17,6 +17,15 @@ class Settings(BaseSettings):
     redis_socket_timeout_seconds: float = 1.0
     redis_lock_ttl_seconds: int = 45
     redis_retry_interval_seconds: int = 30
+    artificial_analysis_api_key: str = ""
+    artificial_analysis_api_base: str = "https://artificialanalysis.ai/api/v2"
+    artificial_analysis_sync_enabled: bool = False
+    artificial_analysis_quota_reserve: int = 2
+    artificial_analysis_max_response_bytes: int = 10 * 1024 * 1024
+    artificial_analysis_request_timeout_seconds: float = 30.0
+    artificial_analysis_schedule_morning: str = "08:30"
+    artificial_analysis_schedule_evening: str = "20:30"
+    artificial_analysis_stale_hours: int = 36
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 

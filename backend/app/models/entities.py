@@ -1,10 +1,16 @@
-from datetime import datetime
+from datetime import date, datetime
+from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, JSON, String, Text, UniqueConstraint, func
+from sqlalchemy import (BigInteger, Boolean, Date, DateTime, ForeignKey, Index, Integer, JSON,
+                        LargeBinary, Numeric, String, Text, UniqueConstraint, func)
+from sqlalchemy.dialects.mysql import LONGBLOB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
+
+BIGINT_PK = BigInteger().with_variant(Integer, "sqlite")
+RAW_BODY_TYPE = LargeBinary().with_variant(LONGBLOB(), "mysql")
 
 
 class TimestampMixin:
@@ -364,3 +370,124 @@ class PageBlock(TimestampMixin, Base):
     grid_x: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     grid_y: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     status: Mapped[str] = mapped_column(String(20), default="draft", nullable=False)
+
+
+class AASyncRun(Base):
+    __tablename__ = "aa_sync_runs"
+    __table_args__ = (
+        Index("ix_aa_sync_runs_status_created", "status", "created_at"),
+        Index("ix_aa_sync_runs_trigger_created", "trigger_type", "created_at"),
+    )
+
+    id: Mapped[int] = mapped_column(BIGINT_PK, primary_key=True, autoincrement=True)
+    trigger_type: Mapped[str] = mapped_column(String(30), nullable=False)
+    status: Mapped[str] = mapped_column(String(30), default="pending", nullable=False)
+    requested_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    requested_datasets_json: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
+    completed_datasets_json: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
+    failed_datasets_json: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list, nullable=False)
+    request_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    quota_tier: Mapped[str] = mapped_column(String(30), default="", nullable=False)
+    quota_limit: Mapped[int | None] = mapped_column(Integer)
+    quota_remaining: Mapped[int | None] = mapped_column(Integer)
+    quota_reset_at: Mapped[datetime | None] = mapped_column(DateTime)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime)
+    heartbeat_at: Mapped[datetime | None] = mapped_column(DateTime)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime)
+    error_message: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
+
+
+class AARawSnapshot(Base):
+    __tablename__ = "aa_raw_snapshots"
+    __table_args__ = (
+        UniqueConstraint("sync_run_id", "dataset_key", "page_number", name="uq_aa_snapshot_run_dataset_page"),
+        Index("ix_aa_snapshots_dataset_captured", "dataset_key", "captured_at"),
+        Index("ix_aa_snapshots_body_sha", "body_sha256"),
+    )
+
+    id: Mapped[int] = mapped_column(BIGINT_PK, primary_key=True, autoincrement=True)
+    sync_run_id: Mapped[int] = mapped_column(ForeignKey("aa_sync_runs.id"), nullable=False)
+    dataset_key: Mapped[str] = mapped_column(String(50), nullable=False)
+    endpoint: Mapped[str] = mapped_column(String(500), nullable=False)
+    page_number: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    http_status: Mapped[int] = mapped_column(Integer, nullable=False)
+    response_headers_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+    body_compressed: Mapped[bytes] = mapped_column(RAW_BODY_TYPE, nullable=False)
+    compression: Mapped[str] = mapped_column(String(20), default="gzip", nullable=False)
+    content_type: Mapped[str] = mapped_column(String(120), default="", nullable=False)
+    body_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    original_size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
+    compressed_size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
+    parse_status: Mapped[str] = mapped_column(String(30), default="pending", nullable=False)
+    parse_error: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    captured_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+
+
+class AARankingDataset(Base):
+    __tablename__ = "aa_ranking_datasets"
+    __table_args__ = (
+        Index("ix_aa_datasets_key_status_published", "dataset_key", "status", "published_at"),
+        Index("ix_aa_datasets_key_hash", "dataset_key", "data_sha256"),
+    )
+
+    id: Mapped[int] = mapped_column(BIGINT_PK, primary_key=True, autoincrement=True)
+    sync_run_id: Mapped[int] = mapped_column(ForeignKey("aa_sync_runs.id"), nullable=False)
+    dataset_key: Mapped[str] = mapped_column(String(50), nullable=False)
+    scope: Mapped[str] = mapped_column(String(20), default="global", nullable=False)
+    score_type: Mapped[str] = mapped_column(String(40), nullable=False)
+    status: Mapped[str] = mapped_column(String(30), default="parsing", nullable=False)
+    source_tier: Mapped[str] = mapped_column(String(30), default="", nullable=False)
+    source_version: Mapped[str] = mapped_column(String(40), default="", nullable=False)
+    entry_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    source_snapshot_ids_json: Mapped[list[int]] = mapped_column(JSON, default=list, nullable=False)
+    parser_warnings_json: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
+    data_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    captured_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    published_at: Mapped[datetime | None] = mapped_column(DateTime)
+    error_message: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
+
+
+class AARankingEntry(Base):
+    __tablename__ = "aa_ranking_entries"
+    __table_args__ = (
+        UniqueConstraint("dataset_id", "model_external_id", name="uq_aa_entry_dataset_model"),
+        Index("ix_aa_entries_dataset_rank", "dataset_id", "rank"),
+        Index("ix_aa_entries_creator", "creator_external_id"),
+    )
+
+    id: Mapped[int] = mapped_column(BIGINT_PK, primary_key=True, autoincrement=True)
+    dataset_id: Mapped[int] = mapped_column(ForeignKey("aa_ranking_datasets.id"), nullable=False)
+    model_external_id: Mapped[str] = mapped_column(String(120), nullable=False)
+    model_slug: Mapped[str] = mapped_column(String(200), default="", nullable=False)
+    model_name: Mapped[str] = mapped_column(String(300), nullable=False)
+    creator_external_id: Mapped[str] = mapped_column(String(120), default="", nullable=False)
+    creator_name: Mapped[str] = mapped_column(String(200), default="", nullable=False)
+    creator_region: Mapped[str] = mapped_column(String(20), default="unknown", nullable=False)
+    rank: Mapped[int | None] = mapped_column(Integer)
+    score: Mapped[Decimal | None] = mapped_column(Numeric(16, 6))
+    score_type: Mapped[str] = mapped_column(String(40), nullable=False)
+    ci_95: Mapped[Decimal | None] = mapped_column(Numeric(16, 6))
+    release_date: Mapped[date | None] = mapped_column(Date)
+    metrics_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+    pricing_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+    performance_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+    source_url: Mapped[str] = mapped_column(String(500), default="", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
+
+
+class AACreatorRegion(TimestampMixin, Base):
+    __tablename__ = "aa_creator_regions"
+    __table_args__ = (
+        UniqueConstraint("creator_external_id", name="uq_aa_creator_external_id"),
+        UniqueConstraint("normalized_name", name="uq_aa_creator_normalized_name"),
+    )
+
+    id: Mapped[int] = mapped_column(BIGINT_PK, primary_key=True, autoincrement=True)
+    creator_external_id: Mapped[str | None] = mapped_column(String(120))
+    canonical_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    normalized_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    region_code: Mapped[str] = mapped_column(String(20), default="unknown", nullable=False)
+    source: Mapped[str] = mapped_column(String(30), default="observed", nullable=False)
+    notes: Mapped[str] = mapped_column(Text, default="", nullable=False)

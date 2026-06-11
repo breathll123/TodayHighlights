@@ -1,3 +1,6 @@
-from app.models.entities import AppSetting, CrawlJob, Highlight, PageBlock, RawItem, Source, Topic
+from app.models.entities import (AACreatorRegion, AARankingDataset, AARankingEntry, AARawSnapshot,
+                                  AASyncRun, AppSetting, CrawlJob, Highlight, PageBlock, RawItem,
+                                  Source, Topic)
 
-__all__ = ["AppSetting", "CrawlJob", "Highlight", "PageBlock", "RawItem", "Source", "Topic"]
+__all__ = ["AACreatorRegion", "AARankingDataset", "AARankingEntry", "AARawSnapshot", "AASyncRun",
+           "AppSetting", "CrawlJob", "Highlight", "PageBlock", "RawItem", "Source", "Topic"]
