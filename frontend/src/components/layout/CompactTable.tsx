@@ -10,6 +10,8 @@ interface Row {
   percent?: number;
   score?: string | number;
   url?: string;
+  release?: string;
+  [key: string]: unknown;
 }
 
 interface Props {
@@ -48,8 +50,12 @@ function cell(key: string, item: Row) {
       return <span className="text-xs text-muted-foreground tabular-nums">{fmtNum(item.score)}</span>;
     case "subtitle":
       return <span className="text-xs text-muted-foreground truncate">{item.subtitle || "—"}</span>;
-    default:
-      return <span className="text-xs text-muted-foreground truncate">—</span>;
+    case "release":
+      return <span className="text-xs text-muted-foreground tabular-nums">{item.release || "—"}</span>;
+    default: {
+      const val = item[key];
+      return <span className="text-xs text-muted-foreground truncate">{val != null ? String(val) : "—"}</span>;
+    }
   }
 }
 
