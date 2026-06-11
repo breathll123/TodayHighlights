@@ -23,8 +23,8 @@ _COMPETITIONS = {
 
 
 def _parse_date(date_label: str) -> str:
-    """Parse '06-13 星期六' → '2026-06-13'"""
-    m = re.match(r"(\d{2})-(\d{2})", date_label)
+    """Parse '明天 06-13 星期六' or '06-13 星期六' → '2026-06-13'"""
+    m = re.search(r"(\d{2})-(\d{2})", date_label)
     if m:
         return f"2026-{m.group(1)}-{m.group(2)}"
     return ""
@@ -148,7 +148,7 @@ def fetch_competition_schedule(config: dict, limit: int) -> list[dict]:
         matches_info = []
 
         tokens = list(re.finditer(
-            r'(?:<div class="fixture__details__header">\s*<span>(\d{2}-\d{2}\s+\S+)</span>)|'
+            r'(?:<div class="fixture__details__header">\s*<span>([^<]+)</span>)|'
             r'(?:fixture__list__header">\s*<span>(\d{2}:\d{2})</span>.*?<span>([^<]*)</span>\s*</div>\s*'
             r'<a[^>]*class="fixture__list__info"\s*href="/game/(\d+)"[^>]*>\s*'
             r'<div[^>]*class="fixture__list__team"[^>]*><span>([^<]+)</span>\s*</div>\s*'

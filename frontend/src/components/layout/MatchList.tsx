@@ -84,7 +84,9 @@ function extractDate(startTime?: string): string {
 }
 
 function dateLabel(dateStr: string): string {
+  if (!dateStr || dateStr === "未知") return "待定";
   const d = new Date(dateStr + "T00:00:00");
+  if (isNaN(d.getTime())) return dateStr;
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const target = new Date(d.getFullYear(), d.getMonth(), d.getDate());
