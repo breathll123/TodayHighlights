@@ -1,8 +1,12 @@
 import logging
 from datetime import datetime, timedelta
 
+from concurrent.futures import ThreadPoolExecutor
+
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from fastapi.responses import JSONResponse
+
+_sync_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="aa-sync")
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
@@ -172,8 +176,8 @@ def update_creator(creator_id: int, body: AACreatorRegionUpdate, session: Sessio
 
 @router.post("/sync")
 def trigger_sync(
+    background_tasks: BackgroundTasks,
     body: AAManualSyncRequest | None = None,
-    background_tasks: BackgroundTasks = None,
     user: User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ):
@@ -189,7 +193,6 @@ def trigger_sync(
             detail={"message": "sync already active", "active_run_id": exc.active_run_id},
         )
 
-    background_tasks.add_task(execute_sync_run, run_id)
-
     run = session.get(AASyncRun, run_id)
+    _sync_executor.submit(execute_sync_run, run_id)
     return JSONResponse(status_code=202, content={"status": "accepted", "run": _serialize_run(run).model_dump()})
