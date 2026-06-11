@@ -144,10 +144,13 @@ describe("FootballTopicPage", () => {
     expect(await screen.findByText("今日赛程")).toBeInTheDocument();
     expect(screen.getByText("足球主题看板")).toBeInTheDocument();
     expect(screen.getByText("比分、赛程、积分榜")).toBeInTheDocument();
-    expect(screen.getByText("当前主题")).toBeInTheDocument();
-    expect(screen.getByText("观测时间")).toBeInTheDocument();
-    expect(screen.getByText("内容模块")).toBeInTheDocument();
-    expect(screen.getByText("平台状态")).toBeInTheDocument();
+    expect(screen.getByText("足球 · 实时看板")).toBeInTheDocument();
+    expect(screen.getByText("运行中")).toBeInTheDocument();
+    expect(screen.getByText("1 个模块")).toBeInTheDocument();
+    expect(screen.getByText(/\d{2}\/\d{2} \d{2}:\d{2} 更新/)).toBeInTheDocument();
+    expect(screen.queryByText("当前主题")).not.toBeInTheDocument();
+    expect(screen.queryByText("观测时间")).not.toBeInTheDocument();
+    expect(screen.queryByText("平台状态")).not.toBeInTheDocument();
   });
 });
 
