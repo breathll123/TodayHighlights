@@ -208,6 +208,15 @@ def resolve_block_data(
         from app.services.adapters.aihot import fetch_news
         return fetch_news(config, limit)
 
+    if source_type == "artificial_analysis_ranking":
+        if session is None:
+            raise RuntimeError("artificial_analysis_ranking requires a database session")
+        config = block.source_config or {}
+        dataset_key = str(config.get("dataset_key") or "language_global")
+        from app.services.artificial_analysis.repository import get_published_ranking
+        data, _meta = get_published_ranking(session, dataset_key, block.display_count)
+        return data
+
     return []
 
 
@@ -231,7 +240,7 @@ def get_page_blocks(session: Session, route: str) -> list[dict]:
         pass
 
     # Separate DB-dependent blocks (topic, raw) from live-API blocks
-    db_types = {"topic", "raw", "eastmoney_longhu", "tonghuashun_news"}
+    db_types = {"topic", "raw", "eastmoney_longhu", "tonghuashun_news", "artificial_analysis_ranking"}
     db_blocks = [b for b in blocks if b.source_type in db_types]
     live_blocks = [b for b in blocks if b.source_type not in db_types]
 
