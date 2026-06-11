@@ -96,6 +96,14 @@ python scripts/init_db.py
 | `APP_SECRET_KEY` | 用于敏感配置和登录令牌加密的 Fernet 密钥 |
 | `CORS_ORIGINS` | 允许访问后端的前端地址 |
 | `SCHEDULER_ENABLED` | 是否启动后台定时任务 |
+| `REDIS_ENABLED` | 是否启用 Redis 共享实时缓存。`false` 时使用进程内存 |
+| `REDIS_URL` | Redis URL，支持 `redis://` 和 `rediss://` |
+| `REDIS_KEY_PREFIX` | Redis Key 命名空间，默认 `today-highlights` |
+| `REDIS_SOCKET_TIMEOUT_SECONDS` | Redis 连接超时秒数，默认 1.0 |
+| `REDIS_LOCK_TTL_SECONDS` | 分布式刷新锁 TTL 秒数，默认 45 |
+| `REDIS_RETRY_INTERVAL_SECONDS` | Redis 恢复重试间隔秒数，默认 30 |
+
+Redis 故障时自动降级为进程内存缓存，不会阻止应用启动。`/health` 端点返回 `{"cache": "redis"|"memory-fallback"|"memory-disabled"}`。
 
 生成 `APP_SECRET_KEY`：
 
