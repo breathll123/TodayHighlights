@@ -1,42 +1,77 @@
-# 今日看点 — 多源实时信息看板
+# 今日看点
 
-聚合雪球、东方财富、同花顺三大财经平台数据，以可定制的方块看板形式展示。支持沪深港美股热度、概念/行业板块、龙虎榜、财经快讯等多维度数据。
+一个面向股票、足球和 AI 等主题的多源信息聚合与智能看板系统。
+
+项目提供可配置的数据接入、定时任务、内容存储、AI 辅助处理和可视化展示能力。管理员可以通过后台组合不同的数据方块，建立适合不同主题的信息工作台。
+
+## 主要功能
+
+- **多主题看板**：内置股票、足球、AI 主题页面，并支持继续扩展新主题
+- **可视化布局**：拖拽配置方块位置、尺寸、展示样式、字段和排序规则
+- **数据连接器**：通过统一 Adapter 接口接入授权 API、RSS、本地数据或其他合规数据源
+- **任务调度**：按数据源配置周期执行同步任务，并记录运行状态和错误信息
+- **内容管理**：保存原始条目、摘要内容、热度指标和发布状态
+- **AI 辅助处理**：支持内容增强、主题摘要、方块分析和提示词模板
+- **AI 运维统计**：记录生成任务、模型调用和 Token 使用情况
+- **后台管理**：提供数据源、主题、用户、模型、任务和页面布局管理
+- **安全初始化**：首次访问时创建管理员，不提供公开的默认账号或密码
 
 ## 技术栈
 
-**后端:** FastAPI + SQLAlchemy 2.0 + MySQL + APScheduler
-**前端:** React 18 + Vite + TypeScript + Tailwind CSS + shadcn/ui + framer-motion
-**采集:** httpx + Playwright (龙虎榜 Cookie 刷新)
+| 模块 | 技术 |
+|------|------|
+| 后端 | FastAPI、SQLAlchemy 2.0、MySQL、Alembic、APScheduler |
+| 前端 | React 18、Vite、TypeScript、Tailwind CSS、shadcn/ui |
+| 数据接入 | Adapter 模式、HTTP 客户端、定时任务 |
+| AI | OpenAI 兼容接口、可配置模型和提示词 |
+| 测试 | Pytest、Vitest、Testing Library |
 
-## 架构
+## 系统架构
 
+```text
+数据连接器                数据处理与存储                 页面展示
+Adapter / Source   ->   RawItem / Highlight   ->   PageBlock / Dashboard
+授权 API / RSS          AI 增强与主题摘要              卡片 / 列表 / 时间线
+本地数据                 任务与用量记录                 股票 / 足球 / AI
 ```
-采集层 (adapters/)  →  存储层 (raw_items/highlights)  →  展示层 (blocks/)
-─────────────────      ─────────────────────────         ────────────────
-雪球 (xueqiu)          raw_items — 原始采集数据          方块编辑器 (CanvasEditor)
-东方财富 (eastmoney)    highlights — AI 摘要内容         卡片/列表/时间线
-同花顺 (tonghuashun)   page_blocks — 看板布局配置        动态列 + 排序
-```
 
-每个方块独立配置数据来源、展示样式、显示字段和排序方式。
+数据连接器负责将不同来源转换为统一结构。数据进入存储层后，可以经过 AI 辅助处理，再由可配置的页面方块完成展示。连接器、内容处理和页面布局相互独立，便于增加新的主题和数据类型。
+
+## 项目结构
+
+```text
+backend/
+  app/api/                 HTTP API
+  app/models/              数据模型
+  app/services/adapters/   页面实时数据连接器
+  app/sources/             后台同步数据连接器
+  app/services/            内容、AI、任务和缓存服务
+  migrations/              数据库迁移
+  scripts/init_db.py       数据库初始化脚本
+
+frontend/
+  src/pages/               公共页面与管理页面
+  src/components/          看板、表格、卡片和表单组件
+  src/api/                 API 客户端与类型
+```
 
 ## 快速开始
 
-### 后端
+### 1. 启动后端
 
 ```bash
 cd backend
 conda activate daily_highlights
-cp .env.example .env  # 编辑数据库连接和密钥
+cp .env.example .env
+# 编辑 .env 中的数据库连接和密钥
+
 python scripts/init_db.py
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-`init_db.py` 会执行全部数据库迁移，但不会创建默认管理员或默认密码。后端和前端启动后，首次访问 `http://localhost:5175/login`，按照页面提示创建首个管理员。创建成功后，公开管理员注册入口会自动关闭。
+`init_db.py` 会执行数据库迁移，但不会创建默认管理员或默认密码。
 
-升级旧版本时也应先运行一次 `python scripts/init_db.py`。如果数据库中仍是历史版本自动创建的默认管理员，登录页会要求重新设置安全的管理员账号和密码。
-
-### 前端
+### 2. 启动前端
 
 ```bash
 cd frontend
@@ -44,51 +79,73 @@ npm install
 npm run dev -- --host 0.0.0.0 --port 5175
 ```
 
-### 环境变量 (`backend/.env`)
+首次访问 `http://localhost:5175/login` 时，页面会要求创建首个管理员。创建成功后，公开管理员创建入口自动关闭。
+
+升级旧版本时，应先重新运行：
+
+```bash
+cd backend
+python scripts/init_db.py
+```
+
+## 环境变量
 
 | 变量 | 说明 |
 |------|------|
-| `DATABASE_URL` | MySQL 连接 (如 `mysql+pymysql://root:pass@127.0.0.1:3306/daily_highlights`) |
-| `APP_SECRET_KEY` | Fernet 加密密钥，`python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"` |
-| `CORS_ORIGINS` | 前端地址，默认 `http://localhost:5173` |
-| `SCHEDULER_ENABLED` | 是否启用定时爬取，默认 `true` |
-| `EASTMONEY_PROXY` | 可选 HTTP 代理 (如 `http://127.0.0.1:7890`) |
+| `DATABASE_URL` | MySQL 数据库连接 |
+| `APP_SECRET_KEY` | 用于敏感配置和登录令牌加密的 Fernet 密钥 |
+| `CORS_ORIGINS` | 允许访问后端的前端地址 |
+| `SCHEDULER_ENABLED` | 是否启动后台定时任务 |
 
-## 数据源
+生成 `APP_SECRET_KEY`：
 
-| 来源 | 数据类型 |
-|------|----------|
-| 雪球 | 热门话题、热门股票、沪深/港股/美股热度榜、涨跌幅榜 |
-| 东方财富 | 概念板块、行业板块、指数行情、主力资金、A股公告、龙虎榜 |
-| 同花顺 | 财经快讯（时间线展示） |
-| 本地 | AI 摘要看点和原始数据源 |
+```bash
+python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+```
 
-## 管理后台
+## 页面与模块
 
-访问 `/admin/layout` 进入看板编辑器：
-- 画布拖拽编辑方块布局
-- 每个方块独立配置数据来源、展示样式（卡片/列表/时间线）、显示字段、排序方式
-- 草稿-发布工作流，支持多页面（摘要页、股票页）
-- `/admin/sources` 管理数据源（添加/编辑 Cookie、触发手动爬取）
-- `/admin/jobs` 查看分页任务日志（含错误原因展开）
-- `/admin/topics` 管理话题分类
+### 公共页面
 
-## 数据采集
+- `/`：综合摘要看板
+- `/topics/stocks`：股票主题看板
+- `/topics/football`：足球主题看板
+- `/topics/ai`：AI 主题看板
 
-- 定时调度器每分钟轮询，按 Source 配置的间隔触发爬取
-- 东方财富 push2 API 主备域名自动切换 (`push2.eastmoney.com` → `push2delay.eastmoney.com`)
-- 龙虎榜通过 Playwright 自动获取 Session Cookie（无需登录）
-- 采集数据统一存入 `raw_items` 表，看板从 DB 读取
+### 管理后台
+
+- `/admin/layout`：页面方块和布局配置
+- `/admin/sources`：数据连接器配置
+- `/admin/jobs`：同步任务和错误日志
+- `/admin/topics`：主题管理
+- `/admin/settings`：AI 模型配置
+- `/admin/ai-prompts`：提示词模板
+- `/admin/ai-ops`：AI 任务和 Token 用量
+- `/admin/users`：用户管理
+
+## 数据接入
+
+系统通过 Adapter 接口隔离不同数据来源，并将数据转换成统一结构。推荐优先使用：
+
+- 已获得授权的正式 API
+- 明确允许程序化访问的开放数据
+- RSS、Atom 等标准订阅协议
+- 用户拥有使用权的本地或内部数据
+
+新增连接器时，应同时实现超时、限速、失败重试、缓存和来源标识，并遵守数据提供方的服务协议、访问规则及适用法律。
+
+## 合规说明
+
+本项目仅提供信息聚合、数据处理和看板展示的技术框架，不附带任何第三方数据的访问权或再分发许可。
+
+部署者需要自行确认所接入数据的授权范围、服务协议、知识产权、个人信息处理要求和展示权限。请勿绕过登录、验证码、访问控制、付费限制或其他技术保护措施，也不要采集、存储或公开无合法处理依据的数据。
 
 ## 运行测试
 
 ```bash
-cd backend && APP_SECRET_KEY=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA= python3 -m pytest tests/ -v
-cd frontend && npx vitest run
+cd backend
+APP_SECRET_KEY=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA= python3 -m pytest tests/ -v
+
+cd frontend
+npx vitest run
 ```
-
-## 文档
-
-- [API 接口文档](docs/api-reference.md) — 完整的端点列表和请求/响应示例
-- [数据源接口参考](docs/sources-api-reference.md) — 各数据源 API 地址、参数和字段映射
-- [多垂类扩展设计](docs/design-vertical-expansion-20260527.md) — AI/足球垂类扩展方案
