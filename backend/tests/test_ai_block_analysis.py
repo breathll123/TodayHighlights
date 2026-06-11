@@ -140,6 +140,7 @@ def test_analyze_block_generates_and_records_token_usage(client):
     session.commit()
 
     assert analysis.status == "generated"
+    assert analysis.generated_by_model == "free-model"
     assert analysis.summary_points_json == ["多条内容集中在AI算力"]
     assert analysis.token_usage_id is not None
     assert analysis.generated_by_user_id == user.id

@@ -208,9 +208,9 @@ def analyze_block(
         analysis.risk_points_json = validated.risk_points
         analysis.related_entities_json = validated.related_entities
         analysis.evidence_refs_json = build_evidence_refs(data)
-        analysis.generatsed_by_model = model_cfg.model
+        analysis.generated_by_model = model_cfg.model
         analysis.generated_at = datetime.utcnow()
-        analysis.tatus = "generated"
+        analysis.status = "generated"
         job.status = "succeeded"
         job.success_count = 1
         job.finished_at = datetime.utcnow()
