@@ -142,10 +142,22 @@ today-highlights:generation:v1:<function-id-hash>
 - 使用可重复的 JSON 序列化。
 - 字典键排序。
 - 列表保持顺序。
-- 不包含运行时对象、数据库 Session 或 `MediaCacheService`。
+- 缓存原始函数只允许接收 `None`、布尔值、数字、字符串、列表、元组和字符串键字典等可规范化数据。
+- 调用方必须在进入缓存原始函数前移除运行时对象。`MediaCacheService`、SQLAlchemy Session 和 `_media_cache` 只能由公开包装函数使用。
+- 缓存框架不得静默跳过任意不可序列化字段。静默跳过会使两个实际不同的调用产生相同 Key，导致错误命中。
+- 遇到不支持的参数类型时，记录一次限频 warning，并绕过 Redis 和内存缓存直接执行函数。该行为用于保持服务可用，同时暴露调用边界错误。
 - 对序列化结果使用 SHA-256，Redis Key 中不保存 Cookie、URL 参数或其他可能敏感的原始值。
 
 `cache_clear()` 通过递增函数 `generation` 实现跨 Worker 失效，不使用阻塞式 `KEYS`，旧 Key 由 Redis TTL 自动清理。
+
+兼容现有显式别名：
+
+```python
+fetch_matches.cache_clear = _fetch_matches_raw.cache_clear
+fetch_standings.cache_clear = _fetch_standings_raw.cache_clear
+```
+
+Redis 模式下，`cache_clear()` 必须递增共享 generation 并清理当前进程的内存降级副本；内存模式下沿用当前清理行为。当前生产代码没有主动调用这些方法，但测试和后续刷新流程依赖这个公开接口，升级后不得改变语义。
 
 ## Value 格式
 
@@ -193,9 +205,18 @@ ttl_seconds + swr_seconds
 1. 第一个请求获取锁并同步访问第三方。
 2. 其他请求短暂轮询 Redis，等待第一个请求写入结果。
 3. 等待超时后，若本机存在降级副本则返回该副本。
-4. 既无 Redis 结果也无降级副本时，允许当前请求访问第三方，优先保证页面可用；这可能产生少量重复请求，但不会让所有请求无限等待 45 秒。
+4. 既无 Redis 结果也无降级副本时返回空数据，不允许锁等待者自行访问第三方。
 
 首期冷启动等待上限固定为 2 秒，轮询间隔 50 毫秒。后续如有需要再开放环境变量，不在首期增加配置复杂度。
+
+当前公开 API 是同步 FastAPI 路由，页面请求占用 AnyIO 工作线程，同时实时区块在共享 `ThreadPoolExecutor(max_workers=8)` 中执行。为避免大量冷启动请求把请求线程和区块线程同时占满：
+
+- 每个缓存 Key 在单个进程内最多允许 4 个锁等待者。
+- 超过本机等待者阈值的请求不再进入轮询，直接返回内存降级副本；无副本时返回空数据。
+- 等待超过 2 秒的请求同样快速降级，不自行访问第三方。
+- 持锁请求是该 Key 冷启动期间唯一允许访问第三方的请求。
+
+该策略优先保护线程池和第三方数据源。极端冷启动并发下，少量请求可能暂时看到空区块，但后续前端轮询会自动取得已写入缓存的数据。
 
 ### 锁释放
 
@@ -238,6 +259,15 @@ fetch_*()
 ```
 
 `MediaCacheService`、SQLAlchemy Session 和 `_media_cache` 不参与缓存键，也不写入 Redis。这样不会出现缓存中保存已关闭 Session 或旧本地路径的问题。
+
+`_fetch_competition_schedule_raw()` 必须在写入 Redis 前完成远程队徽 URL 解析：
+
+- 赛程 HTML 解析结果包含 `logo_league`、`logo_a` 和 `logo_b`。
+- `_get_logo_map()` 和缺失队徽的详情页补充都在持锁刷新流程中完成。
+- Redis Value 保存远程队徽 URL，但不保存 `logo_*_local`。
+- 公开 `fetch_competition_schedule()` 只负责基于远程 URL 查询或生成本地媒体路径。
+
+现有 `_fill_logo_map()` 最多产生 20 个详情页请求。首期将这些请求限制在唯一锁持有者中，并使用最多 4 个工作线程并发获取，避免每次页面请求产生串行 N+1，同时控制第三方并发量。
 
 ## TTL 策略
 
@@ -311,6 +341,10 @@ Redis 缓存模块不得导入 APScheduler、`run_crawl_job` 或任务模型。
 
 ## 改动文件
 
+- `backend/app/services/ai_block_analysis.py`
+  - 在 Redis 改造前单独修复 `generatsed_by_model` 和 `tatus` 拼写错误。
+- `backend/tests/test_ai_block_analysis.py`
+  - 验证成功分析会写入 `status="generated"` 和 `generated_by_model`。
 - `backend/pyproject.toml`
   - 增加同步 Redis 客户端依赖。
 - `backend/.env.example`
@@ -330,8 +364,12 @@ Redis 缓存模块不得导入 APScheduler、`run_crawl_job` 或任务模型。
   - 覆盖 Redis 命中、过期、SWR、锁和内存降级。
 - `backend/tests/test_qiumiwu_media_cache.py`
   - 验证 Redis 缓存结果不包含请求级媒体缓存对象和过期本地路径。
+- `backend/tests/conftest.py`
+  - 在导入 FastAPI 应用前默认设置 `REDIS_ENABLED=false`，避免普通测试依赖开发机 Redis。
 - `README.md`
   - 补充本机和服务器 Redis 配置与故障降级说明。
+- `CLAUDE.md`
+  - 测试命令显式增加 `REDIS_ENABLED=false`。
 
 不需要 Alembic 迁移，也不修改前端 API。
 
@@ -341,18 +379,28 @@ Redis 缓存模块不得导入 APScheduler、`run_crawl_job` 或任务模型。
 
 - 相同参数生成相同 Key，不同参数生成不同 Key。
 - 敏感参数不以明文出现在 Key 中。
+- 不支持的参数类型不会被静默丢弃，也不会写入缓存。
 - 新鲜 Redis 命中不执行被装饰函数。
 - SWR 命中立即返回旧值。
 - 并发 SWR 请求只有一个获得刷新锁。
 - 刷新失败不覆盖旧值。
 - 冷启动并发请求优先等待锁持有者结果。
+- 单 Key 等待者超过阈值后快速返回降级值，不继续占用轮询线程。
+- 锁等待超时不会触发额外第三方请求。
 - 锁只能由相同 token 释放。
 - `cache_clear()` 在多个后端实例间生效。
+- 现有 `fetch_matches.cache_clear()` 和 `fetch_standings.cache_clear()` 别名继续有效。
 - Redis 连接失败时自动使用内存缓存。
 - Redis 恢复后重新使用 Redis。
 - 非 JSON 结果不写入 Redis，并安全退回内存。
 
-测试使用 Fake Redis 或注入式 Redis 客户端，不依赖开发机正在运行的 Redis。
+普通后端测试在 `backend/tests/conftest.py` 中于应用导入前默认设置 `REDIS_ENABLED=false`，并在 README 和 CLAUDE 开发命令中显式保留：
+
+```bash
+APP_SECRET_KEY=... REDIS_ENABLED=false python3 -m pytest tests/ -v
+```
+
+Redis 专项测试使用 Fake Redis 或注入式 Redis 客户端，并在测试内显式启用对应后端，不依赖开发机正在运行的 Redis。
 
 ### 集成验证
 
