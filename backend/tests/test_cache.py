@@ -1,10 +1,13 @@
 import time
 
+import fakeredis
 import pytest
 
 from app.core.cache import (
     CacheSerializationError,
     MemoryCacheBackend,
+    RedisCacheBackend,
+    ResilientCacheBackend,
     build_argument_hash,
 )
 
@@ -41,3 +44,44 @@ def test_memory_clear_function_changes_generation_and_drops_fallback():
     backend.clear_function("fn")
     assert backend.get_generation("fn") == 1
     assert backend.get_fallback("cache-key") is None
+
+
+def test_redis_backend_shares_values_and_generation():
+    client = fakeredis.FakeRedis(decode_responses=True)
+    first = RedisCacheBackend(client, prefix="test", lock_ttl_seconds=45)
+    second = RedisCacheBackend(client, prefix="test", lock_ttl_seconds=45)
+    envelope = {"schema_version": 1, "created_at": time.time(), "fresh_until": time.time() + 30, "value": [1]}
+
+    first.set("cache-key", envelope, 60)
+    assert second.get("cache-key")["value"] == [1]
+
+    first.clear_function("module.func")
+    assert second.get_generation("module.func") == 1
+
+
+def test_redis_lock_requires_matching_token_to_release():
+    client = fakeredis.FakeRedis(decode_responses=True)
+    backend = RedisCacheBackend(client, prefix="test", lock_ttl_seconds=45)
+    assert backend.acquire_lock("lock-key", "owner-a", 45)
+    backend.release_lock("lock-key", "owner-b")
+    assert not backend.acquire_lock("lock-key", "owner-c", 45)
+    backend.release_lock("lock-key", "owner-a")
+    assert backend.acquire_lock("lock-key", "owner-c", 45)
+
+
+def test_resilient_backend_uses_memory_when_redis_fails():
+    class BrokenRedis:
+        def ping(self):
+            raise ConnectionError("offline")
+
+    memory = MemoryCacheBackend(maxsize=8)
+    backend = ResilientCacheBackend(
+        redis_factory=lambda: BrokenRedis(),
+        memory=memory,
+        prefix="test",
+        socket_timeout_seconds=1,
+        lock_ttl_seconds=45,
+        retry_interval_seconds=30,
+    )
+    backend.initialize()
+    assert backend.status() == "memory-fallback"

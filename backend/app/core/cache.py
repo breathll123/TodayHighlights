@@ -176,6 +176,263 @@ class MemoryCacheBackend:
 
 
 # ---------------------------------------------------------------------------
+# Redis cache backend
+# ---------------------------------------------------------------------------
+
+class RedisCacheBackend:
+    """Redis-backed shared cache with distributed locks and generation-based
+    invalidation."""
+
+    def __init__(self, client, *, prefix: str, lock_ttl_seconds: int = 45):
+        self._client = client
+        self._prefix = prefix
+        self._lock_ttl_seconds = lock_ttl_seconds
+
+    def _cache_key(self, key: str) -> str:
+        return f"{self._prefix}:cache:v1:{key}"
+
+    def _lock_key(self, key: str) -> str:
+        return f"{self._prefix}:lock:v1:{key}"
+
+    def _generation_key(self, function_id: str) -> str:
+        return f"{self._prefix}:generation:v1:{function_id}"
+
+    # -- status --
+
+    def status(self) -> str:
+        return "redis"
+
+    # -- envelope storage --
+
+    def get(self, key: str) -> dict | None:
+        try:
+            raw = self._client.get(self._cache_key(key))
+        except Exception:
+            return None
+        if raw is None:
+            return None
+        try:
+            payload = json.loads(raw)
+        except (json.JSONDecodeError, TypeError):
+            return None
+        if payload.get("schema_version") != 1:
+            return None
+        if not isinstance(payload.get("fresh_until"), (int, float)):
+            return None
+        if "value" not in payload:
+            return None
+        return payload
+
+    def set(self, key: str, envelope: dict, ttl_seconds: int) -> None:
+        try:
+            self._client.set(
+                self._cache_key(key),
+                json.dumps(envelope, ensure_ascii=False),
+                ex=ttl_seconds,
+            )
+        except Exception:
+            pass
+
+    # -- fallback delegation (managed by ResilientCacheBackend) --
+
+    def get_fallback(self, key: str) -> dict | None:
+        return None
+
+    def set_fallback(self, key: str, envelope: dict, ttl_seconds: int) -> None:
+        pass
+
+    # -- distributed locks with token-checked release --
+
+    def acquire_lock(self, key: str, token: str, ttl_seconds: int) -> bool:
+        try:
+            result = self._client.set(
+                self._lock_key(key), token, nx=True, ex=ttl_seconds
+            )
+            return bool(result)
+        except Exception:
+            return False
+
+    def release_lock(self, key: str, token: str) -> None:
+        try:
+            lock_key = self._lock_key(key)
+            current = self._client.get(lock_key)
+            if current == token:
+                self._client.delete(lock_key)
+        except Exception:
+            pass
+
+    # -- generation-based invalidation --
+
+    def get_generation(self, function_id: str) -> int:
+        try:
+            val = self._client.get(self._generation_key(function_id))
+            return int(val) if val is not None else 0
+        except Exception:
+            return 0
+
+    def clear_function(self, function_id: str) -> None:
+        try:
+            self._client.incr(self._generation_key(function_id))
+        except Exception:
+            pass
+
+    def close(self) -> None:
+        pass
+
+
+# ---------------------------------------------------------------------------
+# Resilient (Redis-primary, memory-fallback) backend
+# ---------------------------------------------------------------------------
+
+
+class ResilientCacheBackend:
+    """Redis-first cache backend with automatic memory fallback.
+
+    Successful Redis writes are mirrored to the memory backend so
+    fallback data is available immediately. Redis recovery is attempted
+    on demand, at most once per *retry_interval_seconds*.
+    """
+
+    def __init__(
+        self,
+        *,
+        redis_factory,
+        memory: MemoryCacheBackend,
+        prefix: str,
+        socket_timeout_seconds: float = 1.0,
+        lock_ttl_seconds: int = 45,
+        retry_interval_seconds: int = 30,
+    ):
+        self._redis_factory = redis_factory
+        self._memory = memory
+        self._prefix = prefix
+        self._socket_timeout_seconds = socket_timeout_seconds
+        self._lock_ttl_seconds = lock_ttl_seconds
+        self._retry_interval_seconds = retry_interval_seconds
+        self._redis: RedisCacheBackend | None = None
+        self._status: str = "memory-disabled"
+        self._last_retry_attempt: float = 0.0
+        self._lock = threading.Lock()
+
+    # -- lifecycle --
+
+    def initialize(self) -> None:
+        try:
+            client = self._redis_factory()
+            client.ping()
+            self._redis = RedisCacheBackend(
+                client, prefix=self._prefix, lock_ttl_seconds=self._lock_ttl_seconds
+            )
+            self._status = "redis"
+            logger.info("cache backend: redis")
+        except Exception:
+            self._redis = None
+            self._status = "memory-fallback"
+            logger.warning("cache backend: memory-fallback")
+
+    def status(self) -> str:
+        return self._status
+
+    # -- Redis availability --
+
+    def _redis_available(self) -> RedisCacheBackend | None:
+        if self._status == "redis" and self._redis is not None:
+            return self._redis
+        # Attempt reconnection at most once per retry interval
+        now = time.time()
+        with self._lock:
+            if now - self._last_retry_attempt < self._retry_interval_seconds:
+                return None
+            self._last_retry_attempt = now
+        try:
+            client = self._redis_factory()
+            client.ping()
+            self._redis = RedisCacheBackend(
+                client, prefix=self._prefix, lock_ttl_seconds=self._lock_ttl_seconds
+            )
+            self._status = "redis"
+            logger.info("cache backend: redis (recovered)")
+            return self._redis
+        except Exception:
+            self._status = "memory-fallback"
+            return None
+
+    # -- envelope storage --
+
+    def get(self, key: str) -> dict | None:
+        redis = self._redis_available()
+        if redis is not None:
+            try:
+                result = redis.get(key)
+                if result is not None:
+                    return result
+            except Exception:
+                pass
+        return None
+
+    def set(self, key: str, envelope: dict, ttl_seconds: int) -> None:
+        redis = self._redis_available()
+        if redis is not None:
+            try:
+                redis.set(key, envelope, ttl_seconds)
+                # Mirror to memory fallback
+                self._memory.set_fallback(key, envelope, ttl_seconds)
+            except Exception:
+                pass
+        else:
+            # Use memory directly when Redis is unavailable
+            self._memory.set(key, envelope, ttl_seconds)
+
+    # -- fallback (read from memory mirror) --
+
+    def get_fallback(self, key: str) -> dict | None:
+        return self._memory.get_fallback(key)
+
+    def set_fallback(self, key: str, envelope: dict, ttl_seconds: int) -> None:
+        self._memory.set_fallback(key, envelope, ttl_seconds)
+
+    # -- distributed locks --
+
+    def acquire_lock(self, key: str, token: str, ttl_seconds: int) -> bool:
+        redis = self._redis_available()
+        if redis is not None:
+            try:
+                return redis.acquire_lock(key, token, ttl_seconds)
+            except Exception:
+                pass
+        return self._memory.acquire_lock(key, token, ttl_seconds)
+
+    def release_lock(self, key: str, token: str) -> None:
+        redis = self._redis_available()
+        if redis is not None:
+            try:
+                redis.release_lock(key, token)
+            except Exception:
+                pass
+        self._memory.release_lock(key, token)
+
+    # -- generation-based invalidation --
+
+    def get_generation(self, function_id: str) -> int:
+        redis = self._redis_available()
+        if redis is not None:
+            try:
+                return redis.get_generation(function_id)
+            except Exception:
+                pass
+        return self._memory.get_generation(function_id)
+
+    def clear_function(self, function_id: str) -> None:
+        redis = self._redis_available()
+        if redis is not None:
+            try:
+                redis.clear_function(function_id)
+            except Exception:
+                pass
+        self._memory.clear_function(function_id)
+
+    def close(self) -> None:
+        self._memory.close()
 # Legacy ttl_cache decorator (preserved for backward compatibility;
 # will be upgraded in Task 5)
 # ---------------------------------------------------------------------------
