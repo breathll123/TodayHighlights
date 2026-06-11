@@ -104,6 +104,16 @@ class CacheBackend(Protocol):
 
 适配器继续使用 `@ttl_cache`，不直接依赖 Redis 客户端。
 
+`ttl_cache` 增加 `shared: bool = True` 参数。凭证解密等敏感结果必须使用 `shared=False`，只进入当前进程的内存缓存：
+
+```python
+@ttl_cache(300, shared=False)
+def _decrypt_cookie(cookie_encrypted: str) -> str:
+    ...
+```
+
+解密后的 Cookie、API Key、Token 和其他凭证不得写入 Redis Value。
+
 ### 生命周期
 
 - FastAPI 启动时创建 Redis 连接池并执行一次 `PING`。
@@ -205,14 +215,14 @@ ttl_seconds + swr_seconds
 1. 第一个请求获取锁并同步访问第三方。
 2. 其他请求短暂轮询 Redis，等待第一个请求写入结果。
 3. 等待超时后，若本机存在降级副本则返回该副本。
-4. 既无 Redis 结果也无降级副本时返回空数据，不允许锁等待者自行访问第三方。
+4. 既无 Redis 结果也无降级副本时抛出 `CacheBusyError`，不允许锁等待者自行访问第三方。
 
 首期冷启动等待上限固定为 2 秒，轮询间隔 50 毫秒。后续如有需要再开放环境变量，不在首期增加配置复杂度。
 
 当前公开 API 是同步 FastAPI 路由，页面请求占用 AnyIO 工作线程，同时实时区块在共享 `ThreadPoolExecutor(max_workers=8)` 中执行。为避免大量冷启动请求把请求线程和区块线程同时占满：
 
 - 每个缓存 Key 在单个进程内最多允许 4 个锁等待者。
-- 超过本机等待者阈值的请求不再进入轮询，直接返回内存降级副本；无副本时返回空数据。
+- 超过本机等待者阈值的请求不再进入轮询，直接返回内存降级副本；无副本时抛出 `CacheBusyError`。
 - 等待超过 2 秒的请求同样快速降级，不自行访问第三方。
 - 持锁请求是该 Key 冷启动期间唯一允许访问第三方的请求。
 
@@ -237,7 +247,7 @@ ttl_seconds + swr_seconds
 
 ```text
 _fetch_xxx_raw(...)  -> 抛出 CacheRefreshError，由 @ttl_cache 管理旧数据
-fetch_xxx(...)       -> 调用 raw；在缓存和降级都无数据时捕获错误并返回 []
+fetch_xxx(...)       -> 调用 raw；捕获 CacheRefreshError / CacheBusyError 并返回 []
 ```
 
 这样公开 API 保持现有空数据降级行为，同时缓存层能够正确保留旧值。
