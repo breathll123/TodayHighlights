@@ -1,6 +1,5 @@
-import { CalendarDays, Layers3, Radar, RefreshCw } from "lucide-react";
+import { Activity, Clock3, Layers3, Radar, RefreshCw } from "lucide-react";
 import { motion } from "framer-motion";
-import type { LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 
 const easeOutQuint = [0.22, 1, 0.36, 1] as const;
@@ -32,87 +31,55 @@ export function DashboardShell({
   isLoading = false,
   children,
 }: DashboardShellProps) {
-  const tileVariants = {
-    hidden: { opacity: 0, y: 8, scale: 0.97 },
-    visible: (i: number) => ({
-      opacity: 1,
-      y: 0,
-      scale: 1,
-      transition: { duration: 0.3, ease: easeOutQuint, delay: 0.2 + i * 0.08 },
-    }),
-  };
-
   return (
     <div className="space-y-6">
       <motion.section
-        initial={{ opacity: 0, y: 10 }}
+        initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4, ease: easeOutQuint }}
-               className="rounded-2xl border border-border/80 bg-card/72 p-5 shadow-sm sm:p-6 lg:p-7"
+        transition={{ duration: 0.3, ease: easeOutQuint }}
+        className="rounded-lg border border-border/80 bg-card/72 px-4 py-3 shadow-sm sm:px-5"
+        aria-label={`${activeTopic}看板概览`}
       >
-        <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
-          <div className="max-w-3xl">
-            <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-primary/25 bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
-              <Radar className="h-3.5 w-3.5" aria-hidden="true" />
-              {eyebrow}
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 text-[11px] font-medium text-primary">
+              <Radar className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+              <span>{activeTopic} · {eyebrow}</span>
             </div>
-            <h1 className="text-2xl font-semibold text-foreground sm:text-3xl">
-              {title}
-            </h1>
-            <p className="mt-3 max-w-2xl text-sm leading-6 text-muted-foreground sm:text-base">
-              {description}
-            </p>
+            <div className="mt-1 flex min-w-0 flex-col gap-1 sm:flex-row sm:items-baseline sm:gap-3">
+              <h1 className="shrink-0 text-xl font-semibold text-foreground sm:text-2xl">
+                {title}
+              </h1>
+              {description && (
+                <p className="line-clamp-2 text-sm leading-5 text-muted-foreground sm:line-clamp-1">
+                  {description}
+                </p>
+              )}
+            </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:min-w-[520px]">
-            {[
-              { icon: Layers3, label: "当前主题", value: activeTopic, tone: "default" as const },
-              { icon: CalendarDays, label: "观测时间", value: formatter.format(new Date()), tone: "default" as const },
-              { icon: RefreshCw, label: "内容模块", value: isLoading ? "同步中" : `${blockCount} 个`, tone: "default" as const },
-              { icon: Radar, label: "平台状态", value: isLoading ? "连接中" : "运行中", tone: "primary" as const },
-            ].map((tile, i) => (
-              <motion.div
-                key={tile.label}
-                custom={i}
-                variants={tileVariants}
-                initial="hidden"
-                animate="visible"
-                className="rounded-xl border border-border/70 bg-background/45 p-3"
-              >
-                <div className="mb-2 flex items-center gap-2 text-[11px] font-medium uppercase text-muted-foreground">
-                  <tile.icon className={tile.tone === "primary" ? "h-3.5 w-3.5 text-primary" : "h-3.5 w-3.5"} aria-hidden={true} />
-                  {tile.label}
-                </div>
-                <div className="truncate text-sm font-semibold text-foreground">{tile.value}</div>
-              </motion.div>
-            ))}
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-muted-foreground">
+            <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
+              {isLoading ? (
+                <RefreshCw className="h-3.5 w-3.5 animate-spin text-primary" aria-hidden="true" />
+              ) : (
+                <Activity className="h-3.5 w-3.5 text-primary" aria-hidden="true" />
+              )}
+              {isLoading ? "同步中" : "运行中"}
+            </span>
+            <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
+              <Layers3 className="h-3.5 w-3.5" aria-hidden="true" />
+              {blockCount} 个模块
+            </span>
+            <time className="inline-flex items-center gap-1.5 whitespace-nowrap tabular-nums">
+              <Clock3 className="h-3.5 w-3.5" aria-hidden="true" />
+              {formatter.format(new Date())} 更新
+            </time>
           </div>
         </div>
       </motion.section>
 
       {children}
-    </div>
-  );
-}
-
-function StatusTile({
-  icon: Icon,
-  label,
-  value,
-  tone = "default",
-}: {
-  icon: LucideIcon;
-  label: string;
-  value: string;
-  tone?: "default" | "primary";
-}) {
-  return (
-    <div className="rounded-xl border border-border/70 bg-background/45 p-3">
-      <div className="mb-2 flex items-center gap-2 text-[11px] font-medium uppercase text-muted-foreground">
-        <Icon className={tone === "primary" ? "h-3.5 w-3.5 text-primary" : "h-3.5 w-3.5"} aria-hidden={true} />
-        {label}
-      </div>
-      <div className="truncate text-sm font-semibold text-foreground">{value}</div>
     </div>
   );
 }

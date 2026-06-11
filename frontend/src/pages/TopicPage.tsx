@@ -54,7 +54,7 @@ export function TopicPage() {
 
   return (
     <DashboardShell
-      eyebrow="Topic Workspace"
+      eyebrow="实时看板"
       title={`${meta.name}主题看板`}
       description={meta.description}
       activeTopic={meta.name}
