@@ -161,7 +161,7 @@ def get_published_ranking(
     entries = list(session.scalars(
         select(AARankingEntry)
         .where(AARankingEntry.dataset_id == dataset.id)
-        .order_by(AARankingEntry.rank.asc().nullslast())
+        .order_by(AARankingEntry.rank.is_(None), AARankingEntry.rank.asc())
         .limit(limit)
     ))
 

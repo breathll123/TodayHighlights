@@ -154,21 +154,36 @@ export function BlockConfigPanel({ form, onChange, onSave, onCancel }: Props) {
 
       {/* Source-specific config */}
       {form.source_type === "artificial_analysis_ranking" && (
-        <div className="space-y-1.5">
-          <Label className="text-xs">排名数据</Label>
-          <Select
-            value={String(form.source_config?.dataset_key ?? "language_global")}
-            onValueChange={(v) =>
-              update("source_config", { dataset_key: v, display_fields: ["title", "subtitle", "score"] })
-            }
-          >
-            <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              {ARTIFICIAL_ANALYSIS_DATASETS.map((ds) => (
-                <SelectItem key={ds.value} value={ds.value} className="text-xs">{ds.label}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        <div className="space-y-2">
+          <Label className="text-xs">排名数据（可多选）</Label>
+          <div className="space-y-1">
+            {ARTIFICIAL_ANALYSIS_DATASETS.map((ds) => {
+              const cfg = form.source_config as Record<string, unknown> | undefined;
+              const raw = cfg?.dataset_keys as string[] | undefined;
+              const legacy = cfg?.dataset_key as string | undefined;
+              const selected: string[] = raw ?? (legacy ? [legacy] : ["language_global"]);
+              const checked = selected.includes(ds.value);
+              return (
+                <label key={ds.value} className="flex items-center gap-2 cursor-pointer py-0.5">
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={() => {
+                      const next = checked
+                        ? selected.filter((k) => k !== ds.value)
+                        : [...selected, ds.value];
+                      update("source_config", {
+                        dataset_keys: next.length > 0 ? next : ["language_global"],
+                        display_fields: ["title", "subtitle", "score"],
+                      });
+                    }}
+                    className="h-3.5 w-3.5 rounded border-border accent-primary"
+                  />
+                  <span className="text-xs">{ds.label}</span>
+                </label>
+              );
+            })}
+          </div>
         </div>
       )}
       {form.source_type === "topic" && (

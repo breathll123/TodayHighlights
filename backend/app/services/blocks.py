@@ -212,10 +212,19 @@ def resolve_block_data(
         if session is None:
             raise RuntimeError("artificial_analysis_ranking requires a database session")
         config = block.source_config or {}
-        dataset_key = str(config.get("dataset_key") or "language_global")
+        # Support both legacy single key and new multi-key config
+        keys = config.get("dataset_keys")
+        if not keys:
+            single = config.get("dataset_key")
+            keys = [single] if single else ["language_global"]
         from app.services.artificial_analysis.repository import get_published_ranking
-        data, _meta = get_published_ranking(session, dataset_key, block.display_count)
-        return data
+        all_data: list[dict] = []
+        for key in keys:
+            data, _meta = get_published_ranking(session, str(key), block.display_count)
+            for item in data:
+                item["dataset_key"] = str(key)
+            all_data.extend(data)
+        return all_data
 
     return []
 
