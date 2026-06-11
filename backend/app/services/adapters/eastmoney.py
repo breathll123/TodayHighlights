@@ -145,12 +145,12 @@ def fetch_indices(_config: dict, limit: int) -> list[dict]:
     try:
         import re
         index_map = [
-            ("s_sh000001", "000001", "1.000001"),
-            ("s_sz399001", "399001", "0.399001"),
-            ("s_sz399006", "399006", "0.399006"),
-            ("s_sh000688", "000688", "1.000688"),
-            ("s_sz399673", "399673", "0.399673"),
-            ("s_sh000300", "000300", "1.000300"),
+            ("s_sh000001", "000001", "1.000001"),   # 上证指数
+            ("s_sz399001", "399001", "0.399001"),   # 深证成指
+            ("s_sz399006", "399006", "0.399006"),   # 创业板指
+            ("s_sh000688", "000688", "1.000688"),   # 科创50
+            ("s_sz399673", "399673", "0.399673"),   # 创业板50
+            ("s_sh000300", "000300", "1.000300"),   # 沪深300
         ]
         codes = ",".join(c for c, _, _ in index_map[:limit])
         resp = httpx.get(
@@ -200,22 +200,28 @@ def fetch_index_trends(_config: dict, limit: int) -> list[dict]:
     if not snapshots:
         return []
 
-    trends_data = []
+    # Fetch trends in parallel
+    trend_by_secid: dict[str, dict | None] = {}
     with ThreadPoolExecutor(max_workers=3) as pool:
         futures = {}
         for s in snapshots:
-            if s.get("em_secid"):
-                futures[pool.submit(_fetch_one_trend, s)] = s
+            secid = s.get("em_secid")
+            if secid:
+                futures[pool.submit(_fetch_one_trend, s)] = secid
 
         for future in as_completed(futures):
-            s = futures[future]
+            secid = futures[future]
             try:
-                trend = future.result(timeout=10)
+                trend_by_secid[secid] = future.result(timeout=10)
             except Exception:
-                trend = None
-            item = dict(s)
-            item["trend"] = trend
-            trends_data.append(item)
+                trend_by_secid[secid] = None
+
+    # Reassemble in original snapshot order
+    trends_data = []
+    for s in snapshots:
+        item = dict(s)
+        item["trend"] = trend_by_secid.get(s.get("em_secid", ""))
+        trends_data.append(item)
 
     return trends_data
 
