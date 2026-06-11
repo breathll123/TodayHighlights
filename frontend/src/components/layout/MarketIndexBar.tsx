@@ -282,9 +282,9 @@ export function MarketIndexBar({ data: externalData }: { data?: MarketIndex[] })
       {/* Tab bar */}
       <div className="flex items-center border-b border-border/50 px-4 pt-3 pb-0 overflow-x-auto scrollbar-none">
         <div className="flex items-center gap-1 flex-1 min-w-0">
-          {indices.map((i) => (
+          {indices.map((i, idx) => (
             <button
-              key={i.code}
+              key={i.code || `idx-${idx}`}
               onClick={() => setActive(i.code)}
               className={`shrink-0 px-3 py-1.5 text-xs font-medium rounded-t-md transition-colors border-b-2 -mb-[1px] ${
                 active === i.code

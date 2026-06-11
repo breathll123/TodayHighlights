@@ -210,7 +210,23 @@ def resolve_block_data(
 
     if source_type == "market_index_trends":
         from app.services.adapters.eastmoney import fetch_index_trends
-        return fetch_index_trends(config, limit)
+        indices = fetch_index_trends(config, limit)
+        # Transform to match public /market-indices shape (code, name, current, change_pct, etc.)
+        return [
+            {
+                "code": idx.get("symbols", [""])[0] if idx.get("symbols") else "",
+                "name": idx.get("title", ""),
+                "current": idx.get("current", 0),
+                "change_pct": idx.get("percent", 0),
+                "change_amount": idx.get("change_amount", 0),
+                "volume": idx.get("volume", 0),
+                "turnover": idx.get("turnover", 0),
+                "url": idx.get("url", ""),
+                "trend": idx.get("trend"),
+                "source_type": "market_index_trends",
+            }
+            for idx in indices
+        ]
 
     if source_type == "artificial_analysis_ranking":
         if session is None:
