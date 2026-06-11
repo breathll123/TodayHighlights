@@ -1,5 +1,6 @@
 import { useState, useMemo } from "react";
 import { motion } from "framer-motion";
+import { ExternalLink } from "lucide-react";
 import { CompactTable } from "./CompactTable";
 import type { BlockMeta } from "@/api/types";
 
@@ -98,8 +99,8 @@ export function ArtificialAnalysisRanking({ data, meta }: Props) {
 
   return (
     <div className="border rounded-lg bg-card overflow-hidden">
-      {keys.length > 1 && (
-        <div className="flex items-center gap-1.5 border-b border-border/50 bg-muted/30 px-4 py-2.5">
+      <div className="flex items-center justify-between border-b border-border/50 bg-muted/30 pl-4 pr-3 py-2.5">
+        <div className="flex items-center gap-1.5">
           {keys.map((key) => (
             <button
               key={key}
@@ -114,7 +115,16 @@ export function ArtificialAnalysisRanking({ data, meta }: Props) {
             </button>
           ))}
         </div>
-      )}
+        <a
+          href="https://artificialanalysis.ai/"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-1 shrink-0 text-[10px] text-blue-400 hover:text-blue-300 transition-colors no-underline"
+        >
+          数据来源：Artificial Analysis
+          <ExternalLink className="h-3 w-3" />
+        </a>
+      </div>
       <motion.div
         key={activeKey}
         initial={{ opacity: 0, y: 3 }}
@@ -123,19 +133,9 @@ export function ArtificialAnalysisRanking({ data, meta }: Props) {
       >
         <CompactTable showRank data={mapped} fields={fields} />
       </motion.div>
-      <div className="border-t border-border/50 bg-muted/20 px-4 py-2.5 space-y-1">
+      <div className="border-t border-border/50 bg-muted/20 px-4 py-2 space-y-1">
         <div className="flex items-center justify-between gap-3 text-[11px] text-muted-foreground">
           <span>
-            <a
-              href="https://artificialanalysis.ai/"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="underline hover:text-foreground"
-            >
-              数据来源：Artificial Analysis
-            </a>
-          </span>
-          <span className="tabular-nums">
             {meta?.captured_at && (
               <time dateTime={meta.captured_at} className="tabular-nums">
                 {new Date(meta.captured_at).toLocaleDateString("zh-CN")} 更新
