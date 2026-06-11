@@ -6,7 +6,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CanvasEditor } from "@/components/admin/CanvasEditor";
 import { SizePresetPicker } from "@/components/admin/SizePresetPicker";
 import { BlockConfigPanel } from "@/components/admin/BlockConfigPanel";
-import { findAvailablePosition, hasCollision } from "@/lib/grid-utils";
+import { cascadePush } from "@/lib/grid-utils";
 import { safeUUID } from "@/lib/utils";
 import { fetchBlocks, createBlock, updateBlock, deleteBlock, publishPage } from "@/api/client";
 import type { Block } from "@/api/types";
@@ -57,21 +57,18 @@ export function AdminLayoutPage() {
   });
 
   const handleAddBlock = (col: number, row: number) => {
-    // Place new block at top (y=0, x=0) and shift colliding blocks down
+    // Place new block at top-left and cascade-push colliding blocks down
+    const tempId = `new-${Date.now()}`;
     const newBlock = {
-      grid_x: 0, grid_y: 0, col_span: col, row_span: row,
-    };
-    const shifted = draftBlocks.map((b) => {
-      if (hasCollision(newBlock, b)) {
-        return { ...b, grid_y: b.grid_y + row };
-      }
-      return b;
-    });
-    // Persist shifted positions
+      id: tempId as any, grid_x: 0, grid_y: 0, col_span: col, row_span: row,
+    } as Block;
+    const shifted = cascadePush(draftBlocks, newBlock, tempId);
+    // Persist shifted positions for existing blocks
     for (const b of shifted) {
+      if (String(b.id) === tempId) continue;
       const orig = draftBlocks.find((o) => o.id === b.id);
-      if (orig && (orig.grid_y !== b.grid_y || orig.grid_x !== b.grid_x)) {
-        updateBlock(b.id, { grid_y: b.grid_y, grid_x: b.grid_x }).catch(() => {});
+      if (orig && orig.grid_y !== b.grid_y) {
+        updateBlock(b.id, { grid_y: b.grid_y }).catch(() => {});
       }
     }
     createMut.mutate({

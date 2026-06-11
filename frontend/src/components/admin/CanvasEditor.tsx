@@ -4,7 +4,7 @@ import type { Layout, LayoutItem } from "react-grid-layout";
 import { noCompactor } from "react-grid-layout";
 import "react-grid-layout/css/styles.css";
 import { CanvasBlock } from "./CanvasBlock";
-import { hasCollision, clampSize } from "@/lib/grid-utils";
+import { clampSize, cascadePush } from "@/lib/grid-utils";
 import type { Block } from "@/api/types";
 import { toast } from "sonner";
 
@@ -34,14 +34,12 @@ export function CanvasEditor({ blocks, onLayoutChange, onEdit, onDelete }: Props
       if (!newItem) return;
       const moved = blocks.find((b) => String(b.id) === newItem.i);
       if (!moved) return;
-      const candidate: Block = { ...moved, grid_x: newItem.x, grid_y: newItem.y, col_span: newItem.w, row_span: newItem.h };
-      const others = blocks.filter((b) => String(b.id) !== newItem.i);
-      if (others.some((b) => hasCollision(candidate, b))) {
-        toast.error("该位置已有其他组件");
-        onLayoutChange([...blocks]);
-        return;
-      }
-      const updated = blocks.map((b) => (String(b.id) === newItem.i ? candidate : b));
+      const candidate: Block = {
+        ...moved, grid_x: newItem.x, grid_y: newItem.y,
+        col_span: newItem.w, row_span: newItem.h,
+      };
+      // Cascade-push colliding blocks down
+      const updated = cascadePush(blocks, candidate, newItem.i);
       onLayoutChange(updated);
     },
     [blocks, onLayoutChange],
@@ -58,14 +56,12 @@ export function CanvasEditor({ blocks, onLayoutChange, onEdit, onDelete }: Props
       }
       const resized = blocks.find((b) => String(b.id) === newItem.i);
       if (!resized) return;
-      const candidate: Block = { ...resized, grid_x: newItem.x, grid_y: newItem.y, col_span: col, row_span: row };
-      const others = blocks.filter((b) => String(b.id) !== newItem.i);
-      if (others.some((b) => hasCollision(candidate, b))) {
-        toast.error("该位置已有其他组件");
-        onLayoutChange([...blocks]);
-        return;
-      }
-      const updated = blocks.map((b) => (String(b.id) === newItem.i ? candidate : b));
+      const candidate: Block = {
+        ...resized, grid_x: newItem.x, grid_y: newItem.y,
+        col_span: col, row_span: row,
+      };
+      // Cascade-push colliding blocks down
+      const updated = cascadePush(blocks, candidate, newItem.i);
       onLayoutChange(updated);
     },
     [blocks, onLayoutChange],

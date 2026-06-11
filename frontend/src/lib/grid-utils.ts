@@ -12,6 +12,61 @@ export function hasCollision(
   );
 }
 
+export interface GridRect {
+  grid_x: number;
+  grid_y: number;
+  col_span: number;
+  row_span: number;
+}
+
+/**
+ * Cascade-push blocks down to resolve all collisions in a single pass.
+ * Returns a new array with shifted positions (no mutations).
+ */
+export function cascadePush<T extends GridRect>(
+  items: T[],
+  moved: T,
+  movedId: string | number
+): T[] {
+  // Separate the moved item from others
+  const others = items.filter((b) => String((b as any).id) !== String(movedId));
+  // Start with moved at its new position
+  const placed: T[] = [moved];
+
+  // Sort others by grid_y descending so we process from top to bottom
+  const sorted = [...others].sort((a, b) => a.grid_y - b.grid_y);
+
+  const MAX_PUSH = 50;
+
+  for (const item of sorted) {
+    let candidate = { ...item };
+    let pushed = 0;
+
+    // Keep pushing this item down until it no longer collides with any placed item
+    while (pushed < MAX_PUSH && placed.some((p) => hasCollision(candidate, p))) {
+      // Find the max bottom edge of all placed items that collide
+      let maxBottom = candidate.grid_y;
+      for (const p of placed) {
+        if (hasCollision(candidate, p)) {
+          maxBottom = Math.max(maxBottom, p.grid_y + p.row_span);
+        }
+      }
+      candidate = { ...candidate, grid_y: maxBottom };
+      pushed++;
+    }
+
+    placed.push(candidate);
+  }
+
+  // Reconstruct full list with moved item + shifted others
+  const result = placed.map((p) => {
+    const orig = items.find((b) => String((b as any).id) === String((p as any).id));
+    return orig ? { ...orig, grid_y: p.grid_y, grid_x: p.grid_x } as T : p;
+  });
+
+  return result;
+}
+
 export function findAvailablePosition(
   blocks: Block[],
   colSpan: number,
