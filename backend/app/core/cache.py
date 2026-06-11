@@ -433,92 +433,240 @@ class ResilientCacheBackend:
 
     def close(self) -> None:
         self._memory.close()
-# Legacy ttl_cache decorator (preserved for backward compatibility;
-# will be upgraded in Task 5)
+# ---------------------------------------------------------------------------
+# Global cache backend lifecycle
 # ---------------------------------------------------------------------------
 
-def ttl_cache(ttl_seconds: int = 30, swr: int = 0, maxsize: int = 128):
-    """In-memory TTL cache with optional stale-while-revalidate. Thread-safe.
+_cache_backend: MemoryCacheBackend | ResilientCacheBackend | None = None
+_cold_wait_seconds: float = 2.0
+_cold_poll_seconds: float = 0.05
+_max_waiters_per_key: int = 4
 
-    Args:
-        ttl_seconds: How long cached data is considered "fresh".
-        swr: Stale-while-revalidate window in seconds. After ttl_seconds expires,
-             serve stale data for up to ``swr`` additional seconds while refreshing
-             in the background. 0 = disabled (backward-compatible with old behavior).
-        maxsize: Maximum number of cached entries. LRU eviction when exceeded.
+
+def initialize_cache() -> None:
+    """Create and initialise the cache backend based on application settings.
+    Must be called once during FastAPI startup."""
+    global _cache_backend
+    from app.core.config import settings
+
+    memory = MemoryCacheBackend(maxsize=256)
+    if not settings.redis_enabled:
+        _cache_backend = memory
+        logger.info("cache backend: memory-disabled")
+        return
+
+    try:
+        import redis
+        client = redis.Redis.from_url(
+            settings.redis_url,
+            decode_responses=True,
+            socket_connect_timeout=settings.redis_socket_timeout_seconds,
+            socket_timeout=settings.redis_socket_timeout_seconds,
+        )
+        backend = ResilientCacheBackend(
+            redis_factory=lambda: client,
+            memory=memory,
+            prefix=settings.redis_key_prefix,
+            socket_timeout_seconds=settings.redis_socket_timeout_seconds,
+            lock_ttl_seconds=settings.redis_lock_ttl_seconds,
+            retry_interval_seconds=settings.redis_retry_interval_seconds,
+        )
+        backend.initialize()
+        _cache_backend = backend
+    except Exception:
+        _cache_backend = memory
+        logger.warning("cache backend: memory-fallback", exc_info=True)
+
+
+def shutdown_cache() -> None:
+    """Close the cache backend and the SWR executor pool."""
+    global _cache_backend
+    if _cache_backend is not None:
+        _cache_backend.close()
+        _cache_backend = None
+    shutdown_swr_executor()
+
+
+def cache_backend_status() -> str:
+    """Return a short label for the active cache backend."""
+    backend = _cache_backend
+    if backend is None:
+        return "uninitialized"
+    return backend.status()
+
+
+def _get_backend() -> MemoryCacheBackend | ResilientCacheBackend:
+    backend = _cache_backend
+    if backend is None:
+        raise RuntimeError("cache backend not initialised")
+    return backend
+
+
+# ---------------------------------------------------------------------------
+# Test hooks
+# ---------------------------------------------------------------------------
+
+
+def configure_cache_backend_for_tests(
+    backend=None,
+    *,
+    cold_wait_seconds: float = 0.05,
+    cold_poll_seconds: float = 0.01,
+    max_waiters_per_key: int = 4,
+) -> None:
+    global _cache_backend, _cold_wait_seconds, _cold_poll_seconds, _max_waiters_per_key
+    _cache_backend = backend or MemoryCacheBackend(maxsize=32)
+    _cold_wait_seconds = cold_wait_seconds
+    _cold_poll_seconds = cold_poll_seconds
+    _max_waiters_per_key = max_waiters_per_key
+
+
+def reset_cache_backend_for_tests() -> None:
+    global _cache_backend, _cold_wait_seconds, _cold_poll_seconds, _max_waiters_per_key
+    if _cache_backend is not None:
+        _cache_backend.close()
+    _cache_backend = None
+    _cold_wait_seconds = 2.0
+    _cold_poll_seconds = 0.05
+    _max_waiters_per_key = 4
+
+
+# ---------------------------------------------------------------------------
+# ttl_cache decorator — shared backend-aware
+# ---------------------------------------------------------------------------
+
+_VALIDATE_WARNED: set[str] = set()
+
+
+def ttl_cache(ttl_seconds: int = 30, swr: int = 0, shared: bool = True, maxsize: int = 128):
+    """TTL cache with optional stale-while-revalidate.
+
+    When ``shared=True`` (default) the decorated function reads and writes
+    through the global backend (Redis or memory). Set ``shared=False`` for
+    sensitive values like decrypted credentials — those use a decorator-local
+    in-process cache and never touch the shared store.
     """
 
-    store: OrderedDict[str, tuple[float, float, object]] = OrderedDict()
-    # store values: (fresh_until, stale_until, value)
-    lock = threading.Lock()
-    refreshing: set[str] = set()
-    refreshing_lock = threading.Lock()
-
     def decorator(func):
+        function_id = f"{func.__module__}.{func.__qualname__}"
+        local_memory: MemoryCacheBackend | None = None
+        local_lock = threading.Lock()
+        _local_refreshing: set[str] = set()
+        _local_refreshing_lock = threading.Lock()
+
+        def _local_backend() -> MemoryCacheBackend:
+            nonlocal local_memory
+            if local_memory is None:
+                with local_lock:
+                    if local_memory is None:
+                        local_memory = MemoryCacheBackend(maxsize=maxsize)
+            return local_memory
+
         @wraps(func)
         def wrapper(*args, **kwargs):
-            key = f"{func.__name__}:{args}:{sorted(kwargs.items())}"
-            now = time.time()
+            # --- Unsupported argument types: bypass cache entirely ---
+            try:
+                argument_hash = build_argument_hash(args, kwargs)
+            except CacheSerializationError:
+                key = f"{function_id}:{id(args)}"
+                with _local_refreshing_lock:
+                    if key not in _VALIDATE_WARNED:
+                        _VALIDATE_WARNED.add(key)
+                        if len(_VALIDATE_WARNED) > 64:
+                            _VALIDATE_WARNED.clear()
+                        logger.warning(
+                            "unsupported cache argument type in %s — bypassing cache",
+                            function_id,
+                        )
+                return func(*args, **kwargs)
 
-            # --- Fast path: check cache ---
-            with lock:
-                if key in store:
-                    fresh_until, stale_until, value = store[key]
-                    # Move to end (most recently used)
-                    store.move_to_end(key)
+            # --- Determine backend ---
+            if shared:
+                backend = _get_backend()
+            else:
+                backend = _local_backend()
 
-                    if now < fresh_until:
-                        # Fresh hit — return cached data
-                        return value
+            generation = backend.get_generation(function_id)
+            cache_key = f"{function_id}:{generation}:{argument_hash}"
+            lock_key = cache_key
 
-                    if swr > 0 and now < stale_until:
-                        # Stale hit — return stale data, maybe trigger bg refresh
-                        should_refresh = False
-                        with refreshing_lock:
-                            if key not in refreshing:
-                                refreshing.add(key)
-                                should_refresh = True
+            # --- Fast path: fresh hit ---
+            envelope = backend.get(cache_key)
+            if envelope is not None and time.time() < envelope["fresh_until"]:
+                return envelope["value"]
 
-                        if should_refresh:
-                            def _bg_refresh():
-                                try:
-                                    result = func(*args, **kwargs)
-                                    _now = time.time()
-                                    with lock:
-                                        store[key] = (
-                                            _now + ttl_seconds,
-                                            _now + ttl_seconds + swr,
-                                            result,
-                                        )
-                                        store.move_to_end(key)
-                                except Exception:
-                                    logger.warning(
-                                        "SWR background refresh failed for %s", key
-                                    )
-                                finally:
-                                    with refreshing_lock:
-                                        refreshing.discard(key)
+            # --- SWR path: stale hit ---
+            if envelope is not None and swr > 0 and time.time() < envelope["fresh_until"] + swr:
+                should_refresh = False
+                with _local_refreshing_lock:
+                    if cache_key not in _local_refreshing:
+                        _local_refreshing.add(cache_key)
+                        should_refresh = True
 
-                            _swr_executor.submit(_bg_refresh)
+                if should_refresh:
+                    def _bg_refresh():
+                        try:
+                            result = func(*args, **kwargs)
+                            now = time.time()
+                            backend.set(cache_key, {
+                                "schema_version": 1,
+                                "created_at": now,
+                                "fresh_until": now + ttl_seconds,
+                                "value": result,
+                            }, ttl_seconds + swr)
+                        except Exception:
+                            logger.warning("SWR background refresh failed for %s", function_id)
+                        finally:
+                            with _local_refreshing_lock:
+                                _local_refreshing.discard(cache_key)
 
-                        return value
+                    _swr_executor.submit(_bg_refresh)
 
-            # --- Cache miss or fully expired: caller blocks ---
-            result = func(*args, **kwargs)
-            now = time.time()
-            with lock:
-                store[key] = (now + ttl_seconds, now + ttl_seconds + swr, result)
-                store.move_to_end(key)
-                # LRU eviction
-                while len(store) > maxsize:
-                    store.popitem(last=False)
-            return result
+                return envelope["value"]
+
+            # --- Cold start / full miss ---
+            token = cache_key
+            if backend.acquire_lock(lock_key, token, ttl_seconds):
+                try:
+                    result = func(*args, **kwargs)
+                    now = time.time()
+                    backend.set(cache_key, {
+                        "schema_version": 1,
+                        "created_at": now,
+                        "fresh_until": now + ttl_seconds,
+                        "value": result,
+                    }, ttl_seconds + swr)
+                    return result
+                finally:
+                    backend.release_lock(lock_key, token)
+            else:
+                # Not the lock owner — wait for owner (with back-pressure)
+                local_waiters = 0
+                deadline = time.time() + _cold_wait_seconds
+
+                while time.time() < deadline:
+                    if local_waiters >= _max_waiters_per_key:
+                        break
+                    local_waiters += 1
+                    time.sleep(_cold_poll_seconds)
+                    envelope = backend.get(cache_key)
+                    if envelope is not None:
+                        return envelope["value"]
+                    local_waiters -= 1
+
+                fallback = backend.get_fallback(cache_key)
+                if fallback is not None:
+                    return fallback["value"]
+
+                raise CacheBusyError(f"cache cold start timeout for {function_id}")
 
         def cache_clear():
-            with lock:
-                store.clear()
-            with refreshing_lock:
-                refreshing.clear()
+            try:
+                b = _get_backend() if shared else _local_backend()
+                b.clear_function(function_id)
+            except RuntimeError:
+                pass
+            _local_backend().clear_function(function_id)
 
         wrapper.cache_clear = cache_clear
         return wrapper

@@ -4,11 +4,15 @@ import fakeredis
 import pytest
 
 from app.core.cache import (
+    CacheBusyError,
     CacheSerializationError,
     MemoryCacheBackend,
     RedisCacheBackend,
     ResilientCacheBackend,
     build_argument_hash,
+    configure_cache_backend_for_tests,
+    reset_cache_backend_for_tests,
+    ttl_cache,
 )
 
 
@@ -85,3 +89,92 @@ def test_resilient_backend_uses_memory_when_redis_fails():
     )
     backend.initialize()
     assert backend.status() == "memory-fallback"
+
+
+def test_ttl_cache_fresh_hit_calls_function_once():
+    backend = MemoryCacheBackend(maxsize=32)
+    configure_cache_backend_for_tests(backend)
+    calls = 0
+
+    @ttl_cache(30)
+    def load(config, limit):
+        nonlocal calls
+        calls += 1
+        return [{"limit": limit}]
+
+    assert load({"market": "CN"}, 10) == [{"limit": 10}]
+    assert load({"market": "CN"}, 10) == [{"limit": 10}]
+    assert calls == 1
+    reset_cache_backend_for_tests()
+
+
+def test_ttl_cache_unsupported_argument_bypasses_cache(caplog):
+    backend = MemoryCacheBackend(maxsize=32)
+    configure_cache_backend_for_tests(backend)
+    calls = 0
+
+    @ttl_cache(30)
+    def load(config):
+        nonlocal calls
+        calls += 1
+        return [calls]
+
+    assert load({"_media_cache": object()}) == [1]
+    assert load({"_media_cache": object()}) == [2]
+    assert "unsupported cache argument type" in caplog.text
+    reset_cache_backend_for_tests()
+
+
+def test_local_only_cache_never_uses_shared_backend():
+    class SharedBackendMustNotRun(MemoryCacheBackend):
+        def get(self, key):
+            raise AssertionError("shared backend was used")
+
+    configure_cache_backend_for_tests(SharedBackendMustNotRun(maxsize=8))
+    calls = 0
+
+    @ttl_cache(30, shared=False)
+    def decrypt(value):
+        nonlocal calls
+        calls += 1
+        return f"plain-{value}"
+
+    assert decrypt("cipher") == "plain-cipher"
+    assert decrypt("cipher") == "plain-cipher"
+    assert calls == 1
+    reset_cache_backend_for_tests()
+
+
+def test_lock_waiter_does_not_execute_wrapped_function():
+    import threading
+
+    backend = MemoryCacheBackend(maxsize=32)
+    configure_cache_backend_for_tests(
+        backend,
+        cold_wait_seconds=0.05,
+        cold_poll_seconds=0.01,
+        max_waiters_per_key=4,
+    )
+    entered = threading.Event()
+    release = threading.Event()
+    calls = 0
+
+    @ttl_cache(30)
+    def load():
+        nonlocal calls
+        calls += 1
+        entered.set()
+        release.wait(timeout=1)
+        return [{"ok": True}]
+
+    owner = threading.Thread(target=load)
+    owner.start()
+    assert entered.wait(timeout=1)
+
+    with pytest.raises(CacheBusyError):
+        load()
+
+    release.set()
+    owner.join(timeout=1)
+    assert calls == 1
+    reset_cache_backend_for_tests()
