@@ -41,6 +41,7 @@ const SOURCE_TYPE_OPTIONS_EM: { value: Block["source_type"]; label: string }[] =
   { value: "eastmoney_longhu", label: "龙虎榜" },
   { value: "eastmoney_capital_flow", label: "主力资金流入" },
   { value: "eastmoney_announcements", label: "A股公告" },
+  { value: "market_index_trends", label: "指数行情图" },
 ];
 
 const SOURCE_TYPE_OPTIONS_THS: { value: Block["source_type"]; label: string }[] = [
@@ -258,7 +259,7 @@ export function BlockConfigPanel({ form, onChange, onSave, onCancel }: Props) {
       )}
 
       {/* Display Style — hidden for AA index (list only) */}
-      {form.source_type !== "datalearner_aa_index" && form.source_type !== "artificial_analysis_ranking" && (
+      {form.source_type !== "datalearner_aa_index" && form.source_type !== "artificial_analysis_ranking" && form.source_type !== "market_index_trends" && (
         <div className="space-y-1.5">
           <Label className="text-xs">展示样式</Label>
           <Select value={form.display_style} onValueChange={(v) => update("display_style", v as Block["display_style"])}>

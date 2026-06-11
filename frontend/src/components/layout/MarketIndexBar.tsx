@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { AreaChart, Area, XAxis, YAxis, ResponsiveContainer, Tooltip, ReferenceLine } from "recharts";
 import { fetchMarketIndices } from "@/api/client";
@@ -29,6 +29,21 @@ export type MarketIndexChartDatum = {
 };
 
 export const MARKET_TIME_TICKS = [0, 30, 60, 90, 120, 150, 180, 210, 240];
+const MOBILE_MARKET_TIME_TICKS = [0, 60, 120, 180, 240];
+
+export function getMarketIndexChartLayout(isMobile: boolean) {
+  return isMobile
+    ? {
+        ticks: MOBILE_MARKET_TIME_TICKS,
+        axisWidth: 38,
+        horizontalMargin: 4,
+      }
+    : {
+        ticks: MARKET_TIME_TICKS,
+        axisWidth: 44,
+        horizontalMargin: 8,
+      };
+}
 
 const MARKET_TIME_LABELS: Record<number, string> = {
   0: "09:30",
@@ -123,7 +138,30 @@ function TrendTooltip({
   );
 }
 
+function useMobileChartLayout(): boolean {
+  const query = "(max-width: 640px)";
+  const [isMobile, setIsMobile] = useState(() => (
+    typeof window !== "undefined" && typeof window.matchMedia === "function"
+      ? window.matchMedia(query).matches
+      : false
+  ));
+
+  useEffect(() => {
+    if (typeof window.matchMedia !== "function") return undefined;
+    const mediaQuery = window.matchMedia(query);
+    const update = () => setIsMobile(mediaQuery.matches);
+    update();
+    mediaQuery.addEventListener("change", update);
+    return () => mediaQuery.removeEventListener("change", update);
+  }, []);
+
+  return isMobile;
+}
+
 function TrendChart({ idx }: { idx: MarketIndex }) {
+  const isMobile = useMobileChartLayout();
+  const chartLayout = getMarketIndexChartLayout(isMobile);
+
   if (!idx.trend?.points || idx.trend.points.length < 2) {
     return <div className="h-52 rounded-lg bg-muted/30 flex items-center justify-center text-xs text-muted-foreground">暂无分时数据</div>;
   }
@@ -134,11 +172,22 @@ function TrendChart({ idx }: { idx: MarketIndex }) {
 
   return (
     <div className="relative">
-      <div className="pointer-events-none absolute left-14 top-1 z-10 rounded bg-card/85 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground shadow-sm">
+      <div
+        className="pointer-events-none absolute top-1 z-10 rounded bg-card/85 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground shadow-sm"
+        style={{ left: chartLayout.axisWidth + chartLayout.horizontalMargin }}
+      >
         开盘 {fmt(openPrice)}
       </div>
       <ResponsiveContainer width="100%" height={220}>
-        <AreaChart data={chartData} margin={{ top: 18, right: 56, bottom: 0, left: 56 }}>
+        <AreaChart
+          data={chartData}
+          margin={{
+            top: 18,
+            right: chartLayout.horizontalMargin,
+            bottom: 0,
+            left: chartLayout.horizontalMargin,
+          }}
+        >
           <defs>
             <linearGradient id="idx-grad" x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%" stopColor={CHART_LINE} stopOpacity={0.2} />
@@ -149,7 +198,7 @@ function TrendChart({ idx }: { idx: MarketIndex }) {
             dataKey="x"
             type="number"
             domain={[0, 240]}
-            ticks={MARKET_TIME_TICKS}
+            ticks={chartLayout.ticks}
             tick={{ fontSize: 9, fill: "#A1AAB5" }}
             tickLine={false}
             axisLine={{ stroke: "#242E3A" }}
@@ -163,7 +212,7 @@ function TrendChart({ idx }: { idx: MarketIndex }) {
             tick={{ fontSize: 10, fill: "#A1AAB5" }}
             tickLine={false}
             axisLine={false}
-            width={52}
+            width={chartLayout.axisWidth}
             tickFormatter={(v: number) => v.toFixed(0)}
           />
           <YAxis
@@ -173,7 +222,7 @@ function TrendChart({ idx }: { idx: MarketIndex }) {
             tick={<PercentAxisTick referencePrice={openPrice} />}
             tickLine={false}
             axisLine={false}
-            width={52}
+            width={chartLayout.axisWidth}
           />
           <Tooltip content={<TrendTooltip />} cursor={{ stroke: "#4B5563", strokeWidth: 1, strokeDasharray: "3 3" }} />
           {openPrice > 0 && (
@@ -197,17 +246,19 @@ function TrendChart({ idx }: { idx: MarketIndex }) {
   );
 }
 
-export function MarketIndexBar() {
-  const { data: indices, isLoading } = useQuery({
+export function MarketIndexBar({ data: externalData }: { data?: MarketIndex[] }) {
+  const { data: fetchedData, isLoading } = useQuery({
     queryKey: ["market-indices"],
     queryFn: fetchMarketIndices,
     staleTime: 30_000,
     refetchInterval: 30_000,
+    enabled: !externalData,
   });
 
+  const indices = externalData ?? fetchedData;
   const [active, setActive] = useState("000001");
 
-  if (isLoading) {
+  if (!externalData && isLoading) {
     return (
       <div className="mb-6 rounded-xl border border-border/70 bg-card/80 animate-pulse p-5">
         <div className="flex gap-2 mb-4">
@@ -246,7 +297,7 @@ export function MarketIndexBar() {
           ))}
         </div>
         {idx.trend?.date && (
-          <span className="shrink-0 text-[11px] text-muted-foreground/60 tabular-nums ml-3 pb-1.5">{idx.trend.date}</span>
+          <span className="hidden shrink-0 text-[11px] text-muted-foreground/60 tabular-nums ml-3 pb-1.5 sm:inline">{idx.trend.date}</span>
         )}
       </div>
 
@@ -256,7 +307,7 @@ export function MarketIndexBar() {
         initial={{ opacity: 0, y: 4 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.15, ease: easeOutQuint }}
-        className="p-5"
+        className="p-4 sm:p-5"
       >
         {/* Price header */}
         <div className="flex items-baseline gap-3 mb-3">

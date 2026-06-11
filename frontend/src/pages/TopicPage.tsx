@@ -88,7 +88,6 @@ export function TopicPage() {
             </div>
           )}
           {aiSummary && !aiLoading && <AITopicSummary summary={aiSummary} />}
-          {slug === "stocks" && <MarketIndexBar />}
 
           <GridRenderer blocks={data?.blocks ?? []} isLoading={isLoading} dataUpdatedAt={dataUpdatedAt} />
         </>

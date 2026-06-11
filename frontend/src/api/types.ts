@@ -55,7 +55,8 @@ export interface Block {
   page_route: string;
   title: string;
   sort_order: number;
-  source_type: "topic" | "raw" | "hot_stocks" | "hot_events" | "xueqiu_hot_cn" | "xueqiu_hot_hk" | "xueqiu_hot_us" | "screener" | "eastmoney_sectors" | "eastmoney_longhu" | "eastmoney_industry" | "eastmoney_indices" | "eastmoney_capital_flow" | "eastmoney_announcements" | "tonghuashun_news" | "qiumiwu_matches" | "qiumiwu_fixtures" | "qiumiwu_standings" | "qiumiwu_schedule" | "datalearner_leaderboard" | "datalearner_aa_index" | "aihot_news" | "artificial_analysis_ranking";
+  source_type: "topic" | "raw" | "hot_stocks" | "hot_events" | "xueqiu_hot_cn" | "xueqiu_hot_hk" | "xueqiu_hot_us" | "screener" | "eastmoney_sectors" | "eastmoney_longhu" | "eastmoney_industry" | "eastmoney_indices" | "eastmoney_capital_flow" | "eastmoney_announcements" | "tonghuashun_news" | "qiumiwu_matches" | "qiumiwu_fixtures" | "qiumiwu_standings" | "qiumiwu_schedule" | "datalearner_leaderboard" | "datalearner_aa_index" | "aihot_news" | "artificial_analysis_ranking"
+  | "market_index_trends";
   source_config: Record<string, unknown>;
   display_style: "card" | "list" | "timeline" | "schedule";
   display_count: number;

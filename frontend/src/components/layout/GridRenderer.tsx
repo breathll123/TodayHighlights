@@ -11,6 +11,7 @@ import { NewsTimeline } from "./NewsTimeline";
 import { StandingsTable } from "./StandingsTable";
 import { LeaderboardTable } from "./LeaderboardTable";
 import { ArtificialAnalysisRanking } from "./ArtificialAnalysisRanking";
+import { MarketIndexBar } from "./MarketIndexBar";
 import { SectionHeading } from "./SectionHeading";
 import { BlockAIAnalysisDrawer } from "./BlockAIAnalysisDrawer";
 import { CollapsibleSection } from "./CollapsibleSection";
@@ -56,6 +57,7 @@ const SOURCE_NAMES: Record<string, string> = {
   datalearner_aa_index: "DataLearner",
   aihot_news: "AI HOT",
   artificial_analysis_ranking: "Artificial Analysis",
+  market_index_trends: "东方财富",
 };
 
 const SOURCE_URLS: Record<string, string> = {
@@ -76,6 +78,7 @@ function sourceUrlFor(sourceType: string): string | undefined {
   if (sourceType.startsWith("datalearner")) return SOURCE_URLS.datalearner;
   if (sourceType.startsWith("aihot")) return SOURCE_URLS.aihot;
   if (sourceType.startsWith("artificial_analysis")) return SOURCE_URLS.artificial_analysis;
+  if (sourceType.startsWith("market_index")) return SOURCE_URLS.eastmoney;
   return undefined;
 }
 
@@ -287,6 +290,8 @@ export function GridRenderer({ blocks, isLoading, dataUpdatedAt }: { blocks: any
               <AAIndexBlock block={block} displayFields={displayFields} />
             ) : block.source_type === "datalearner_leaderboard" ? (
               <LeaderboardTable data={block.data} />
+            ) : block.source_type === "market_index_trends" ? (
+              <MarketIndexBar data={block.data} />
             ) : block.source_type === "artificial_analysis_ranking" ? (
               <ArtificialAnalysisRanking data={block.data} meta={block.meta} />
             ) : block.source_type === "aihot_news" ? (

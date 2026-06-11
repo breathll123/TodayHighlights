@@ -208,6 +208,10 @@ def resolve_block_data(
         from app.services.adapters.aihot import fetch_news
         return fetch_news(config, limit)
 
+    if source_type == "market_index_trends":
+        from app.services.adapters.eastmoney import fetch_index_trends
+        return fetch_index_trends(config, limit)
+
     if source_type == "artificial_analysis_ranking":
         if session is None:
             raise RuntimeError("artificial_analysis_ranking requires a database session")

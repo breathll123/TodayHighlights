@@ -87,6 +87,11 @@ export const FIELD_DEFS: Record<string, FieldDef[]> = {
     { key: "release", label: "Released", type: "text" },
     { key: "score", label: "评分", type: "number" },
   ],
+  market_index_trends: [
+    { key: "title", label: "指数", type: "text" },
+    { key: "current", label: "点数", type: "number" },
+    { key: "percent", label: "涨跌幅", type: "number" },
+  ],
   aihot_news: [
     { key: "title", label: "标题", type: "text" },
     { key: "subtitle", label: "来源", type: "text" },
@@ -118,5 +123,6 @@ export const DEFAULT_FIELDS: Record<string, string[]> = {
   datalearner_leaderboard: ["title", "subtitle", "score"],
   datalearner_aa_index: ["title", "subtitle", "score"],
   artificial_analysis_ranking: ["title", "subtitle", "release", "score"],
+  market_index_trends: ["title", "current", "percent"],
   aihot_news: ["title", "subtitle"],
 };
