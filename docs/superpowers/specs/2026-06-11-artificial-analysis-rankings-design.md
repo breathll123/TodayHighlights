@@ -1,540 +1,698 @@
 # Artificial Analysis Rankings Design
 
-## Goal
+## 1. Goal
 
-Replace the AI model leaderboard's request-time DataLearner scraping with a database-backed Artificial Analysis Free API integration. Persist every upstream response before parsing, publish normalized versioned ranking datasets to MySQL, and make all public-page reads database-only.
+Replace the AI dashboard's live DataLearner model ranking requests with a database-backed Artificial Analysis integration.
 
-## Scope
+The system must:
 
-The first release supports seven public rankings:
+- collect seven ranking datasets from the Artificial Analysis V2 API;
+- save every bounded HTTP response before parsing or error handling it;
+- parse and version normalized ranking data in MySQL;
+- derive a China language-model ranking without an additional upstream request;
+- serve public pages only from MySQL;
+- preserve the last successfully published dataset when collection or parsing fails;
+- stay within the current Free API allowance of 25 requests per day.
+
+The first release covers:
 
 1. Global language models
-2. Chinese language models
+2. China language models
 3. Text-to-image
 4. Text-to-video
 5. Image-to-video
 6. Text-to-speech
 7. Speech-to-text
 
-The Chinese language ranking is derived locally from the global language dataset. It does not consume an additional Artificial Analysis request.
+## 2. Non-goals
 
-The integration is Free-only:
+- The public page must not call Artificial Analysis directly.
+- Redis must not be the authoritative ranking store.
+- The integration will not introduce Celery, RQ, or another task queue.
+- The first release will not ingest image editing, speech-to-speech, music, or video-with-audio rankings.
+- The first release will not automatically delete the DataLearner adapter.
+- The first release will not infer creator regions with fuzzy, suffix, or substring matching.
 
-- Call only documented `/free` endpoints.
-- Do not probe standard Pro endpoints.
-- Do not retry a Free response against a Pro endpoint.
-- Do not depend on Pro-only fields.
+## 3. Upstream API
 
-## Official API Boundaries
+### 3.1 Endpoints
 
-Base URL:
+The Free API endpoints are:
 
-```text
-https://artificialanalysis.ai/api/v2
-```
+| Dataset | Endpoint |
+| --- | --- |
+| Global language models | `/api/v2/language/models/free` |
+| Text-to-image | `/api/v2/media/text-to-image/models/free` |
+| Text-to-video | `/api/v2/media/text-to-video/models/free` |
+| Image-to-video | `/api/v2/media/image-to-video/models/free` |
+| Text-to-speech | `/api/v2/media/text-to-speech/models/free` |
+| Speech-to-text | `/api/v2/media/speech-to-text/models/free` |
 
-Allowed endpoints:
+China language models are derived from the global language-model response and do not consume another upstream request.
 
-```text
-/language/models/free
-/media/text-to-image/models/free
-/media/text-to-video/models/free
-/media/image-to-video/models/free
-/media/text-to-speech/models/free
-/media/speech-to-text/models/free
-```
+Language models use pagination. The collector must follow `pagination.has_more` and request subsequent pages dynamically. No fixed page count is allowed.
 
-The language endpoint is paginated. The client follows `pagination.has_more` and `pagination.total_pages`; it does not assume there are always two pages. Media endpoints are treated as single-response datasets unless the official response shape later adds pagination.
+### 3.2 Authentication and attribution
 
-The current official V2 documentation states a Free quota of 25 requests per day. Every response updates locally stored values from:
-
-```text
-X-AA-Tier
-X-RateLimit-Limit
-X-RateLimit-Remaining
-X-RateLimit-Reset
-Retry-After
-```
-
-The API key is sent only through the `x-api-key` request header. Request headers and API keys are never persisted.
-
-## Data Flow
-
-```text
-APScheduler or admin trigger
-        |
-        v
-Acquire MySQL named lock
-        |
-        v
-Create sync run
-        |
-        v
-Request one allowed /free endpoint or language page
-        |
-        v
-Commit raw response snapshot
-        |
-        v
-Parse and validate committed snapshot
-        |
-        v
-Create immutable dataset + entries
-        |
-        v
-Publish dataset
-        |
-        v
-Public block queries latest published MySQL dataset
-```
-
-No public page request calls Artificial Analysis. Redis may cache ordinary database query results later, but MySQL remains authoritative.
-
-## Database Model
-
-### `aa_sync_runs`
-
-One row per scheduled or manual synchronization.
-
-| Field | Type | Purpose |
-| --- | --- | --- |
-| `id` | bigint PK | Run identifier |
-| `trigger_type` | varchar(20) | `scheduled` or `manual` |
-| `requested_rankings_json` | JSON | Requested ranking types |
-| `status` | varchar(30) | `pending`, `running`, `succeeded`, `partial`, `failed`, `rate_limited`, `skipped_locked`, `skipped_quota` |
-| `requests_attempted` | int | Upstream requests started |
-| `requests_succeeded` | int | HTTP 2xx responses |
-| `datasets_published` | int | Successfully published datasets |
-| `rate_limit_tier` | varchar(20) | Last observed `X-AA-Tier` |
-| `rate_limit_limit` | int nullable | Last observed daily limit |
-| `rate_limit_remaining` | int nullable | Last observed remaining requests |
-| `rate_limit_reset_at` | datetime nullable | Converted reset timestamp |
-| `started_at` | datetime nullable | Start time |
-| `finished_at` | datetime nullable | Finish time |
-| `error_message` | text | Run-level error summary |
-| `created_at` | datetime | Creation time |
-
-Index status and creation time for admin history queries.
-
-### `aa_raw_snapshots`
-
-One row per upstream HTTP response, including non-2xx responses.
-
-| Field | Type | Purpose |
-| --- | --- | --- |
-| `id` | bigint PK | Snapshot identifier |
-| `sync_run_id` | FK | Owning synchronization |
-| `ranking_type` | varchar(40) | Requested dataset type |
-| `endpoint_path` | varchar(255) | Relative allow-listed endpoint |
-| `page_number` | int nullable | Language page number |
-| `http_status` | int | Upstream status |
-| `response_headers_json` | JSON | Allow-listed rate-limit and content headers |
-| `response_body` | LONGTEXT | Exact response body |
-| `content_hash` | char(64) | SHA-256 of raw response bytes |
-| `parse_status` | varchar(20) | `pending`, `parsed`, `failed`, `skipped` |
-| `parse_error` | text | Parser failure without losing raw data |
-| `item_count` | int | Number of parsed records |
-| `fetched_at` | datetime | Request completion time |
-| `created_at` | datetime | Row creation time |
-
-The raw snapshot is committed before parsing starts. The response header allow-list excludes cookies, authorization values, and request headers.
-
-Raw snapshots are retained indefinitely in the first release. Their expected volume is small at two runs per day; cleanup can be added after real storage growth is measured.
-
-### `aa_ranking_datasets`
-
-An immutable successfully parsed version of one ranking.
-
-| Field | Type | Purpose |
-| --- | --- | --- |
-| `id` | bigint PK | Dataset identifier |
-| `sync_run_id` | FK | Publishing run |
-| `ranking_type` | varchar(40) | One of the seven supported types |
-| `source_snapshot_ids_json` | JSON | Raw snapshots used to build it |
-| `derived_from_dataset_id` | FK nullable | Global language dataset used for Chinese derivation |
-| `score_key` | varchar(80) | `intelligence_index`, `elo`, or `aa_wer_index` |
-| `source_version` | varchar(40) | Intelligence Index version when available |
-| `item_count` | int | Published entry count |
-| `captured_at` | datetime | Upstream capture time |
-| `published_at` | datetime | Publication time |
-| `source_url` | varchar(500) | Official source page |
-| `attribution` | varchar(255) | Visible attribution text |
-| `metadata_json` | JSON | Pagination and parser metadata |
-| `created_at` | datetime | Creation time |
-
-A dataset and all its entries are inserted in one transaction. Public queries select the latest dataset ordered by `published_at DESC, id DESC`. Failed or incomplete parses never create a dataset.
-
-### `aa_ranking_entries`
-
-Normalized rows belonging to one immutable dataset.
-
-| Field | Type | Purpose |
-| --- | --- | --- |
-| `id` | bigint PK | Entry identifier |
-| `dataset_id` | FK | Owning dataset |
-| `external_model_id` | varchar(80) | Artificial Analysis model ID |
-| `model_slug` | varchar(180) | Model slug when provided |
-| `model_name` | varchar(255) | Display name |
-| `creator_external_id` | varchar(80) | Artificial Analysis creator ID |
-| `creator_name` | varchar(180) | Creator display name |
-| `creator_country` | char(2) nullable | Locally resolved country |
-| `source_rank` | int | Order returned by the Free endpoint |
-| `rank` | int | Published rank after local derivation |
-| `score` | decimal(18,6) nullable | Primary displayed score |
-| `score_key` | varchar(80) | Meaning of `score` |
-| `ci_95` | decimal(18,6) nullable | Arena confidence interval |
-| `release_date` | date nullable | Present for Free language models |
-| `metrics_json` | JSON | All supported Free fields not promoted to columns |
-| `created_at` | datetime | Creation time |
-
-Use a unique constraint on `(dataset_id, external_model_id)` and an index on `(dataset_id, rank)`.
-
-For language models, `metrics_json` retains the three headline indices, pricing, median performance, and Intelligence Index evaluation cost. For media rankings it retains the complete Free response object after known identifiers are normalized.
-
-`source_rank` preserves the upstream order. This is important for speech-to-text because the Free documentation exposes `aa_wer_index` but does not define a local sorting contract. The parser does not invent a new global ordering.
-
-### `aa_creator_regions`
-
-A maintainable mapping used only for local regional derivation.
-
-| Field | Type | Purpose |
-| --- | --- | --- |
-| `id` | bigint PK | Mapping identifier |
-| `creator_external_id` | varchar(80) unique | Stable Artificial Analysis creator ID |
-| `canonical_name` | varchar(180) | Creator name |
-| `country_code` | char(2) | Lowercase ISO code, such as `cn` |
-| `aliases_json` | JSON | Historical or alternate names |
-| `enabled` | boolean | Whether mapping participates |
-| `notes` | text | Maintenance context |
-| `created_at` / `updated_at` | datetime | Audit timestamps |
-
-The migration seeds confirmed Chinese creators already needed by the current datasets, including ByteDance Seed and Kuaishou KlingAI. Additional mappings are maintained in MySQL, not hard-coded into the parser.
-
-Unknown creators remain global-only. Name matching is permitted only as a logged fallback when no stable creator ID mapping exists.
-
-## Parsing and Publication Rules
-
-### Global language models
-
-- Fetch every language page.
-- Require every page reported by pagination.
-- Reject duplicate model IDs across pages.
-- Use `evaluations.artificial_analysis_intelligence_index` as the primary score.
-- Preserve API order as `source_rank`.
-- Publish only when the full page set succeeds.
-
-### Chinese language models
-
-- Never call another upstream endpoint.
-- Derive from the newly published global language dataset.
-- Include entries whose enabled creator mapping has `country_code = "cn"`.
-- Sort by non-null Intelligence Index descending, then global source rank.
-- Re-number `rank` from one.
-- Store `derived_from_dataset_id`.
-
-The public page states:
-
-```text
-中国模型范围由今日看点根据模型厂商归属整理；原始评分来自 Artificial Analysis。
-```
-
-### Image, video, and text-to-speech
-
-- Use `elo` as primary score.
-- Preserve upstream order as `source_rank` and published `rank`.
-- Store `ci_95`.
-
-### Speech-to-text
-
-- Use `aa_wer_index` as primary score.
-- Preserve upstream order as rank instead of assuming whether a future index revision is ascending or descending.
-
-### Validation
-
-A ranking is not published when:
-
-- HTTP status is not 2xx.
-- JSON is invalid.
-- Required `data` is missing or not a list.
-- A required model or creator identifier is absent.
-- The result is empty.
-- Language pagination is incomplete.
-- Duplicate model IDs are found in one dataset.
-
-The raw snapshot remains available with `parse_status = "failed"` and a bounded error message.
-
-## Synchronization and Quota Control
-
-Scheduled times are:
-
-```text
-08:30 Asia/Shanghai
-20:30 Asia/Shanghai
-```
-
-A normal run currently consumes approximately seven requests:
-
-- Two or more language pages, determined dynamically
-- Five single-response media endpoints
-
-At two runs per day this is expected to stay below the documented 25-request Free limit while leaving retry and manual-operation headroom.
-
-Before a full run:
-
-- Read the latest known quota state.
-- Treat quota as unknown when the stored reset timestamp has passed; do not let yesterday's exhausted value block a new daily window.
-- Skip an optional manual full run when known remaining requests are below eight.
-- Scheduled runs may start only when known remaining requests are sufficient for the six first requests plus one language continuation page.
-- Before every additional language page, re-check the latest response header.
-- Stop immediately on `429`; persist the response and `Retry-After`, mark the run `rate_limited`, and publish no incomplete affected dataset.
-
-Retries are conservative:
-
-- Network failure: one retry with short backoff.
-- `5xx`: one retry only when remaining quota is unknown or safely above the reserve.
-- `401`, `403`, and `429`: no retry.
-- A `403` is treated as configuration or endpoint-contract failure; the client does not try a Pro route.
-
-Each upstream attempt counts in `requests_attempted`, including retries.
-
-## Concurrency
-
-Every synchronization acquires a MySQL named lock:
-
-```text
-today-highlights:artificial-analysis-sync
-```
-
-The lock is acquired on a dedicated database connection with zero wait and released in `finally`. This prevents duplicate quota consumption when multiple FastAPI workers each start APScheduler.
-
-If the lock is unavailable, a scheduled invocation exits without creating duplicate HTTP traffic. Manual requests return a conflict response identifying the active synchronization.
-
-## Configuration
-
-Add environment settings:
+The API key is supplied only by the backend:
 
 ```env
-ARTIFICIAL_ANALYSIS_ENABLED=false
 ARTIFICIAL_ANALYSIS_API_KEY=
-ARTIFICIAL_ANALYSIS_BASE_URL=https://artificialanalysis.ai/api/v2
-ARTIFICIAL_ANALYSIS_SYNC_HOURS=8,20
-ARTIFICIAL_ANALYSIS_SYNC_MINUTE=30
-ARTIFICIAL_ANALYSIS_TIMEOUT_SECONDS=20
+ARTIFICIAL_ANALYSIS_SYNC_ENABLED=true
+ARTIFICIAL_ANALYSIS_QUOTA_RESERVE=2
 ```
 
-The API key remains in environment configuration and is never returned by admin or public APIs.
+The key must never be stored in ranking records, logs, API responses, block configuration, or frontend state.
 
-The client has a code-level endpoint allow-list. A configured base URL may change for tests, but requested paths must still be one of the six `/free` paths.
-
-## Service Boundaries
-
-### `artificial_analysis_client.py`
-
-- Authenticated HTTP transport
-- `/free` endpoint allow-list
-- Timeout and conservative retry policy
-- Safe response header extraction
-- No parsing into application ranking models
-
-### `artificial_analysis_parser.py`
-
-- Pure parsing functions per response shape
-- Validation and normalization
-- No HTTP or database access
-
-### `artificial_analysis_sync.py`
-
-- MySQL lock lifecycle
-- Sync run state
-- Raw snapshot-first persistence
-- Dataset publication transactions
-- Quota decisions
-- Chinese dataset derivation
-
-### `artificial_analysis_rankings.py`
-
-- Latest published dataset queries
-- Conversion into public block response objects
-- No third-party HTTP access
-
-## Admin API
-
-Add:
+Public ranking components must display a visible link:
 
 ```text
-GET  /api/admin/artificial-analysis/status
-GET  /api/admin/artificial-analysis/runs
-POST /api/admin/artificial-analysis/sync
-GET  /api/admin/artificial-analysis/creator-regions
-POST /api/admin/artificial-analysis/creator-regions
-PUT  /api/admin/artificial-analysis/creator-regions/{id}
+数据来源：Artificial Analysis
 ```
 
-The sync request accepts either all rankings or selected ranking types. Selecting `language_china` automatically requests `language_global` because China is derived.
-The endpoint returns `202 Accepted` with a run ID after scheduling background execution. It returns `409 Conflict` when the MySQL synchronization lock is already held.
+China rankings must additionally display:
 
-The status response includes:
+```text
+中国模型范围由今日看点根据模型厂商归属整理，原始评分来自 Artificial Analysis。
+```
 
-- Enabled/configured state without exposing the key
-- Latest run
-- Latest successful dataset time per ranking
-- Last known rate limit and reset time
-- Current sync-in-progress state
+### 3.3 Rate-limit handling
 
-## Public Block Integration
+The collector records these headers after every authenticated response:
 
-Introduce one database-backed source type:
+- `X-AA-Tier`
+- `X-RateLimit-Limit`
+- `X-RateLimit-Remaining`
+- `X-RateLimit-Reset`
+- `Retry-After`, when present
+
+Quota decisions must use the most recent response headers. They must not assume that a full run always requires a fixed number of requests.
+
+Before requesting another page or dataset:
+
+1. If the remaining quota is unknown, the request may proceed.
+2. If `remaining <= ARTIFICIAL_ANALYSIS_QUOTA_RESERVE`, collection stops cleanly.
+3. If a response is `429`, collection stops immediately and records the reset time.
+4. Completed datasets may publish; incomplete datasets retain their previous published version.
+
+The configured reserve defaults to two requests. It protects recovery and operational inspection but is not a forecast of the remaining run cost.
+
+## 4. Architecture
+
+```text
+APScheduler or admin request
+        |
+        v
+ArtificialAnalysisSyncService
+        |
+        +--> authenticated HTTP request
+        |
+        +--> persist compressed raw response
+        |
+        +--> validate and parse response
+        |
+        +--> create immutable dataset + entries
+        |
+        +--> publish dataset atomically
+        |
+        v
+MySQL
+        |
+        v
+resolve_block_data(session, block)
+        |
+        v
+public page API
+        |
+        v
+React dashboard
+```
+
+Each upstream response is persisted before parsing. A parser can therefore be rerun against saved data without spending API quota.
+
+Normalized datasets are immutable. Publishing changes which completed dataset is current; it does not overwrite previous entries.
+
+## 5. Data model
+
+### 5.1 `aa_sync_runs`
+
+Tracks one scheduled or manual synchronization attempt.
+
+| Column | Type | Notes |
+| --- | --- | --- |
+| `id` | BIGINT PK | |
+| `trigger_type` | VARCHAR(30) | `scheduled`, `manual`, `reparse` |
+| `status` | VARCHAR(30) | `pending`, `running`, `partial`, `succeeded`, `failed`, `quota_exhausted`, `abandoned` |
+| `requested_by_user_id` | BIGINT NULL FK | Admin for manual runs |
+| `requested_datasets_json` | JSON | Requested dataset keys |
+| `completed_datasets_json` | JSON | Successfully published dataset keys |
+| `failed_datasets_json` | JSON | Dataset key and error summary |
+| `request_count` | INT | Requests used by this run |
+| `quota_tier` | VARCHAR(30) | Latest `X-AA-Tier` |
+| `quota_limit` | INT NULL | Latest known daily limit |
+| `quota_remaining` | INT NULL | Latest known remaining requests |
+| `quota_reset_at` | DATETIME NULL | Parsed reset time |
+| `started_at` | DATETIME NULL | |
+| `heartbeat_at` | DATETIME NULL | Updated between requests and parsing phases |
+| `finished_at` | DATETIME NULL | |
+| `error_message` | TEXT | Run-level error |
+| `created_at` | DATETIME | |
+
+Indexes:
+
+- `(status, created_at)`
+- `(trigger_type, created_at)`
+
+Only one `pending` or `running` synchronization may exist at a time.
+
+### 5.2 `aa_raw_snapshots`
+
+Stores one upstream HTTP response before parsing.
+
+| Column | Type | Notes |
+| --- | --- | --- |
+| `id` | BIGINT PK | |
+| `sync_run_id` | BIGINT FK | Owning run |
+| `dataset_key` | VARCHAR(50) | Dataset being collected |
+| `endpoint` | VARCHAR(500) | Path without credentials |
+| `page_number` | INT | One-based page number; media endpoints use `1` |
+| `http_status` | INT | |
+| `response_headers_json` | JSON | Safe allowlisted headers only |
+| `body_compressed` | LONGBLOB | Gzip-compressed original response bytes |
+| `compression` | VARCHAR(20) | `gzip` |
+| `content_type` | VARCHAR(120) | |
+| `body_sha256` | CHAR(64) | Hash of uncompressed bytes |
+| `original_size_bytes` | INT | |
+| `compressed_size_bytes` | INT | |
+| `parse_status` | VARCHAR(30) | `pending`, `parsed`, `failed` |
+| `parse_error` | TEXT | |
+| `captured_at` | DATETIME | |
+
+Constraints and indexes:
+
+- Unique `(sync_run_id, dataset_key, page_number)`
+- Index `(dataset_key, captured_at)`
+- Index `(body_sha256)`
+
+The API key and full request headers are never stored.
+
+### 5.3 `aa_ranking_datasets`
+
+Represents one immutable parsed version of a ranking.
+
+| Column | Type | Notes |
+| --- | --- | --- |
+| `id` | BIGINT PK | |
+| `sync_run_id` | BIGINT FK | |
+| `dataset_key` | VARCHAR(50) | `language_global`, `language_china`, `text_to_image`, `text_to_video`, `image_to_video`, `text_to_speech`, `speech_to_text` |
+| `scope` | VARCHAR(20) | `global`, `china` |
+| `score_type` | VARCHAR(40) | `intelligence_index`, `elo`, `aa_wer_index` |
+| `status` | VARCHAR(30) | `parsing`, `ready`, `published`, `failed`, `superseded` |
+| `source_tier` | VARCHAR(30) | `free`, `pro`, `commercial` |
+| `source_version` | VARCHAR(40) | Intelligence Index version when available |
+| `entry_count` | INT | |
+| `source_snapshot_ids_json` | JSON | Snapshot IDs used by the parser |
+| `data_sha256` | CHAR(64) | Hash of canonical normalized entries |
+| `captured_at` | DATETIME | Upstream capture time |
+| `published_at` | DATETIME NULL | |
+| `error_message` | TEXT | |
+| `created_at` | DATETIME | |
+
+Indexes and constraints:
+
+- Index `(dataset_key, status, published_at)`
+- Unique `(dataset_key, data_sha256)`
+- At most one `published` dataset per `dataset_key`, enforced by the publication service transaction.
+
+### 5.4 `aa_ranking_entries`
+
+Stores normalized rows for a dataset.
+
+| Column | Type | Notes |
+| --- | --- | --- |
+| `id` | BIGINT PK | |
+| `dataset_id` | BIGINT FK | |
+| `model_external_id` | VARCHAR(120) | Artificial Analysis model ID |
+| `model_slug` | VARCHAR(200) | Empty when unavailable |
+| `model_name` | VARCHAR(300) | |
+| `creator_external_id` | VARCHAR(120) | Empty when creator is null |
+| `creator_name` | VARCHAR(200) | |
+| `creator_region` | VARCHAR(20) | `cn`, `other`, `unknown` |
+| `rank` | INT | Rank recalculated from normalized score |
+| `score` | DECIMAL(16,6) NULL | Primary ranking score |
+| `score_type` | VARCHAR(40) | |
+| `ci_95` | DECIMAL(16,6) NULL | |
+| `release_date` | DATE NULL | |
+| `metrics_json` | JSON | Dataset-specific metrics |
+| `pricing_json` | JSON | Available pricing fields |
+| `performance_json` | JSON | Available performance fields |
+| `source_url` | VARCHAR(500) | Artificial Analysis ranking URL |
+| `created_at` | DATETIME | |
+
+Constraints and indexes:
+
+- Unique `(dataset_id, model_external_id)`
+- Index `(dataset_id, rank)`
+- Index `(creator_external_id)`
+
+If a model external ID is missing, the parser uses a deterministic fallback key based on dataset key, normalized model name, and normalized creator name. It records this condition in `metrics_json.parser_warnings`.
+
+### 5.5 `aa_creator_regions`
+
+Maintains creator ownership for derived regional rankings.
+
+| Column | Type | Notes |
+| --- | --- | --- |
+| `id` | BIGINT PK | |
+| `creator_external_id` | VARCHAR(120) NULL | Preferred identity |
+| `canonical_name` | VARCHAR(200) | |
+| `normalized_name` | VARCHAR(200) | Case-folded, whitespace-normalized name |
+| `region_code` | VARCHAR(20) | `cn`, `other`, `unknown` |
+| `source` | VARCHAR(30) | `observed`, `manual`, `official_country` |
+| `notes` | TEXT | |
+| `created_at` | DATETIME | |
+| `updated_at` | DATETIME | |
+
+Constraints:
+
+- Unique `creator_external_id` when present
+- Unique `normalized_name`
+
+The first release does not include `aliases_json`.
+
+## 6. Raw-response persistence
+
+### 6.1 Ordering
+
+For every response:
+
+1. Read the response bytes with a hard client limit.
+2. Reject the response if uncompressed bytes exceed 10 MB.
+3. Compute SHA-256 over the original bytes.
+4. Gzip the original bytes.
+5. Insert and commit `aa_raw_snapshots`.
+6. Only then decode JSON and parse the response.
+
+If snapshot persistence fails, parsing must not continue.
+
+### 6.2 Size limits
+
+The application soft limit is:
+
+```env
+ARTIFICIAL_ANALYSIS_MAX_RESPONSE_BYTES=10485760
+```
+
+Responses larger than the limit fail that dataset and preserve its previous published version. Responses must not be truncated because truncated JSON cannot support reliable replay.
+
+Deployment documentation must require:
+
+```text
+MySQL max_allowed_packet >= 16MB
+```
+
+The compressed body is stored in `LONGBLOB`, but the application limit remains 10 MB uncompressed.
+
+### 6.3 Replay
+
+A reparse operation:
+
+- creates a new `aa_sync_runs` record with `trigger_type=reparse`;
+- reads and decompresses selected existing snapshots;
+- does not call Artificial Analysis;
+- runs the current parser and publication logic;
+- creates a new immutable dataset version.
+
+## 7. Parsing
+
+### 7.1 Common validation
+
+The parser must validate:
+
+- response root is an object;
+- `data` is a list;
+- required model and score fields match the endpoint schema;
+- numeric values are finite;
+- model identity is non-empty;
+- creator identity follows the rules below;
+- duplicate models inside one dataset are rejected or deterministically deduplicated with a recorded warning.
+
+One malformed row does not invalidate an otherwise usable dataset unless more than 10% of rows fail validation. Row failures are recorded in the run log and dataset error metadata.
+
+### 7.2 Ranking
+
+Ranks are calculated locally after validation:
+
+- Intelligence Index and Elo: descending score.
+- AA WER Index: ascending score because it is a word-error-rate metric and lower error is better.
+- Null scores sort after scored models and are excluded from numbered ranks by default.
+- Ties use score, then model name, then external ID for deterministic ordering.
+
+### 7.3 Creator identity and region
+
+Official contracts:
+
+- Media `model_creator.id` and `model_creator.name` are required.
+- Free language `model_creator` may be null; when present, `id` and `name` are required.
+- Pro language responses may include `model_creator.country`.
+
+Region resolution order:
+
+1. If the response contains an official country and it equals `cn`, upsert `source=official_country` and assign `cn`.
+2. Match non-empty `creator_external_id` exactly.
+3. If a non-empty ID is not known, insert an `observed` creator row with `region_code=unknown`; do not fall back to its name.
+4. If the ID is absent, normalize the creator name with Unicode case folding, trim, and whitespace collapse, then perform exact equality against `normalized_name`.
+5. Do not use substring, suffix, fuzzy, transliteration, or alias matching.
+6. Unmatched creators receive `unknown` and are excluded from the China dataset.
+
+Before enabling scheduled publication, a real Free API response must be collected and a creator coverage report produced:
+
+- total unique creators;
+- creators resolved by ID;
+- creators resolved by exact normalized name;
+- unresolved creators;
+- percentage of language entries eligible for regional classification.
+
+## 8. China language-model dataset
+
+The China dataset is derived only after the global language dataset parses successfully.
+
+Steps:
+
+1. Select global language entries with `creator_region=cn`.
+2. Preserve the original scores and metrics.
+3. Recalculate rank within the selected subset.
+4. Create a separate immutable `language_china` dataset linked to the same raw snapshot IDs.
+5. Publish the global dataset when it is valid.
+6. Publish the China dataset in a separate transaction when it is non-empty and valid. A China derivation failure must not block a valid global update.
+
+An empty China result is a parsing/configuration failure. It must not replace an existing published China dataset.
+
+## 9. Publication and failure behavior
+
+Publication is per dataset.
+
+Within one transaction:
+
+1. Verify the new dataset status is `ready`.
+2. Lock the currently published row for the dataset key.
+3. Mark the old published dataset `superseded`.
+4. Mark the new dataset `published` and set `published_at`.
+5. Commit.
+
+Failure behavior:
+
+- HTTP, snapshot, parsing, or publication failure never deletes the current published dataset.
+- A partially successful run publishes successful datasets and reports `partial`.
+- If nothing publishes, the run is `failed` or `quota_exhausted`.
+- Duplicate normalized data may reuse the current published dataset and record the run as successful without inserting duplicate entries.
+
+## 10. Execution model
+
+### 10.1 Scheduled synchronization
+
+APScheduler adds two Asia/Shanghai jobs:
+
+- `08:30`
+- `20:30`
+
+Both call the same standalone sync entry point. The entry point creates and closes its own `SessionLocal`.
+
+### 10.2 Manual synchronization
+
+Admin endpoint:
+
+```http
+POST /api/admin/artificial-analysis/sync
+```
+
+Behavior:
+
+1. Validate admin access and configuration.
+2. Open a short-lived dedicated database connection and acquire the synchronization lock.
+3. Check for an existing `pending` or `running` run.
+4. Insert and commit an `aa_sync_runs` row with `pending`.
+5. Release the lock on the same dedicated connection.
+6. Register a FastAPI `BackgroundTasks` callback with the run ID.
+7. Return `202 Accepted` with the run record.
+
+The background callback opens a new `SessionLocal`; it never uses the request Session.
+
+### 10.3 Mutual exclusion
+
+The synchronization service uses MySQL `GET_LOCK` with a bounded timeout. Because MySQL advisory locks belong to a database connection, lock acquisition, protected work, `RELEASE_LOCK`, and connection close must use the same dedicated SQLAlchemy `Connection`. The lock name is stable and application-prefixed.
+
+The background callback reacquires this lock before moving its run from `pending` to `running`. It also verifies that its run is still the oldest active run. Scheduled synchronization acquires the same lock before creating a run.
+
+If the lock is unavailable:
+
+- the admin endpoint returns `409 Conflict` with `active_run_id`;
+- a scheduled invocation logs and exits without consuming quota.
+
+Redis is not used for this critical lock because MySQL is the authoritative store and the feature must work when Redis is disabled.
+
+### 10.4 Abandoned runs
+
+The service updates `heartbeat_at` between network requests, parsing, and publication.
+
+At application startup and before a new run, `pending` or `running` rows with a heartbeat older than 30 minutes are marked `abandoned`. Their unpublished datasets remain available for inspection but are never served.
+
+## 11. Backend integration
+
+### 11.1 Block source type
+
+Add one source type:
 
 ```text
 artificial_analysis_ranking
 ```
 
-`source_config`:
+Its `source_config` is:
 
 ```json
 {
-  "ranking_type": "language_global",
+  "dataset_key": "language_global",
   "display_fields": ["model", "creator", "score"]
 }
 ```
 
-Supported `ranking_type` values:
+Allowed dataset keys are fixed by the backend enum.
 
-```text
-language_global
-language_china
-text_to_image
-text_to_video
-image_to_video
-text_to_speech
-speech_to_text
-```
+### 11.2 Database-only block resolution
 
-`resolve_block_data()` treats this source as database-dependent. It queries the latest published dataset and never enters the live-adapter executor.
+`blocks.py` must use a named constant:
 
-Public response entries include:
-
-```text
-id
-rank
-model
-creator
-creator_country
-score
-score_key
-ci_95
-metrics
-captured_at
-source_url
-```
-
-Every ranking block displays:
-
-- Artificial Analysis attribution link
-- Dataset capture time
-- Score label appropriate to the ranking
-- A stale-data badge when the latest dataset is older than 36 hours
-
-## Frontend Configuration
-
-The layout editor presents an `Artificial Analysis` group with one source type and a ranking selector. It does not expose endpoint paths, tier selection, API keys, arbitrary sort fields, or Pro options.
-
-Ranking labels:
-
-```text
-全球语言模型
-中国语言模型
-文生图
-文生视频
-图生视频
-文本转语音
-语音转文本
-```
-
-Use one reusable ranking table. The first three ranks retain the existing medal/icon treatment. Mobile layouts prioritize rank, model, and score; creator and confidence interval move to secondary text.
-
-## Migration and Cutover
-
-1. Add the five Artificial Analysis tables and initial Chinese creator mappings.
-2. Configure the Free API key in the backend environment.
-3. Run one manual synchronization and verify all raw snapshots and datasets.
-4. Add the new database-backed block source.
-5. Change existing published `datalearner_aa_index` blocks to:
-
-```json
-{
-  "source_type": "artificial_analysis_ranking",
-  "source_config": {
-    "ranking_type": "language_global"
-  }
+```python
+DB_SOURCE_TYPES = {
+    "topic",
+    "raw",
+    "eastmoney_longhu",
+    "tonghuashun_news",
+    "artificial_analysis_ranking",
 }
 ```
 
-6. Remove DataLearner ranking choices from the layout editor.
-7. Keep the old adapter code unreferenced for one release as rollback support; delete it only after the new source has completed several successful scheduled runs.
+The resolver queries only the latest `published` dataset for the configured key, orders by rank, and applies `display_count`.
 
-If no Artificial Analysis dataset exists at cutover time, the block returns an empty state rather than calling DataLearner or Artificial Analysis during the page request.
+This source type must never enter the live adapter executor and must reject a missing Session.
 
-## Testing
+### 11.3 Public response
 
-### Client
+Each item returned to the frontend includes:
 
-- Every request path ends in an allowed `/free` endpoint.
-- Pro paths are rejected before network access.
-- API keys never appear in persisted headers or errors.
-- `401`, `403`, and `429` are not retried.
-- Quota headers are parsed correctly.
+```json
+{
+  "id": 1,
+  "rank": 1,
+  "model": "Model name",
+  "title": "Model name",
+  "creator": "Creator name",
+  "subtitle": "Creator name",
+  "score": 42.0,
+  "score_type": "intelligence_index",
+  "ci_95": null,
+  "metrics": {},
+  "captured_at": "2026-06-11T20:30:00",
+  "source_url": "https://artificialanalysis.ai/"
+}
+```
 
-### Raw persistence
+Each serialized block adds a `meta` object alongside `data`:
 
-- Raw response is committed before parser execution.
-- Invalid JSON and parser exceptions leave a retrievable snapshot.
-- Non-2xx response bodies are retained.
-- Duplicate response hashes may exist across runs for audit history.
+```json
+{
+  "dataset_key": "language_global",
+  "score_type": "intelligence_index",
+  "captured_at": "2026-06-11T20:30:00",
+  "source_name": "Artificial Analysis",
+  "source_url": "https://artificialanalysis.ai/",
+  "scope_note": null,
+  "is_stale": false
+}
+```
 
-### Parsers
+`scope_note` contains the China-ranking attribution when applicable. `is_stale` is true when the published capture time is older than 36 hours. Attribution and dataset metadata are not repeated on every row solely for rendering.
 
-- Language pagination merges complete pages.
-- Missing pages prevent publication.
-- Free language metrics are retained.
-- Arena Elo and confidence intervals normalize correctly.
-- Speech-to-text preserves upstream ordering.
-- Empty and malformed payloads fail validation.
+## 12. Admin API
 
-### Publication
+Add:
 
-- Dataset and entries publish atomically.
-- Failed refresh leaves the previous dataset readable.
-- One failed ranking does not block successful independent rankings.
-- China derivation uses creator IDs and produces consecutive ranks.
-- Unknown creators are excluded from China without disappearing globally.
+```http
+GET  /api/admin/artificial-analysis/status
+GET  /api/admin/artificial-analysis/runs
+GET  /api/admin/artificial-analysis/runs/{run_id}
+GET  /api/admin/artificial-analysis/creators
+PUT  /api/admin/artificial-analysis/creators/{creator_external_id}
+POST /api/admin/artificial-analysis/sync
+POST /api/admin/artificial-analysis/reparse/{snapshot_id}
+```
 
-### Scheduling and concurrency
+The first release requires only operational controls:
 
-- Scheduled jobs use 08:30 and 20:30 Asia/Shanghai.
-- MySQL lock prevents concurrent runs.
-- Low known quota skips manual full sync.
-- `429` stops remaining requests.
+- configuration present/missing;
+- latest quota state;
+- latest successful sync;
+- active run;
+- per-dataset published version and capture time;
+- run details and errors;
+- manual full sync;
+- snapshot reparse.
+- list observed and unresolved creators;
+- update an observed creator to `cn` or `other`, followed by explicit snapshot reparse.
 
-### Public and frontend
+The first release does not include a creator-region management UI. Initial known mappings may be seeded by migration. Creators discovered from a real response are stored as `observed/unknown` and can be classified through the admin API. A management UI can be justified later by actual maintenance volume.
 
-- Public block resolution performs only SQL queries.
-- All seven ranking types render.
-- Attribution and capture time are visible.
-- Stale state appears after 36 hours.
-- Mobile ranking rows do not overflow.
+## 13. Frontend
 
-## Out of Scope
+### 13.1 Layout editor
 
-- Pro or Commercial endpoints
-- Automatic plan detection or upgrade
-- Provider-level benchmark details
-- Paid pricing fields unavailable in Free responses
-- Real-time page-triggered refresh
-- Redis as the source of truth
-- Deleting historical raw snapshots in the first release
+Replace the DataLearner AI ranking choice with an Artificial Analysis group:
 
-## Sources
+- 全球大语言模型
+- 中国大语言模型
+- 文生图
+- 文生视频
+- 图生视频
+- 文本转语音
+- 语音转文本
 
-- [Artificial Analysis Data API documentation](https://artificialanalysis.ai/data-api/docs#overview-hero)
-- [Artificial Analysis OpenAPI specification](https://artificialanalysis.ai/api/v2/openapi)
+These options all save `source_type=artificial_analysis_ranking` with a different `dataset_key`.
+
+The editor exposes:
+
+- ranking type;
+- display count;
+- supported display fields.
+
+It does not expose raw source IDs, topic IDs, live refresh controls, or API credentials.
+
+### 13.2 Public ranking component
+
+Use a unified ranking table with:
+
+- rank icon for the first three rows;
+- model name;
+- creator;
+- primary score and score label;
+- optional confidence interval or secondary metric;
+- captured time;
+- visible Artificial Analysis attribution.
+
+The component must handle:
+
+- no published dataset;
+- stale but usable dataset;
+- partial sync where another ranking remains old;
+- unknown creator region;
+- mobile horizontal constraints without requiring page-level horizontal scrolling.
+
+## 14. Migration and rollout
+
+1. Add Alembic tables and indexes.
+2. Add environment variables with synchronization disabled by default.
+3. Configure a Free API key locally.
+4. Run one manual collection and preserve the raw snapshots.
+5. Review creator coverage and classify unresolved creators through the admin API.
+6. Reparse the saved language snapshots if region mappings changed.
+7. Verify all seven published datasets in MySQL.
+8. In the layout editor, modify the AI page's draft blocks from `datalearner_aa_index` to `artificial_analysis_ranking`.
+9. Re-publish the AI page so published blocks are regenerated from the updated drafts.
+10. Keep the DataLearner adapter for one release as rollback support.
+11. Enable the twice-daily scheduler only after quota and dataset monitoring is verified.
+
+Alembic must not directly rewrite published `page_blocks`.
+
+## 15. Retention
+
+Initial retention:
+
+- `aa_sync_runs`: 180 days.
+- `aa_raw_snapshots`: 90 days.
+- Published datasets: retain indefinitely.
+- Superseded datasets and entries: 180 days.
+- Failed unpublished datasets: 30 days.
+
+Cleanup must never delete snapshots referenced by retained datasets.
+
+## 16. Testing
+
+### 16.1 Collector tests
+
+- sends `x-api-key` without logging it;
+- follows dynamic language pagination;
+- persists raw bytes before parsing;
+- saves safe rate-limit headers;
+- stops at the quota reserve;
+- handles `429` and `Retry-After`;
+- rejects responses over 10 MB;
+- does not parse when snapshot persistence fails.
+
+### 16.2 Parser tests
+
+- parses each of the six upstream endpoint shapes;
+- creates seven normalized datasets including derived China language;
+- handles null language creators;
+- matches creator ID exactly;
+- uses normalized-name exact fallback only when ID is absent;
+- excludes unknown creators from China ranking;
+- produces deterministic ranks and hashes;
+- rejects an empty derived China dataset;
+- ranks Speech-to-Text entries by ascending AA WER Index.
+
+### 16.3 Publication tests
+
+- atomically replaces one published dataset;
+- preserves the old dataset after a failed run;
+- permits partial run publication;
+- avoids duplicate entries for identical normalized data;
+- marks stale running jobs abandoned.
+
+### 16.4 API and block tests
+
+- manual sync returns `202`;
+- overlapping manual sync returns `409` with `active_run_id`;
+- background callback uses an independent Session;
+- `artificial_analysis_ranking` is resolved in the database path;
+- block resolution never invokes an upstream HTTP request;
+- public page returns the latest published dataset;
+- source attribution and capture time are present.
+
+### 16.5 Frontend tests
+
+- all seven ranking choices create the correct block config;
+- ranking table renders global and China datasets;
+- first three rows retain ranking icons;
+- attribution is visible;
+- empty and stale states render correctly;
+- mobile rendering has no page-level horizontal overflow.
+
+## 17. Deployment checks
+
+- Run `alembic upgrade head`.
+- Confirm `max_allowed_packet >= 16MB`.
+- Set the API key only in the backend environment.
+- Start with `ARTIFICIAL_ANALYSIS_SYNC_ENABLED=false`.
+- Run and inspect one manual sync.
+- Verify the response headers report the expected Free tier and remaining quota.
+- Confirm frontend requests do not produce Artificial Analysis traffic.
+- Enable scheduled synchronization after the draft AI blocks have been updated and published.
