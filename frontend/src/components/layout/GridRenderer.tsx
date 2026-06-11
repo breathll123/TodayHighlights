@@ -48,7 +48,36 @@ const SOURCE_NAMES: Record<string, string> = {
   eastmoney_announcements: "东方财富",
   eastmoney_indices: "指数行情",
   tonghuashun_news: "同花顺",
+  qiumiwu_matches: "球迷屋",
+  qiumiwu_fixtures: "球迷屋",
+  qiumiwu_standings: "球迷屋",
+  qiumiwu_schedule: "球迷屋",
+  datalearner_leaderboard: "DataLearner",
+  datalearner_aa_index: "DataLearner",
+  aihot_news: "AI HOT",
+  artificial_analysis_ranking: "Artificial Analysis",
 };
+
+const SOURCE_URLS: Record<string, string> = {
+  xueqiu: "https://xueqiu.com/",
+  eastmoney: "https://www.eastmoney.com/",
+  tonghuashun: "https://www.10jqka.com.cn/",
+  qiumiwu: "https://www.qiumiwu.com/",
+  datalearner: "https://www.datalearner.com/",
+  aihot: "https://aihot.virxact.com/",
+  artificial_analysis: "https://artificialanalysis.ai/",
+};
+
+function sourceUrlFor(sourceType: string): string | undefined {
+  if (sourceType.startsWith("xueqiu")) return SOURCE_URLS.xueqiu;
+  if (sourceType.startsWith("eastmoney")) return SOURCE_URLS.eastmoney;
+  if (sourceType.startsWith("tonghuashun")) return SOURCE_URLS.tonghuashun;
+  if (sourceType.startsWith("qiumiwu")) return SOURCE_URLS.qiumiwu;
+  if (sourceType.startsWith("datalearner")) return SOURCE_URLS.datalearner;
+  if (sourceType.startsWith("aihot")) return SOURCE_URLS.aihot;
+  if (sourceType.startsWith("artificial_analysis")) return SOURCE_URLS.artificial_analysis;
+  return undefined;
+}
 
 export function sourceNameFor(item: any, sourceType: string): string {
   return SOURCE_NAMES[item.source ?? sourceType] ?? "今日看点";
@@ -217,6 +246,8 @@ export function GridRenderer({ blocks, isLoading, dataUpdatedAt }: { blocks: any
                 icon={sectionIcon(st)}
                 title={block.title}
                 dataUpdatedAt={dataUpdatedAt}
+                sourceName={st === "topic" || st === "raw" ? undefined : SOURCE_NAMES[st] ?? undefined}
+                sourceUrl={st === "artificial_analysis_ranking" ? undefined : sourceUrlFor(st)}
                 action={
                   <Button
                     variant="ghost"
