@@ -124,12 +124,36 @@ def _cache_logo(media_cache, url: str, *, entity_type: str, entity_name: str, so
 
 
 def fetch_competition_schedule(config: dict, limit: int) -> list[dict]:
-    """Fetch competition schedule from qiumiwu mobile HTML."""
+    """Fetch competition schedule (fixtures) + include completed matches from live API."""
     comp_name = (config or {}).get("competition", "男足世界杯")
     media_cache = (config or {}).get("_media_cache")
     slug = _COMPETITIONS.get(comp_name)
     if not slug:
         return []
+
+    # Map competition names to league names used in live API
+    _COMP_LEAGUE = {
+        "男足世界杯": "男足世界杯",
+    }
+    league_filter = _COMP_LEAGUE.get(comp_name, comp_name)
+
+    result: list[dict] = []
+
+    # 1. Fetch completed/live matches from live API
+    try:
+        from app.services.adapters.qiumiwu import _fetch_matches_raw
+        live_matches = _fetch_matches_raw(200)
+        for m in live_matches:
+            if m.get("league") == league_filter and m.get("status") != 1:
+                # Map status fields to match schedule format
+                result.append({
+                    **m,
+                    "logo_a_local": _cache_logo(media_cache, m.get("logo_a", ""), entity_type="team", entity_name=m.get("team_a", ""), source_entity_id=str(m.get("id", ""))),
+                    "logo_b_local": _cache_logo(media_cache, m.get("logo_b", ""), entity_type="team", entity_name=m.get("team_b", ""), source_entity_id=str(m.get("id", ""))),
+                    "logo_league_local": _cache_logo(media_cache, m.get("logo_league", ""), entity_type="league", entity_name=comp_name, source_entity_id=str(m.get("id", ""))),
+                })
+    except Exception:
+        pass
 
     try:
         resp = httpx.get(
@@ -142,8 +166,7 @@ def fetch_competition_schedule(config: dict, limit: int) -> list[dict]:
         logo_map = _get_logo_map()
         league_logo = logo_map.get(f"_league_{comp_name}", "")
 
-        # Parse once: collect date headers and matches
-        result = []
+        # Parse once: collect date headers and matches (keep live matches already in result)
         current_date = ""
         matches_info = []
 
@@ -219,7 +242,19 @@ def fetch_competition_schedule(config: dict, limit: int) -> list[dict]:
                     "source_type": "qiumiwu_schedule",
                 })
 
-        return result[:limit]
+        # Dedup by match_id (live matches may overlap with HTML fixtures)
+        seen: set[str] = set()
+        deduped: list[dict] = []
+        for r in result:
+            mid = str(r.get("id", ""))
+            if mid and mid not in seen:
+                seen.add(mid)
+                deduped.append(r)
+            elif not mid:
+                deduped.append(r)
+
+        deduped.sort(key=lambda x: x.get("start_time", ""))
+        return deduped[:limit]
 
     except Exception:
-        return []
+        return result if result else []
