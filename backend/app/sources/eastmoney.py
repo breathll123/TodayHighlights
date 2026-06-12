@@ -1,4 +1,3 @@
-import re
 from datetime import datetime
 from hashlib import sha256
 
@@ -143,36 +142,39 @@ class EastmoneyAdapter:
             ))
         return drafts
 
-    # ── indices (via Sina) ──
+    # ── indices ──
 
     def _fetch_indices(self, subtype: str) -> list[RawItemDraft]:
         index_map = [
-            ("s_sh000001", "000001"),
-            ("s_sz399001", "399001"),
-            ("s_sz399006", "399006"),
-            ("s_sh000688", "000688"),
-            ("s_sz399673", "399673"),
-            ("s_sh000300", "000300"),
+            ("000001", "1.000001"),
+            ("399001", "0.399001"),
+            ("399006", "0.399006"),
+            ("000688", "1.000688"),
+            ("399673", "0.399673"),
+            ("000300", "1.000300"),
         ]
-        codes = ",".join(c for c, _ in index_map)
-        resp = httpx.get(
-            f"https://hq.sinajs.cn/list={codes}",
-            headers={"User-Agent": "Mozilla/5.0 TodayHighlights/0.1", "Referer": "https://finance.sina.com.cn/"},
-            timeout=10,
+        resp = _push2_get(
+            "/api/qt/ulist.np/get",
+            params={
+                "fltt": 2,
+                "invt": 2,
+                "fields": "f2,f3,f4,f5,f6,f12,f13,f14",
+                "secids": ",".join(secid for _, secid in index_map),
+            },
         )
-        resp.raise_for_status()
-        text = resp.content.decode("gbk")
+        items = resp.json().get("data", {}).get("diff", [])
+        known_codes = {code for code, _ in index_map}
         drafts = []
-        for symbol, code in index_map:
-            m = re.search(rf'hq_str_{symbol}="([^"]*)"', text)
-            if not m:
+        for item in items:
+            code = str(item.get("f12") or "")
+            if code not in known_codes:
                 continue
-            fields = m.group(1).split(",")
-            if len(fields) < 4:
-                continue
-            name = fields[0]
-            current_val = float(fields[1])
-            pct = float(fields[3])
+            name = str(item.get("f14") or "")
+            current_val = float(item.get("f2") or 0)
+            pct = float(item.get("f3") or 0)
+            change_amount = float(item.get("f4") or 0)
+            volume = int(item.get("f5") or 0)
+            turnover = float(item.get("f6") or 0)
             content_str = f"{subtype}|{code}|{current_val:.2f}|{pct:.2f}"
             drafts.append(RawItemDraft(
                 external_id=f"em_{subtype}_{code}",
@@ -181,7 +183,15 @@ class EastmoneyAdapter:
                 title=name,
                 body=f"{current_val:.2f} {pct:+.2f}%",
                 published_at=datetime.now(SH_TZ).replace(tzinfo=None),
-                metrics={"percent": pct, "current": current_val, "subtype": subtype, "symbol": code},
+                metrics={
+                    "percent": pct,
+                    "current": current_val,
+                    "change_amount": change_amount,
+                    "volume": volume,
+                    "turnover": turnover,
+                    "subtype": subtype,
+                    "symbol": code,
+                },
                 content_hash=sha256(content_str.encode()).hexdigest(),
             ))
         return drafts
@@ -255,4 +265,3 @@ class EastmoneyAdapter:
             if len(drafts) >= 20:
                 break
         return drafts
-

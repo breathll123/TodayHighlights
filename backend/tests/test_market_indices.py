@@ -1,4 +1,5 @@
 from app.services.adapters import eastmoney
+from app.sources import eastmoney as source_eastmoney
 
 
 class _TrendResponse:
@@ -13,6 +14,29 @@ class _TrendResponse:
                     "2026-06-08 09:30,3000,3005,3010,2998,100,200,3003",
                     "2026-06-08 09:31,3005,3004,3008,2990,100,200,3004",
                 ],
+            }
+        }
+
+
+class _IndexResponse:
+    def raise_for_status(self) -> None:
+        return None
+
+    def json(self) -> dict:
+        return {
+            "data": {
+                "diff": [
+                    {
+                        "f2": 4031.51,
+                        "f3": 1.12,
+                        "f4": 44.5,
+                        "f5": 743131092,
+                        "f6": 1537401519424.7,
+                        "f12": "000001",
+                        "f13": 1,
+                        "f14": "上证指数",
+                    }
+                ]
             }
         }
 
@@ -32,3 +56,64 @@ def test_fetch_one_trend_uses_intraday_high_low_fields(monkeypatch) -> None:
         {"time": "09:30", "price": 3005.0},
         {"time": "09:31", "price": 3004.0},
     ]
+
+
+def test_fetch_indices_uses_eastmoney_snapshot_api(monkeypatch) -> None:
+    def fail_sina_request(*args, **kwargs):
+        raise AssertionError("index snapshots must not use hq.sinajs.cn")
+
+    def fake_get(url, *, params):
+        assert url.endswith("/api/qt/ulist.np/get")
+        assert params["secids"].startswith("1.000001,0.399001")
+        return _IndexResponse()
+
+    eastmoney.fetch_indices.cache_clear()
+    monkeypatch.setattr(eastmoney.httpx, "get", fail_sina_request)
+    monkeypatch.setattr(eastmoney._http, "get", fake_get)
+
+    result = eastmoney.fetch_indices({}, 6)
+
+    assert result == [
+        {
+            "title": "上证指数",
+            "summary": "4031.51 +1.12%",
+            "symbols": ["000001"],
+            "score": 112,
+            "source": "eastmoney_indices",
+            "percent": 1.12,
+            "current": 4031.51,
+            "change_amount": 44.5,
+            "volume": 743131092,
+            "turnover": 1537401519424.7,
+            "em_secid": "1.000001",
+            "url": "https://quote.eastmoney.com/zs000001.html",
+        }
+    ]
+
+
+def test_source_indices_use_eastmoney_snapshot_api(monkeypatch) -> None:
+    def fail_sina_request(*args, **kwargs):
+        raise AssertionError("source index snapshots must not use hq.sinajs.cn")
+
+    def fake_push2_get(path: str, params: dict):
+        assert path == "/api/qt/ulist.np/get"
+        assert params["secids"].startswith("1.000001,0.399001")
+        return _IndexResponse()
+
+    monkeypatch.setattr(source_eastmoney.httpx, "get", fail_sina_request)
+    monkeypatch.setattr(source_eastmoney, "_push2_get", fake_push2_get)
+
+    drafts = source_eastmoney.EastmoneyAdapter().fetch("eastmoney://indices", "")
+
+    assert len(drafts) == 1
+    assert drafts[0].title == "上证指数"
+    assert drafts[0].body == "4031.51 +1.12%"
+    assert drafts[0].metrics == {
+        "percent": 1.12,
+        "current": 4031.51,
+        "change_amount": 44.5,
+        "volume": 743131092,
+        "turnover": 1537401519424.7,
+        "subtype": "indices",
+        "symbol": "000001",
+    }

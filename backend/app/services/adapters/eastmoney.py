@@ -141,39 +141,41 @@ def fetch_industry(config: dict, limit: int) -> list[dict]:
 
 @ttl_cache(30, swr=300)
 def fetch_indices(_config: dict, limit: int) -> list[dict]:
-    """指数行情 — 使用新浪财经 API，稳定不封 IP"""
+    """指数行情 — 使用东方财富批量快照接口。"""
     try:
-        import re
         index_map = [
-            ("s_sh000001", "000001", "1.000001"),   # 上证指数
-            ("s_sz399001", "399001", "0.399001"),   # 深证成指
-            ("s_sz399006", "399006", "0.399006"),   # 创业板指
-            ("s_sh000688", "000688", "1.000688"),   # 科创50
-            ("s_sz399673", "399673", "0.399673"),   # 创业板50
-            ("s_sh000300", "000300", "1.000300"),   # 沪深300
+            ("000001", "1.000001"),   # 上证指数
+            ("399001", "0.399001"),   # 深证成指
+            ("399006", "0.399006"),   # 创业板指
+            ("000688", "1.000688"),   # 科创50
+            ("399673", "0.399673"),   # 创业板50
+            ("000300", "1.000300"),   # 沪深300
         ]
-        codes = ",".join(c for c, _, _ in index_map[:limit])
-        resp = httpx.get(
-            f"https://hq.sinajs.cn/list={codes}",
-            headers={"User-Agent": "Mozilla/5.0 TodayHighlights/0.1", "Referer": "https://finance.sina.com.cn/"},
-            timeout=10,
+        selected = index_map[:limit]
+        resp = _http.get(
+            "https://push2delay.eastmoney.com/api/qt/ulist.np/get",
+            params={
+                "fltt": 2,
+                "invt": 2,
+                "fields": "f2,f3,f4,f5,f6,f12,f13,f14",
+                "secids": ",".join(secid for _, secid in selected),
+            },
         )
         resp.raise_for_status()
-        text = resp.content.decode("gbk")
+        items = resp.json().get("data", {}).get("diff", [])
+        secid_by_code = dict(selected)
         result = []
-        for symbol, code, em_secid in index_map[:limit]:
-            m = re.search(rf'hq_str_{symbol}="([^"]*)"', text)
-            if not m:
+        for item in items:
+            code = str(item.get("f12") or "")
+            em_secid = secid_by_code.get(code)
+            if not em_secid:
                 continue
-            fields = m.group(1).split(",")
-            if len(fields) < 4:
-                continue
-            name = fields[0]
-            current = float(fields[1])
-            change_amount = float(fields[2])
-            percent = float(fields[3])
-            volume = int(fields[4]) if len(fields) > 4 and fields[4] else 0
-            turnover = float(fields[5]) if len(fields) > 5 and fields[5] else 0
+            name = str(item.get("f14") or "")
+            current = float(item.get("f2") or 0)
+            change_amount = float(item.get("f4") or 0)
+            percent = float(item.get("f3") or 0)
+            volume = int(item.get("f5") or 0)
+            turnover = float(item.get("f6") or 0)
             result.append({
                 "title": name,
                 "summary": f"{current:.2f} {percent:+.2f}%",
