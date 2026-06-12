@@ -22,6 +22,13 @@ def upgrade() -> None:
     # Update existing xueqiu sources to enable highlight
     op.execute("UPDATE sources SET enable_highlight = 1 WHERE site = 'xueqiu'")
 
+    # Ensure a default topic exists so the seed sources have a valid topic_id
+    op.execute("""
+        INSERT INTO topics (id, name, slug, sort_order, enabled)
+        SELECT 1, 'A股市场', 'a-stock', 0, 1
+        WHERE NOT EXISTS (SELECT 1 FROM topics WHERE id = 1)
+    """)
+
     # Seed Eastmoney + Tonghuashun sources
     op.execute("""
         INSERT INTO sources (topic_id, site, name, entry_url, cookie_encrypted, enabled, crawl_interval_minutes, enable_highlight)

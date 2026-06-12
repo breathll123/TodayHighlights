@@ -8,16 +8,24 @@ if str(BACKEND_DIR) not in sys.path:
 
 from alembic import command
 from alembic.config import Config
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
-from app.core.database import SessionLocal
-from app.models.entities import AppSetting, User
+from app.core.database import SessionLocal, engine
+from app.models.entities import AppSetting, Topic, User
 from app.services.admin_bootstrap import (
     BOOTSTRAP_COMPLETED_KEY,
     LEGACY_PASSWORD_KEY,
     is_legacy_default_admin,
 )
+
+
+def seed_default_topic(session: Session) -> None:
+    """If no topics exist, insert a default topic so data migrations succeed."""
+    topic_count = session.scalar(select(func.count()).select_from(Topic))
+    if topic_count == 0:
+        session.add(Topic(name="A股市场", slug="a-stock", sort_order=0, enabled=True))
+        session.flush()
 
 
 def reconcile_bootstrap_state(session: Session) -> None:
@@ -57,6 +65,7 @@ def main(
     upgrade_fn(config, "head")
 
     with session_factory() as session:
+        seed_default_topic(session)
         reconcile_bootstrap_state(session)
         session.commit()
 
