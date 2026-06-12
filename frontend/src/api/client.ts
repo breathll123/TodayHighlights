@@ -97,7 +97,7 @@ export function fetchBlocks(): Promise<Block[]> {
   return api.get<Block[]>("/api/admin/blocks").then((r) => r.data);
 }
 
-export function createBlock(data: Omit<Block, "id">): Promise<Block> {
+export function createBlock(data: Omit<Block, "id" | "created_at" | "updated_at">): Promise<Block> {
   return api.post<Block>("/api/admin/blocks", data).then((r) => r.data);
 }
 

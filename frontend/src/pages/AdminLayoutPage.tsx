@@ -6,7 +6,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CanvasEditor } from "@/components/admin/CanvasEditor";
 import { SizePresetPicker } from "@/components/admin/SizePresetPicker";
 import { BlockConfigPanel } from "@/components/admin/BlockConfigPanel";
-import { cascadePush } from "@/lib/grid-utils";
+import { changedLayoutBlocks, insertBlockAtTop } from "@/lib/grid-utils";
 import { safeUUID } from "@/lib/utils";
 import { fetchBlocks, createBlock, updateBlock, deleteBlock, publishPage } from "@/api/client";
 import type { Block } from "@/api/types";
@@ -34,12 +34,13 @@ export function AdminLayoutPage() {
     .sort((a: Block, b: Block) => a.grid_y - b.grid_y || a.grid_x - b.grid_x);
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ["blocks"] });
+  const applyDraftLayout = (next: Block[]) => {
+    const nextById = new Map(next.map((block) => [block.id, block]));
+    queryClient.setQueryData<Block[]>(["blocks"], (current = []) => (
+      current.map((block) => nextById.get(block.id) ?? block)
+    ));
+  };
 
-  const createMut = useMutation({
-    mutationFn: createBlock,
-    onSuccess: () => { invalidate(); toast.success("方块已添加"); },
-    onError: (err: Error) => toast.error(`添加失败: ${err.message}`),
-  });
   const updateMut = useMutation({
     mutationFn: ({ id, data }: { id: number; data: Partial<Block> }) => updateBlock(id, data),
     onSuccess: () => { invalidate(); setConfigBlock(null); toast.success("已保存"); },
@@ -56,40 +57,49 @@ export function AdminLayoutPage() {
     onError: (err: Error) => toast.error(`发布失败: ${err.message}`),
   });
 
-  const handleAddBlock = (col: number, row: number) => {
-    // Place new block at top-left and cascade-push colliding blocks down
-    const tempId = `new-${Date.now()}`;
-    const newBlock = {
-      id: tempId as any, grid_x: 0, grid_y: 0, col_span: col, row_span: row,
-    } as Block;
-    const shifted = cascadePush(draftBlocks, newBlock, tempId);
-    // Persist shifted positions for existing blocks
-    for (const b of shifted) {
-      if (String(b.id) === tempId) continue;
-      const orig = draftBlocks.find((o) => o.id === b.id);
-      if (orig && orig.grid_y !== b.grid_y) {
-        updateBlock(b.id, { grid_y: b.grid_y }).catch(() => {});
-      }
+  const persistLayoutChanges = (previous: Block[], next: Block[]) => (
+    Promise.all(changedLayoutBlocks(previous, next).map((block) => (
+      updateBlock(block.id, {
+        grid_x: block.grid_x,
+        grid_y: block.grid_y,
+        col_span: block.col_span,
+        row_span: block.row_span,
+      })
+    )))
+  );
+
+  const handleAddBlock = async (col: number, row: number) => {
+    const inserted = insertBlockAtTop(draftBlocks, col, row);
+    applyDraftLayout(inserted.blocks);
+    try {
+      await persistLayoutChanges(draftBlocks, inserted.blocks);
+      await createBlock({
+        page_route: activePage, title: "新方块", source_type: "topic",
+        source_config: { topic_id: 1 }, block_key: safeUUID(),
+        col_span: col, row_span: row,
+        grid_x: inserted.position.x, grid_y: inserted.position.y,
+        display_style: "card", display_count: 5, sort_by: "created_at",
+        enabled: true, sort_order: 0, status: "draft",
+      });
+      toast.success("方块已添加");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      toast.error(`添加失败: ${message}`);
+    } finally {
+      invalidate();
     }
-    createMut.mutate({
-      page_route: activePage, title: "新方块", source_type: "topic",
-      source_config: { topic_id: 1 }, block_key: safeUUID(),
-      col_span: col, row_span: row, grid_x: 0, grid_y: 0,
-      display_style: "card", display_count: 5, sort_by: "created_at",
-      enabled: true, sort_order: 0, status: "draft",
-    } as any);
   };
 
   const handleLayoutChange = async (blocks: Block[]) => {
-    for (const b of blocks) {
-      try {
-        await updateBlock(b.id, { grid_x: b.grid_x, grid_y: b.grid_y, col_span: b.col_span, row_span: b.row_span });
-      } catch (err: any) {
-        toast.error(`保存位置失败: ${err.message}`);
-        return;
-      }
+    applyDraftLayout(blocks);
+    try {
+      await persistLayoutChanges(draftBlocks, blocks);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      toast.error(`保存位置失败: ${message}`);
+    } finally {
+      invalidate();
     }
-    invalidate();
   };
 
   const handleEditBlock = (block: Block) => {

@@ -44,9 +44,8 @@
 
 2. `insertBlockAtTop(blocks, colSpan, rowSpan)`：
 
-- 使用不会与数据库 ID 冲突的临时负数 ID。
-- 在 `(0, 0)` 创建临时方块。
-- 调用 `reflowBlocks` 完成所有连续下推。
+- 在 `(0, 0)` 创建不带数据库 ID 的占位矩形。
+- 以该矩形为固定锚点，复用相同的连续下推算法。
 - 返回已有方块的新布局以及新方块坐标。
 
 3. `changedLayoutBlocks(previous, next)`：

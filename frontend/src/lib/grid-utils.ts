@@ -1,8 +1,15 @@
 import type { Block } from "@/api/types";
 
+export interface GridRect {
+  grid_x: number;
+  grid_y: number;
+  col_span: number;
+  row_span: number;
+}
+
 export function hasCollision(
-  a: { grid_x: number; grid_y: number; col_span: number; row_span: number },
-  b: { grid_x: number; grid_y: number; col_span: number; row_span: number }
+  a: GridRect,
+  b: GridRect,
 ): boolean {
   return (
     a.grid_x < b.grid_x + b.col_span &&
@@ -12,74 +19,86 @@ export function hasCollision(
   );
 }
 
-export interface GridRect {
-  grid_x: number;
-  grid_y: number;
-  col_span: number;
-  row_span: number;
+function placeWithoutOverlap(block: Block, placed: GridRect[]): Block {
+  let candidate = { ...block };
+
+  while (true) {
+    const collisions = placed.filter((item) => hasCollision(candidate, item));
+    if (collisions.length === 0) return candidate;
+
+    candidate = {
+      ...candidate,
+      grid_y: Math.max(...collisions.map((item) => item.grid_y + item.row_span)),
+    };
+  }
 }
 
-/**
- * Cascade-push blocks down to resolve all collisions in a single pass.
- * Returns a new array with shifted positions (no mutations).
- */
-export function cascadePush<T extends GridRect>(
-  items: T[],
-  moved: T,
-  movedId: string | number
-): T[] {
-  // Separate the moved item from others
-  const others = items.filter((b) => String((b as any).id) !== String(movedId));
-  // Start with moved at its new position
-  const placed: T[] = [moved];
+function reflowAfterAnchor(blocks: Block[], anchor: GridRect): Block[] {
+  const placed: GridRect[] = [anchor];
+  const resolved = new Map<number, Block>();
+  const ordered = [...blocks].sort(
+    (a, b) => a.grid_y - b.grid_y || a.grid_x - b.grid_x || a.id - b.id,
+  );
 
-  // Sort others by grid_y descending so we process from top to bottom
-  const sorted = [...others].sort((a, b) => a.grid_y - b.grid_y);
-
-  const MAX_PUSH = 50;
-
-  for (const item of sorted) {
-    let candidate = { ...item };
-    let pushed = 0;
-
-    // Keep pushing this item down until it no longer collides with any placed item
-    while (pushed < MAX_PUSH && placed.some((p) => hasCollision(candidate, p))) {
-      // Find the max bottom edge of all placed items that collide
-      let maxBottom = candidate.grid_y;
-      for (const p of placed) {
-        if (hasCollision(candidate, p)) {
-          maxBottom = Math.max(maxBottom, p.grid_y + p.row_span);
-        }
-      }
-      candidate = { ...candidate, grid_y: maxBottom };
-      pushed++;
-    }
-
-    placed.push(candidate);
+  for (const block of ordered) {
+    const next = placeWithoutOverlap(block, placed);
+    placed.push(next);
+    resolved.set(next.id, next);
   }
 
-  // Reconstruct full list with moved item + shifted others
-  const result = placed.map((p) => {
-    const orig = items.find((b) => String((b as any).id) === String((p as any).id));
-    return orig ? { ...orig, grid_y: p.grid_y, grid_x: p.grid_x } as T : p;
-  });
-
-  return result;
+  return blocks.map((block) => resolved.get(block.id) ?? block);
 }
 
-export function findAvailablePosition(
+export function reflowBlocks(
+  blocks: Block[],
+  activeId: number,
+  target: GridRect,
+): Block[] {
+  const active = blocks.find((block) => block.id === activeId);
+  if (!active) return [...blocks];
+
+  const moved = { ...active, ...target };
+  const followers = reflowAfterAnchor(
+    blocks.filter((block) => block.id !== activeId),
+    moved,
+  );
+  const byId = new Map(followers.map((block) => [block.id, block]));
+  byId.set(activeId, moved);
+
+  return blocks.map((block) => byId.get(block.id) ?? block);
+}
+
+export function insertBlockAtTop(
   blocks: Block[],
   colSpan: number,
-  rowSpan: number
-): { x: number; y: number } {
-  for (let y = 0; y < 20; y++) {
-    for (let x = 0; x <= 4 - colSpan; x++) {
-      const candidate = { grid_x: x, grid_y: y, col_span: colSpan, row_span: rowSpan };
-      const blocked = blocks.some((b) => hasCollision(candidate, b));
-      if (!blocked) return { x, y };
-    }
-  }
-  return { x: 0, y: blocks.length };
+  rowSpan: number,
+): { blocks: Block[]; position: { x: 0; y: 0 } } {
+  const position = { x: 0 as const, y: 0 as const };
+  const anchor: GridRect = {
+    grid_x: position.x,
+    grid_y: position.y,
+    col_span: colSpan,
+    row_span: rowSpan,
+  };
+
+  return {
+    blocks: reflowAfterAnchor(blocks, anchor),
+    position,
+  };
+}
+
+export function changedLayoutBlocks(previous: Block[], next: Block[]): Block[] {
+  const previousById = new Map(previous.map((block) => [block.id, block]));
+
+  return next.filter((block) => {
+    const before = previousById.get(block.id);
+    return before !== undefined && (
+      before.grid_x !== block.grid_x ||
+      before.grid_y !== block.grid_y ||
+      before.col_span !== block.col_span ||
+      before.row_span !== block.row_span
+    );
+  });
 }
 
 export function clampSize(
