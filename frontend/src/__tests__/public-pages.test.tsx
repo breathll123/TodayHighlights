@@ -4,6 +4,13 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
 
 vi.mock("../api/client", () => ({
+  default: {
+    defaults: {
+      headers: {
+        common: {},
+      },
+    },
+  },
   fetchHighlights: vi.fn().mockResolvedValue([
     {
       id: 1,
@@ -57,6 +64,7 @@ vi.mock("../api/client", () => ({
 
 import { SummaryPage } from "../pages/SummaryPage";
 import { TopicPage } from "../pages/TopicPage";
+import App from "../App";
 import { sourceNameFor } from "../components/layout/GridRenderer";
 import { fetchPageBlocks } from "../api/client";
 
@@ -91,6 +99,18 @@ describe("SummaryPage", () => {
     expect(screen.getByText("主题看点")).toBeInTheDocument();
     expect(screen.queryByText("Signal")).not.toBeInTheDocument();
     expect(screen.queryByText("82")).not.toBeInTheDocument();
+  });
+});
+
+describe("PublicLayout", () => {
+  it("gives dashboard content and the overview header the full public width", async () => {
+    render(<App />);
+
+    const main = document.querySelector("main#main-content");
+    expect(main).toHaveClass("max-w-[1680px]");
+
+    const overview = await screen.findByLabelText("全局看板概览");
+    expect(overview).toHaveClass("w-full", "max-w-full");
   });
 });
 

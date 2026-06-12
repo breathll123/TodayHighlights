@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { buildMarketIndexChartData, buildPriceDomain, MARKET_TIME_TICKS, priceToReferencePct } from "../components/layout/MarketIndexBar";
+import {
+  buildMarketIndexChartData,
+  buildPriceDomain,
+  getMarketIndexChartLayout,
+  MARKET_TIME_TICKS,
+  priceToReferencePct,
+} from "../components/layout/MarketIndexBar";
 
 describe("MarketIndexBar chart data", () => {
   it("joins the afternoon session directly after the morning session", () => {
@@ -43,5 +49,21 @@ describe("MarketIndexBar chart data", () => {
 
     expect(min).toBeLessThan(2980);
     expect(max).toBeGreaterThan(3020);
+  });
+
+  it("uses fewer ticks and compact axes on mobile", () => {
+    expect(getMarketIndexChartLayout(true)).toEqual({
+      ticks: [0, 60, 120, 180, 240],
+      axisWidth: 38,
+      horizontalMargin: 4,
+    });
+  });
+
+  it("keeps full time detail while reducing unused desktop margins", () => {
+    expect(getMarketIndexChartLayout(false)).toEqual({
+      ticks: MARKET_TIME_TICKS,
+      axisWidth: 44,
+      horizontalMargin: 8,
+    });
   });
 });

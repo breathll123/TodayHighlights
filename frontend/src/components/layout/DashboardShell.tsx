@@ -37,7 +37,7 @@ export function DashboardShell({
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.3, ease: easeOutQuint }}
-        className="rounded-lg border border-border/80 bg-card/72 px-4 py-3 shadow-sm sm:px-5"
+        className="w-full max-w-full rounded-lg border border-border/80 bg-card/72 px-4 py-3 shadow-sm sm:px-5"
         aria-label={`${activeTopic}看板概览`}
       >
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
