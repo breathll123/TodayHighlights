@@ -36,7 +36,7 @@ def upgrade() -> None:
         sa.Column("site", sa.String(40), nullable=False),
         sa.Column("name", sa.String(120), nullable=False),
         sa.Column("entry_url", sa.String(500), nullable=False),
-        sa.Column("cookie_encrypted", sa.Text(), nullable=False, server_default=""),
+        sa.Column("cookie_encrypted", sa.Text(), nullable=False),
         sa.Column("enabled", sa.Boolean(), nullable=False, server_default="1"),
         sa.Column("crawl_interval_minutes", sa.Integer(), nullable=False, server_default="60"),
         sa.Column("last_crawled_at", sa.DateTime(), nullable=True),
