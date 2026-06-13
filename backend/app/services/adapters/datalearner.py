@@ -1,6 +1,7 @@
 import re
 import httpx
 from app.core.cache import ttl_cache
+from app.core.logging import log_adapter_failure, observed_http_get
 
 _headers = {
     "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -12,8 +13,11 @@ _headers = {
 def fetch_leaderboard(_config: dict, limit: int) -> list[dict]:
     """Parse AI model leaderboard from datalearner.com HTML table."""
     try:
-        resp = httpx.get(
+        resp = observed_http_get(
+            httpx.get,
             "https://www.datalearner.com/leaderboards",
+            provider="datalearner", operation="leaderboard",
+            host="www.datalearner.com", path="/leaderboards",
             headers=_headers,
             timeout=30,
             follow_redirects=True,
@@ -116,7 +120,8 @@ def fetch_leaderboard(_config: dict, limit: int) -> list[dict]:
 
         return result[:limit]
 
-    except Exception:
+    except Exception as exc:
+        log_adapter_failure(provider="datalearner", operation="leaderboard", stage="parse", exc=exc)
         return []
 
 
@@ -221,16 +226,22 @@ def fetch_aa_index(_config: dict, limit: int) -> list[dict]:
     """Parse AA Intelligence Index leaderboard — global and china datasets in parallel."""
 
     def _fetch_global():
-        resp = httpx.get(
+        resp = observed_http_get(
+            httpx.get,
             "https://www.datalearner.com/leaderboards/external/aa-quality-index",
+            provider="datalearner", operation="aa_quality_global",
+            host="www.datalearner.com", path="/leaderboards/external/aa-quality-index",
             headers=_headers, timeout=30, follow_redirects=True,
         )
         resp.raise_for_status()
         return _parse_aa_page(resp.text, str(resp.url), "global")
 
     def _fetch_china():
-        resp = httpx.get(
+        resp = observed_http_get(
+            httpx.get,
             "https://www.datalearner.com/leaderboards/external/aa-quality-index?isChina=1",
+            provider="datalearner", operation="aa_quality_china",
+            host="www.datalearner.com", path="/leaderboards/external/aa-quality-index",
             headers=_headers, timeout=30, follow_redirects=True,
         )
         resp.raise_for_status()
@@ -248,12 +259,18 @@ def fetch_aa_index(_config: dict, limit: int) -> list[dict]:
             china_items = []
             try:
                 china_items, _, _ = f_china.result()
-            except Exception:
-                pass
+            except Exception as exc:
+                log_adapter_failure(
+                    provider="datalearner",
+                    operation="aa_quality_china",
+                    stage="parse",
+                    exc=exc,
+                )
 
         combined = (global_items + china_items)[:max(limit, 1000)]
         if not combined:
             raise ValueError("empty result — don't cache")
         return combined
-    except Exception:
+    except Exception as exc:
+        log_adapter_failure(provider="datalearner", operation="aa_quality", stage="parse", exc=exc)
         return []

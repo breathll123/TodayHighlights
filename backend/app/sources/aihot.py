@@ -6,6 +6,7 @@ from hashlib import sha256
 import httpx
 
 from app.core.config import SH_TZ
+from app.core.logging import observed_http_get
 from app.sources.base import RawItemDraft
 
 _headers = {"User-Agent": "Mozilla/5.0 TodayHighlights/0.1", "Accept": "application/xml"}
@@ -23,8 +24,13 @@ class AihotAdapter:
         return handler(subtype)
 
     def _fetch_news(self, subtype: str) -> list[RawItemDraft]:
-        resp = httpx.get(
+        resp = observed_http_get(
+            httpx.get,
             "https://aihot.virxact.com/feed.xml",
+            provider="aihot",
+            operation="news_feed",
+            host="aihot.virxact.com",
+            path="/feed.xml",
             headers=_headers,
             timeout=20,
             follow_redirects=True,

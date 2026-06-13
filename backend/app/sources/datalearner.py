@@ -5,6 +5,7 @@ from hashlib import sha256
 import httpx
 
 from app.core.config import SH_TZ
+from app.core.logging import observed_http_get
 from app.sources.base import RawItemDraft
 
 _headers = {
@@ -33,8 +34,13 @@ class DatalearnerAdapter:
         return handler(subtype)
 
     def _fetch_leaderboard(self, subtype: str) -> list[RawItemDraft]:
-        resp = httpx.get(
+        resp = observed_http_get(
+            httpx.get,
             "https://www.datalearner.com/leaderboards",
+            provider="datalearner",
+            operation="leaderboard",
+            host="www.datalearner.com",
+            path="/leaderboards",
             headers=_headers,
             timeout=30,
             follow_redirects=True,

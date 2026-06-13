@@ -4,6 +4,7 @@ from hashlib import sha256
 import httpx
 
 from app.core.config import SH_TZ, settings
+from app.core.logging import observed_http_get
 from app.sources.base import RawItemDraft
 
 _proxy = settings.eastmoney_proxy
@@ -18,8 +19,13 @@ def _push2_get(path: str, params: dict) -> httpx.Response:
     last_err = None
     for host in _PUSH2_HOSTS:
         try:
-            resp = httpx.get(
+            resp = observed_http_get(
+                httpx.get,
                 f"https://{host}{path}", params=params,
+                provider="eastmoney",
+                operation="push2",
+                host=host,
+                path=path,
                 headers=_headers, timeout=15, follow_redirects=True,
                 proxy=_proxy,
             )
@@ -223,8 +229,13 @@ class EastmoneyAdapter:
 
     def _fetch_longhu_datacenter(self, subtype: str) -> list[RawItemDraft]:
         cookie = self._get_lhb_cookie()
-        resp = httpx.get(
+        resp = observed_http_get(
+            httpx.get,
             "https://datacenter-web.eastmoney.com/api/data/v1/get",
+            provider="eastmoney",
+            operation="longhu_datacenter",
+            host="datacenter-web.eastmoney.com",
+            path="/api/data/v1/get",
             params={"reportName": "RPT_ORGANIZATION_TRADE_DETAILSNEW", "columns": "ALL",
                     "pageNumber": 1, "pageSize": 100, "sortTypes": "-1", "sortColumns": "TRADE_DATE",
                     "source": "WEB", "client": "WEB"},

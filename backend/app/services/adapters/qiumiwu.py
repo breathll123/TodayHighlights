@@ -3,6 +3,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import httpx
 from app.core.cache import ttl_cache
+from app.core.logging import log_adapter_failure, observed_http_get
 
 _headers = {
     "User-Agent": "Mozilla/5.0 TodayHighlights/0.1",
@@ -52,8 +53,11 @@ def _cache_logo(media_cache, url: str, *, entity_type: str, entity_name: str, so
 def _fetch_matches_raw(limit: int) -> list[dict]:
     """Fetch live match data from qiumiwu schedule API."""
     try:
-        resp = httpx.get(
+        resp = observed_http_get(
+            httpx.get,
             "https://api.qiumiwu.com/v5/game/schedule/0/1/0/0/0",
+            provider="qiumiwu", operation="match_schedule",
+            host="api.qiumiwu.com", path="/v5/game/schedule/0/1/0/0/0",
             params={"reqfrom": "web"},
             headers=_headers,
             timeout=20,
@@ -133,7 +137,8 @@ def _fetch_matches_raw(limit: int) -> list[dict]:
         result.sort(key=lambda x: (-x["priority"], x["start_time"]))
         return result[:limit]
 
-    except Exception:
+    except Exception as exc:
+        log_adapter_failure(provider="qiumiwu", operation="match_schedule", stage="parse", exc=exc)
         return []
 
 
@@ -202,8 +207,11 @@ _standings_client = httpx.Client(
 def _fetch_league(league_name: str, slug: str) -> list[dict]:
     """Fetch and parse standings for a single league. Thread-safe via shared client."""
     try:
-        resp = _standings_client.get(
+        resp = observed_http_get(
+            _standings_client.get,
             f"https://m.qiumiwu.com/league/{slug}/standings",
+            provider="qiumiwu", operation="standings",
+            host="m.qiumiwu.com", path="/league/{slug}/standings",
         )
         resp.raise_for_status()
         html = resp.text
@@ -341,7 +349,8 @@ def _fetch_league(league_name: str, slug: str) -> list[dict]:
 
         return result
 
-    except Exception:
+    except Exception as exc:
+        log_adapter_failure(provider="qiumiwu", operation="standings", stage="parse", exc=exc)
         return []
 
 

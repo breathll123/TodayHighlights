@@ -1,5 +1,6 @@
 import httpx
 from app.core.cache import ttl_cache
+from app.core.logging import log_adapter_failure, observed_http_get
 
 _headers = {
     "User-Agent": "Mozilla/5.0 TodayHighlights/0.1",
@@ -20,8 +21,11 @@ _PRIORITY_LEAGUES = {
 def fetch_matches(_config: dict, limit: int) -> list[dict]:
     """Fetch live match data from dongqiudi magicball API."""
     try:
-        resp = httpx.get(
+        resp = observed_http_get(
+            httpx.get,
             "https://www.dongqiudi.com/magicball/v1/list/match_list",
+            provider="dongqiudi", operation="match_list",
+            host="www.dongqiudi.com", path="/magicball/v1/list/match_list",
             params={"language": "zh-CN", "cmp_type": "soccer", "tab_type": "all"},
             headers=_headers,
             timeout=20,
@@ -86,5 +90,6 @@ def fetch_matches(_config: dict, limit: int) -> list[dict]:
         result.sort(key=lambda x: (-x["priority"], x["start_time"]))
         return result[:limit]
 
-    except Exception:
+    except Exception as exc:
+        log_adapter_failure(provider="dongqiudi", operation="match_list", stage="parse", exc=exc)
         return []

@@ -5,6 +5,7 @@ from datetime import datetime, timezone, timedelta
 import httpx
 
 from app.core.cache import ttl_cache
+from app.core.logging import log_adapter_failure, observed_http_get
 
 _CST = timezone(timedelta(hours=8))
 _headers = {"User-Agent": "Mozilla/5.0 TodayHighlights/0.1", "Accept": "application/xml"}
@@ -54,8 +55,11 @@ def _parse_feed(xml_text: str) -> list[dict]:
 def fetch_news(_config: dict, limit: int) -> list[dict]:
     """Fetch AI news from AI HOT RSS feed."""
     try:
-        resp = httpx.get(
+        resp = observed_http_get(
+            httpx.get,
             "https://aihot.virxact.com/feed.xml",
+            provider="aihot", operation="news_feed",
+            host="aihot.virxact.com", path="/feed.xml",
             headers=_headers,
             timeout=20,
             follow_redirects=True,
@@ -77,5 +81,6 @@ def fetch_news(_config: dict, limit: int) -> list[dict]:
         if not result:
             raise ValueError("empty RSS — don't cache")
         return result
-    except Exception:
+    except Exception as exc:
+        log_adapter_failure(provider="aihot", operation="news_feed", stage="parse", exc=exc)
         return []

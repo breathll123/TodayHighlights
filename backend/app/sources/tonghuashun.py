@@ -4,6 +4,7 @@ from hashlib import sha256
 import httpx
 
 from app.core.config import SH_TZ
+from app.core.logging import observed_http_get
 from app.sources.base import RawItemDraft
 
 
@@ -11,8 +12,13 @@ class TonghuashunAdapter:
 
     def fetch(self, entry_url: str, cookie: str) -> list[RawItemDraft]:
         try:
-            resp = httpx.get(
+            resp = observed_http_get(
+                httpx.get,
                 "https://news.10jqka.com.cn/tapp/news/push/stock?page=1",
+                provider="tonghuashun",
+                operation="stock_news",
+                host="news.10jqka.com.cn",
+                path="/tapp/news/push/stock",
                 headers={"User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X)"},
                 timeout=15,
             )
@@ -41,4 +47,4 @@ class TonghuashunAdapter:
                 ))
             return drafts
         except Exception:
-            return []
+            raise

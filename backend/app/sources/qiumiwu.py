@@ -4,6 +4,7 @@ from hashlib import sha256
 import httpx
 
 from app.core.config import SH_TZ
+from app.core.logging import observed_http_get
 from app.sources.base import RawItemDraft
 
 _headers = {
@@ -25,8 +26,13 @@ class QiumiwuAdapter:
         return handler(subtype)
 
     def _fetch_matches(self, subtype: str) -> list[RawItemDraft]:
-        resp = httpx.get(
+        resp = observed_http_get(
+            httpx.get,
             "https://api.qiumiwu.com/v5/game/schedule/0/1/0/0/0",
+            provider="qiumiwu",
+            operation="match_schedule",
+            host="api.qiumiwu.com",
+            path="/v5/game/schedule/0/1/0/0/0",
             params={"reqfrom": "web"},
             headers=_headers,
             timeout=20,

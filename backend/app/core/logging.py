@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from queue import Full, Queue
-from typing import Any, Iterator
+from typing import Any, Callable, Iterator
 
 from app.core.config import SH_TZ
 
@@ -174,6 +174,57 @@ def log_event(
     logger.handle(record)
 
 
+def observed_http_get(
+    get: Callable[..., Any],
+    url: str,
+    *,
+    provider: str,
+    operation: str,
+    host: str,
+    path: str,
+    **kwargs: Any,
+) -> Any:
+    """Execute one HTTP GET while logging only allowlisted request metadata."""
+    started = time.perf_counter()
+    logger = logging.getLogger("today_highlights.external")
+    try:
+        response = get(url, **kwargs)
+    except Exception as exc:
+        log_event(
+            logger,
+            channel="application",
+            category="crawler",
+            event="external_request_failed",
+            level=logging.WARNING,
+            provider=provider,
+            operation=operation,
+            host=host,
+            path=path,
+            stage="transport",
+            exception_type=type(exc).__name__,
+            duration_ms=round((time.perf_counter() - started) * 1000, 2),
+        )
+        raise
+
+    status = int(getattr(response, "status_code", 0) or 0)
+    failed = status >= 400
+    log_event(
+        logger,
+        channel="application",
+        category="crawler",
+        event="external_request_failed" if failed else "external_request_finished",
+        level=logging.WARNING if failed else logging.INFO,
+        provider=provider,
+        operation=operation,
+        host=host,
+        path=path,
+        stage="status" if failed else "response",
+        status=status,
+        duration_ms=round((time.perf_counter() - started) * 1000, 2),
+    )
+    return response
+
+
 # Rate-limited logging
 _rate_limit_store: dict[str, float] = {}
 _rate_limit_lock = threading.Lock()
@@ -204,6 +255,28 @@ def log_event_rate_limited(
         return False
     log_event(logger, **event_kwargs)
     return True
+
+
+def log_adapter_failure(
+    *,
+    provider: str,
+    operation: str,
+    stage: str,
+    exc: Exception,
+) -> None:
+    log_event_rate_limited(
+        logging.getLogger("today_highlights.external"),
+        fingerprint=f"adapter:{provider}:{operation}:{stage}:{type(exc).__name__}",
+        interval_seconds=30,
+        channel="application",
+        category="crawler",
+        event="adapter_operation_failed",
+        level=logging.WARNING,
+        provider=provider,
+        operation=operation,
+        stage=stage,
+        exception_type=type(exc).__name__,
+    )
 
 
 # ---------------------------------------------------------------------------

@@ -4,6 +4,7 @@ import httpx
 
 from app.core.cache import ttl_cache
 from app.core.config import settings
+from app.core.logging import log_adapter_failure, observed_http_get
 
 
 _proxy = settings.eastmoney_proxy
@@ -20,8 +21,11 @@ def fetch_sectors(config: dict, limit: int) -> list[dict]:
         board_type = config.get("board_type", "concept")
         fs_map = {"concept": "m:90+t:3", "industry": "m:90+t:2", "region": "m:90+t:1"}
         fs = fs_map.get(board_type, "m:90+t:3")
-        resp = _http.get(
+        resp = observed_http_get(
+            _http.get,
             "https://push2delay.eastmoney.com/api/qt/clist/get",
+            provider="eastmoney", operation="sectors",
+            host="push2delay.eastmoney.com", path="/api/qt/clist/get",
             params={"pn": 1, "pz": limit, "po": 1, "np": 1, "fltt": 2, "invt": 2, "fid": "f3", "fs": fs,
                     "fields": "f2,f3,f4,f12,f14"},
         )
@@ -39,15 +43,19 @@ def fetch_sectors(config: dict, limit: int) -> list[dict]:
             }
             for item in items
         ]
-    except Exception:
+    except Exception as exc:
+        log_adapter_failure(provider="eastmoney", operation="sectors", stage="parse", exc=exc)
         return []
 
 
 @ttl_cache(30, swr=300)
 def fetch_longhu(config: dict, limit: int) -> list[dict]:
     try:
-        resp = _http.get(
+        resp = observed_http_get(
+            _http.get,
             "https://push2delay.eastmoney.com/api/qt/clist/get",
+            provider="eastmoney", operation="longhu",
+            host="push2delay.eastmoney.com", path="/api/qt/clist/get",
             params={"pn": 1, "pz": limit, "po": 1, "np": 1, "fltt": 2, "invt": 2, "fid": "f178",
                     "fs": "m:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23",
                     "fields": "f2,f3,f8,f12,f14,f152,f174,f175,f176,f177,f178,f179"},
@@ -74,15 +82,19 @@ def fetch_longhu(config: dict, limit: int) -> list[dict]:
             if len(result) >= limit:
                 break
         return result
-    except Exception:
+    except Exception as exc:
+        log_adapter_failure(provider="eastmoney", operation="longhu", stage="parse", exc=exc)
         return []
 
 
 def _fetch_top_stock(board_code: str) -> tuple[str, dict | None]:
     """Fetch the top stock from a single industry board. Thread-safe via shared _http client."""
     try:
-        sr = _http.get(
+        sr = observed_http_get(
+            _http.get,
             "https://push2delay.eastmoney.com/api/qt/clist/get",
+            provider="eastmoney", operation="industry_top_stock",
+            host="push2delay.eastmoney.com", path="/api/qt/clist/get",
             params={"pn": 1, "pz": 1, "po": 1, "np": 1, "fltt": 2, "invt": 2, "fid": "f3",
                     "fs": f"b:{board_code}", "fields": "f2,f3,f12,f14"},
         )
@@ -90,16 +102,19 @@ def _fetch_top_stock(board_code: str) -> tuple[str, dict | None]:
         items = sr.json().get("data", {}).get("diff", [])
         if items:
             return board_code, items[0]
-    except Exception:
-        pass
+    except Exception as exc:
+        log_adapter_failure(provider="eastmoney", operation="industry_top_stock", stage="parse", exc=exc)
     return board_code, None
 
 
 @ttl_cache(30, swr=600)
 def fetch_industry(config: dict, limit: int) -> list[dict]:
     try:
-        resp = _http.get(
+        resp = observed_http_get(
+            _http.get,
             "https://push2delay.eastmoney.com/api/qt/clist/get",
+            provider="eastmoney", operation="industry",
+            host="push2delay.eastmoney.com", path="/api/qt/clist/get",
             params={"pn": 1, "pz": limit, "po": 1, "np": 1, "fltt": 2, "invt": 2, "fid": "f3",
                     "fs": "m:90+t:2", "fields": "f2,f3,f4,f12,f14"},
         )
@@ -135,7 +150,8 @@ def fetch_industry(config: dict, limit: int) -> list[dict]:
                 "url": f"https://quote.eastmoney.com/bk/90.{code}.html",
             })
         return result
-    except Exception:
+    except Exception as exc:
+        log_adapter_failure(provider="eastmoney", operation="industry", stage="parse", exc=exc)
         return []
 
 
@@ -152,8 +168,11 @@ def fetch_indices(_config: dict, limit: int) -> list[dict]:
             ("000300", "1.000300"),   # 沪深300
         ]
         selected = index_map[:limit]
-        resp = _http.get(
+        resp = observed_http_get(
+            _http.get,
             "https://push2delay.eastmoney.com/api/qt/ulist.np/get",
+            provider="eastmoney", operation="indices",
+            host="push2delay.eastmoney.com", path="/api/qt/ulist.np/get",
             params={
                 "fltt": 2,
                 "invt": 2,
@@ -191,7 +210,8 @@ def fetch_indices(_config: dict, limit: int) -> list[dict]:
                 "url": f"https://quote.eastmoney.com/zs{code}.html",
             })
         return result
-    except Exception:
+    except Exception as exc:
+        log_adapter_failure(provider="eastmoney", operation="indices", stage="parse", exc=exc)
         return []
 
 
@@ -215,7 +235,8 @@ def fetch_index_trends(_config: dict, limit: int) -> list[dict]:
             secid = futures[future]
             try:
                 trend_by_secid[secid] = future.result(timeout=10)
-            except Exception:
+            except Exception as exc:
+                log_adapter_failure(provider="eastmoney", operation="index_trend", stage="parse", exc=exc)
                 trend_by_secid[secid] = None
 
     # Reassemble in original snapshot order
@@ -231,8 +252,11 @@ def fetch_index_trends(_config: dict, limit: int) -> list[dict]:
 def _fetch_one_trend(snapshot: dict) -> dict | None:
     """Fetch intraday trend for a single index."""
     try:
-        resp = _http.get(
+        resp = observed_http_get(
+            _http.get,
             "https://push2delay.eastmoney.com/api/qt/stock/trends2/get",
+            provider="eastmoney", operation="index_trend",
+            host="push2delay.eastmoney.com", path="/api/qt/stock/trends2/get",
             params={
                 "fields1": "f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f11,f12,f13",
                 "fields2": "f51,f52,f53,f54,f55,f56,f57,f58",
@@ -276,15 +300,19 @@ def _fetch_one_trend(snapshot: dict) -> dict | None:
             "high": max(highs) if highs else 0,
             "low": min(lows) if lows else 0,
         }
-    except Exception:
+    except Exception as exc:
+        log_adapter_failure(provider="eastmoney", operation="index_trend", stage="parse", exc=exc)
         return None
 
 
 @ttl_cache(30, swr=300)
 def fetch_capital_flow(_config: dict, limit: int) -> list[dict]:
     try:
-        resp = _http.get(
+        resp = observed_http_get(
+            _http.get,
             "https://push2delay.eastmoney.com/api/qt/clist/get",
+            provider="eastmoney", operation="capital_flow",
+            host="push2delay.eastmoney.com", path="/api/qt/clist/get",
             params={"pn": 1, "pz": limit, "po": 1, "np": 1, "fltt": 2, "invt": 2, "fid": "f62",
                     "fs": "m:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23",
                     "fields": "f2,f3,f12,f14,f62,f64,f66"},
@@ -303,15 +331,19 @@ def fetch_capital_flow(_config: dict, limit: int) -> list[dict]:
             }
             for item in items
         ]
-    except Exception:
+    except Exception as exc:
+        log_adapter_failure(provider="eastmoney", operation="capital_flow", stage="parse", exc=exc)
         return []
 
 
 @ttl_cache(60, swr=600)
 def fetch_announcements(_config: dict, limit: int) -> list[dict]:
     try:
-        resp = httpx.get(
+        resp = observed_http_get(
+            httpx.get,
             "https://np-anotice-stock.eastmoney.com/api/security/ann",
+            provider="eastmoney", operation="announcements",
+            host="np-anotice-stock.eastmoney.com", path="/api/security/ann",
             params={"page_index": 1, "page_size": limit, "ann_type": "A",
                     "sort_name": "notice_date", "sort_type": "desc"},
             headers={"User-Agent": "Mozilla/5.0 TodayHighlights/0.1", "Referer": "https://data.eastmoney.com/"},
@@ -333,5 +365,6 @@ def fetch_announcements(_config: dict, limit: int) -> list[dict]:
                 "url": f"https://data.eastmoney.com/notices/detail/{art_code}.html" if art_code else None,
             })
         return result
-    except Exception:
+    except Exception as exc:
+        log_adapter_failure(provider="eastmoney", operation="announcements", stage="parse", exc=exc)
         return []

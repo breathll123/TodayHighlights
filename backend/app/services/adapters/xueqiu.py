@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from app.core.cache import ttl_cache
 from app.core.config import settings
 from app.core.crypto import CryptoService
+from app.core.logging import log_adapter_failure, observed_http_get
 from app.models.entities import Source
 
 
@@ -30,8 +31,11 @@ def get_cookie(session: Session) -> str:
 @ttl_cache(30, swr=300)
 def fetch_hot_events(cookie: str, limit: int) -> list[dict]:
     try:
-        resp = httpx.get(
+        resp = observed_http_get(
+            httpx.get,
             "https://xueqiu.com/hot_event/list.json",
+            provider="xueqiu", operation="hot_events",
+            host="xueqiu.com", path="/hot_event/list.json",
             headers={"Cookie": cookie, "User-Agent": "Mozilla/5.0 TodayHighlights/0.1", "Accept": "application/json", "Referer": "https://xueqiu.com/"},
             timeout=15,
         )
@@ -48,7 +52,8 @@ def fetch_hot_events(cookie: str, limit: int) -> list[dict]:
             }
             for item in items
         ]
-    except Exception:
+    except Exception as exc:
+        log_adapter_failure(provider="xueqiu", operation="hot_events", stage="parse", exc=exc)
         return []
 
 
@@ -56,8 +61,11 @@ def fetch_hot_events(cookie: str, limit: int) -> list[dict]:
 def fetch_hot_stocks(cookie: str, config: dict, limit: int) -> list[dict]:
     try:
         stock_type = config.get("type", 10)
-        resp = httpx.get(
+        resp = observed_http_get(
+            httpx.get,
             f"https://stock.xueqiu.com/v5/stock/hot_stock/list.json?type={stock_type}&size={limit}",
+            provider="xueqiu", operation="hot_stocks",
+            host="stock.xueqiu.com", path="/v5/stock/hot_stock/list.json",
             headers={"Cookie": cookie, "User-Agent": "Mozilla/5.0 TodayHighlights/0.1", "Accept": "application/json", "Referer": "https://xueqiu.com/"},
             timeout=15,
         )
@@ -76,7 +84,8 @@ def fetch_hot_stocks(cookie: str, config: dict, limit: int) -> list[dict]:
             }
             for item in items
         ]
-    except Exception:
+    except Exception as exc:
+        log_adapter_failure(provider="xueqiu", operation="hot_stocks", stage="parse", exc=exc)
         return []
 
 
@@ -97,8 +106,11 @@ def fetch_hot_stocks_us(cookie: str, config: dict, limit: int) -> list[dict]:
 
 def _fetch_hot_stocks_typed(cookie: str, stock_type: int, source: str, limit: int) -> list[dict]:
     try:
-        resp = httpx.get(
+        resp = observed_http_get(
+            httpx.get,
             f"https://stock.xueqiu.com/v5/stock/hot_stock/list.json?type={stock_type}&size={limit}",
+            provider="xueqiu", operation=source,
+            host="stock.xueqiu.com", path="/v5/stock/hot_stock/list.json",
             headers={"Cookie": cookie, "User-Agent": "Mozilla/5.0 TodayHighlights/0.1", "Accept": "application/json", "Referer": "https://xueqiu.com/"},
             timeout=15,
         )
@@ -117,7 +129,8 @@ def _fetch_hot_stocks_typed(cookie: str, stock_type: int, source: str, limit: in
             }
             for item in items
         ]
-    except Exception:
+    except Exception as exc:
+        log_adapter_failure(provider="xueqiu", operation=source, stage="parse", exc=exc)
         return []
 
 
@@ -125,8 +138,11 @@ def _fetch_hot_stocks_typed(cookie: str, stock_type: int, source: str, limit: in
 def fetch_screener(cookie: str, config: dict, limit: int) -> list[dict]:
     try:
         order_by = config.get("order_by", "percent")
-        resp = httpx.get(
+        resp = observed_http_get(
+            httpx.get,
             f"https://xueqiu.com/service/screener/quote/list?page=1&size={limit}&order=desc&order_by={order_by}&type=stock&exchange=CN&market=CN",
+            provider="xueqiu", operation="screener",
+            host="xueqiu.com", path="/service/screener/quote/list",
             headers={"Cookie": cookie, "User-Agent": "Mozilla/5.0 TodayHighlights/0.1", "Accept": "application/json", "Referer": "https://xueqiu.com/"},
             timeout=15,
         )
@@ -144,5 +160,6 @@ def fetch_screener(cookie: str, config: dict, limit: int) -> list[dict]:
             }
             for item in items
         ]
-    except Exception:
+    except Exception as exc:
+        log_adapter_failure(provider="xueqiu", operation="screener", stage="parse", exc=exc)
         return []

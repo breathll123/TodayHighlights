@@ -5,6 +5,7 @@ from hashlib import sha256
 import httpx
 
 from app.core.config import SH_TZ
+from app.core.logging import observed_http_get
 from app.sources.base import RawItemDraft
 
 _headers = {
@@ -35,8 +36,13 @@ class DongqiudiAdapter:
 
     def _fetch_matches(self, subtype: str) -> list[RawItemDraft]:
         """Fetch match data from magicball API. Returns all matches grouped by league."""
-        resp = httpx.get(
+        resp = observed_http_get(
+            httpx.get,
             "https://www.dongqiudi.com/magicball/v1/list/match_list",
+            provider="dongqiudi",
+            operation="match_list",
+            host="www.dongqiudi.com",
+            path="/magicball/v1/list/match_list",
             params={"language": "zh-CN", "cmp_type": "soccer", "tab_type": "all"},
             headers=_headers,
             timeout=20,

@@ -6,6 +6,7 @@ from typing import Any
 import httpx
 
 from app.core.config import SH_TZ
+from app.core.logging import observed_http_get
 from app.sources.base import RawItemDraft
 
 
@@ -19,7 +20,14 @@ class XueqiuAdapter:
             "Accept": "application/json,text/plain,*/*",
         }
         with httpx.Client(timeout=15, follow_redirects=True, headers=headers) as client:
-            response = client.get(entry_url)
+            response = observed_http_get(
+                client.get,
+                entry_url,
+                provider="xueqiu",
+                operation="timeline",
+                host="xueqiu.com",
+                path="/statuses/user_timeline.json",
+            )
             if response.status_code in {401, 403}:
                 raise RuntimeError(f"Xueqiu request rejected with HTTP {response.status_code}")
             response.raise_for_status()

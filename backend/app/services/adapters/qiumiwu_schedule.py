@@ -1,5 +1,6 @@
 import re
 import httpx
+from app.core.logging import log_adapter_failure, observed_http_get
 
 _HEADERS = {
     "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15",
@@ -44,8 +45,11 @@ def _get_logo_map() -> dict[str, str]:
 
     logo_map = {}
     try:
-        api_resp = httpx.get(
+        api_resp = observed_http_get(
+            httpx.get,
             "https://api.qiumiwu.com/v5/game/schedule/0/1/0/0/0",
+            provider="qiumiwu", operation="schedule_logo_map",
+            host="api.qiumiwu.com", path="/v5/game/schedule/0/1/0/0/0",
             params={"reqfrom": "web"},
             headers={"User-Agent": "Mozilla/5.0 TodayHighlights/0.1", "Referer": "https://www.qiumiwu.com/"},
             timeout=20,
@@ -67,24 +71,27 @@ def _get_logo_map() -> dict[str, str]:
                 logo_map[f"_league_{lname}"] = llogo
         _LEAGUE_LOGO_CACHE = logo_map
         _LOGO_CACHE_TS = now
-    except Exception:
-        pass
+    except Exception as exc:
+        log_adapter_failure(provider="qiumiwu", operation="schedule_logo_map", stage="parse", exc=exc)
     return _LEAGUE_LOGO_CACHE or logo_map
 
 
 def _fetch_logos_from_detail(match_id: str) -> tuple[str, str]:
     """Fetch (home_logo, away_logo) from a match detail page."""
     try:
-        resp = httpx.get(
+        resp = observed_http_get(
+            httpx.get,
             f"https://m.qiumiwu.com/game/{match_id}",
+            provider="qiumiwu", operation="match_detail_logos",
+            host="m.qiumiwu.com", path="/game/{match_id}",
             headers=_HEADERS, timeout=15,
         )
         # Extract team logo img URLs — first two are home and away
         logos = re.findall(r'<img[^>]*src="(https://file\.qiumiwu\.com/team/[^"]+)"[^>]*>', resp.text)
         if len(logos) >= 2:
             return logos[0], logos[1]
-    except Exception:
-        pass
+    except Exception as exc:
+        log_adapter_failure(provider="qiumiwu", operation="match_detail_logos", stage="parse", exc=exc)
     return "", ""
 
 
@@ -152,12 +159,15 @@ def fetch_competition_schedule(config: dict, limit: int) -> list[dict]:
                     "logo_b_local": _cache_logo(media_cache, m.get("logo_b", ""), entity_type="team", entity_name=m.get("team_b", ""), source_entity_id=str(m.get("id", ""))),
                     "logo_league_local": _cache_logo(media_cache, m.get("logo_league", ""), entity_type="league", entity_name=comp_name, source_entity_id=str(m.get("id", ""))),
                 })
-    except Exception:
-        pass
+    except Exception as exc:
+        log_adapter_failure(provider="qiumiwu", operation="live_schedule_merge", stage="parse", exc=exc)
 
     try:
-        resp = httpx.get(
+        resp = observed_http_get(
+            httpx.get,
             f"https://m.qiumiwu.com/game/{slug}",
+            provider="qiumiwu", operation="competition_schedule",
+            host="m.qiumiwu.com", path="/game/{slug}",
             headers=_HEADERS, timeout=20, follow_redirects=True,
         )
         resp.raise_for_status()
@@ -256,5 +266,6 @@ def fetch_competition_schedule(config: dict, limit: int) -> list[dict]:
         deduped.sort(key=lambda x: x.get("start_time", ""))
         return deduped[:limit]
 
-    except Exception:
+    except Exception as exc:
+        log_adapter_failure(provider="qiumiwu", operation="competition_schedule", stage="parse", exc=exc)
         return result if result else []
