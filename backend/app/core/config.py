@@ -26,6 +26,16 @@ class Settings(BaseSettings):
     artificial_analysis_schedule_morning: str = "08:30"
     artificial_analysis_schedule_evening: str = "20:30"
     artificial_analysis_stale_hours: int = 36
+    log_dir: str = "logs"
+    log_level: str = "INFO"
+    log_rotation: str = "daily"
+    log_retention_days: int = 14
+    log_max_message_length: int = 4000
+    log_console_enabled: bool = True
+    log_slow_request_ms: int = 2000
+    log_access_exclude_paths: str = ""
+    log_trust_proxy_headers: bool = False
+    log_queue_size: int = 10_000
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
