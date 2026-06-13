@@ -2,7 +2,7 @@ import logging
 from queue import Queue
 
 from app.core.logging import SafeQueueHandler, StructuredTextFormatter, build_event_record
-from app.core.logging_catalog import EVENT_SPECS, event_spec
+from app.core.logging_catalog import EVENT_SPECS, EventSpec, event_spec
 
 
 def test_event_catalog_contains_canonical_and_legacy_events():
@@ -253,3 +253,31 @@ def test_queue_prepare_resolves_message_when_custom_event_exists():
     assert prepared.getMessage() == "Retry 2 failed for upstream"
     assert prepared.msg == "Retry 2 failed for upstream"
     assert prepared.args is None
+
+
+def test_third_party_multiline_message_stays_in_single_headline(monkeypatch):
+    handler = SafeQueueHandler(Queue())
+    record = logging.LogRecord(
+        "third.party",
+        logging.INFO,
+        "",
+        0,
+        "Cleanup\r\n\tdeleted %d rows",
+        (3,),
+        None,
+    )
+    record.category = "third\r\n\tparty"
+    record.event_fields = {"attempt": 2}
+    monkeypatch.setitem(
+        EVENT_SPECS,
+        "Cleanup\r\n\tdeleted 3 rows",
+        EventSpec("第三方\r\n\t消息", ()),
+    )
+
+    prepared = handler.prepare(record)
+    lines = StructuredTextFormatter().format(prepared).splitlines()
+
+    assert len(lines) == 2
+    assert "third party" in lines[0]
+    assert "Cleanup deleted 3 rows 第三方 消息" in lines[0]
+    assert lines[1] == "  attempt=2"

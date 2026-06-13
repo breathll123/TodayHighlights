@@ -124,9 +124,13 @@ class StructuredTextFormatter(logging.Formatter):
         cat = fields.pop("category", None) or getattr(record, "category", None)
         category = str(cat or channel)
         spec = event_spec(event)
+        headline_event = _headline_token(event)
+        headline_category = _headline_token(category)
+        headline_description = _headline_token(spec.description)
         lines = [
             f"{ts_str}.{ms} {level:<{self.LEVEL_WIDTH}} "
-            f"{category:<{self.CATEGORY_WIDTH}} {event} {spec.description}"
+            f"{headline_category:<{self.CATEGORY_WIDTH}} "
+            f"{headline_event} {headline_description}"
         ]
 
         expanded = set(spec.expanded_fields)
@@ -156,6 +160,10 @@ class StructuredTextFormatter(logging.Formatter):
             text += "\n" + redact_text(record.exc_text)
 
         return text
+
+
+def _headline_token(value: Any) -> str:
+    return re.sub(r"\s+", " ", str(value)).strip()
 
 
 def _ordered_field_names(
