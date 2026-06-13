@@ -105,6 +105,36 @@ python scripts/init_db.py
 
 Redis 故障时自动降级为进程内存缓存，不会阻止应用启动。`/health` 端点返回 `{"cache": "redis"|"memory-fallback"|"memory-disabled"}`。
 
+| `LOG_DIR` | 日志文件目录，默认 `logs` |
+| `LOG_LEVEL` | 日志级别：`DEBUG`/`INFO`/`WARNING`/`ERROR`，默认 `INFO` |
+| `LOG_ROTATION` | 滚动策略：`daily`（每天）或 `hourly`（每小时），默认 `daily` |
+| `LOG_RETENTION_DAYS` | 日志保留天数，默认 14 |
+| `LOG_MAX_MESSAGE_LENGTH` | 单条日志最大字符数，超长截断，默认 4000 |
+| `LOG_CONSOLE_ENABLED` | 是否同时输出到控制台，默认 `true` |
+| `LOG_SLOW_REQUEST_MS` | 慢请求阈值（毫秒），超时标记 `slow=true`，默认 2000 |
+| `LOG_ACCESS_EXCLUDE_PATHS` | 逗号分隔的排除路径（如 `/health`），这些路径不写入 access 日志 |
+| `LOG_TRUST_PROXY_HEADERS` | 是否信任 `X-Forwarded-For`，Nginx 反代时设为 `true` |
+
+**生产部署命令**（宝塔面板）：
+```bash
+cd /root/projects/daily_highlights/TodayHighlights/backend
+mkdir -p logs
+chmod 750 logs
+python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --workers 1 --no-access-log
+```
+
+**运维命令**：
+```bash
+tail -f logs/access.log        # HTTP 请求（含 request_id, status, duration）
+tail -f logs/application.log   # 业务事件（crawler/ai/scheduler/cache）
+tail -f logs/error.log         # 异常（自动关联 request_id）
+grep 'category=crawler' logs/application.log
+grep 'crawl_job_id=128' logs/application.log
+grep 'request_id=<id>' logs/access.log logs/error.log  # 跨文件关联
+```
+
+日志自动脱敏：API Key、Bearer token、数据库密码、Cookie 不会出现在日志中。
+
 生成 `APP_SECRET_KEY`：
 
 ```bash

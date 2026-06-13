@@ -93,6 +93,15 @@ def set_media_cache(mc):
 - **AI 是辅助，不是主角** — AI 生成内容必须有明确标识；原始数据始终可见
 - **Design tokens** 见 `DESIGN.md`：deep-teal 主色、signal-gold 强调色、terminal-* 表面色、Inter 字体族
 
+### 日志
+
+生产日志系统使用 `QueueHandler` + `QueueListener` + `TimedRotatingFileHandler`：
+- `logs/access.log` — HTTP 请求日志（method, path, status, duration_ms, request_id, user_id）
+- `logs/application.log` — 业务事件（category=crawler|ai|scheduler）
+- `logs/error.log` — 未处理异常（自动关联 request_id）
+- 日志脱敏自动处理 API Key、Bearer token、数据库密码、Cookie
+- 本地开发命令：`APP_SECRET_KEY=.. REDIS_ENABLED=false python3 -m pytest tests/ -v`（LOG_DIR 自动隔离）
+
 ## 踩坑记录
 
 - **FastAPI 路由顺序**：`/token-usages/stats` 必须在 `/token-usages/{usage_id}` 之前注册，否则 stats 路径会被当作 usage_id 捕获
