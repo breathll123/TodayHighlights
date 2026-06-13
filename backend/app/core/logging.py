@@ -106,7 +106,7 @@ def build_event_record(
 
 class StructuredTextFormatter(logging.Formatter):
     LEVEL_WIDTH = 8
-    CATEGORY_WIDTH = 12
+    CATEGORY_WIDTH = 8
 
     def __init__(self, max_message_length: int = 4000, **kwargs):
         super().__init__(**kwargs)
@@ -126,7 +126,8 @@ class StructuredTextFormatter(logging.Formatter):
         spec = event_spec(event)
         lines = [
             f"{ts_str}.{ms} {level:<{self.LEVEL_WIDTH}} "
-            f"{category:<{self.CATEGORY_WIDTH}} {event} {spec.description}"
+            f"{category[:self.CATEGORY_WIDTH]:<{self.CATEGORY_WIDTH}} "
+            f"{event} {spec.description}"
         ]
 
         expanded = set(spec.expanded_fields)
@@ -346,7 +347,9 @@ class SafeQueueHandler(logging.handlers.QueueHandler):
         if record.exc_info and not isinstance(record.exc_info, bool) and record.exc_info[1]:
             rec.exc_text = self.formatter.formatException(record.exc_info) if hasattr(self, "formatter") and self.formatter else ""
         if not hasattr(record, "event"):
-            rec.event = record.getMessage()
+            resolved = record.getMessage()
+            rec.event = resolved
+            rec.msg = resolved
         rec.args = None
         return rec
 
