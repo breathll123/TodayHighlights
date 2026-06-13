@@ -189,7 +189,7 @@ describe("sourceNameFor", () => {
     ["eastmoney_longhu", "东方财富"],
     ["eastmoney_capital_flow", "东方财富"],
     ["eastmoney_announcements", "东方财富"],
-    ["eastmoney_indices", "指数行情"],
+    ["eastmoney_indices", "新浪财经"],
     ["tonghuashun_news", "同花顺"],
   ])("maps %s to %s", (sourceType, sourceName) => {
     expect(sourceNameFor({}, sourceType)).toBe(sourceName);

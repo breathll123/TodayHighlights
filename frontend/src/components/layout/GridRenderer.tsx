@@ -47,7 +47,7 @@ const SOURCE_NAMES: Record<string, string> = {
   eastmoney_longhu: "东方财富",
   eastmoney_capital_flow: "东方财富",
   eastmoney_announcements: "东方财富",
-  eastmoney_indices: "指数行情",
+  eastmoney_indices: "新浪财经",
   tonghuashun_news: "同花顺",
   qiumiwu_matches: "球迷屋",
   qiumiwu_fixtures: "球迷屋",
@@ -63,6 +63,7 @@ const SOURCE_NAMES: Record<string, string> = {
 const SOURCE_URLS: Record<string, string> = {
   xueqiu: "https://xueqiu.com/",
   eastmoney: "https://www.eastmoney.com/",
+  sina: "https://finance.sina.com.cn/",
   tonghuashun: "https://www.10jqka.com.cn/",
   qiumiwu: "https://www.qiumiwu.com/",
   datalearner: "https://www.datalearner.com/",
@@ -72,6 +73,7 @@ const SOURCE_URLS: Record<string, string> = {
 
 function sourceUrlFor(sourceType: string): string | undefined {
   if (sourceType.startsWith("xueqiu")) return SOURCE_URLS.xueqiu;
+  if (sourceType === "eastmoney_indices") return SOURCE_URLS.sina;
   if (sourceType.startsWith("eastmoney")) return SOURCE_URLS.eastmoney;
   if (sourceType.startsWith("tonghuashun")) return SOURCE_URLS.tonghuashun;
   if (sourceType.startsWith("qiumiwu")) return SOURCE_URLS.qiumiwu;

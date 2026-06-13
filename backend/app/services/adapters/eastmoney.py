@@ -157,7 +157,16 @@ def fetch_industry(config: dict, limit: int) -> list[dict]:
 
 @ttl_cache(30, swr=300)
 def fetch_indices(_config: dict, limit: int) -> list[dict]:
-    """指数行情 — 使用新浪财经 API，稳定不封 IP"""
+    """
+    指数行情快照 — 新浪财经 (hq.sinajs.cn)
+
+    使用新浪而非东方财富 push2 接口，因为新浪财经 API 没有频率限制和 IP 封禁。
+    返回的 source 字段仍标记为 "eastmoney_indices"，但前端显示为"新浪财经"。
+
+    对比：
+    - 新浪 hq.sinajs.cn：实时指数快照，无频率限制，GBK 编码
+    - 东方财富 push2delay：行业/板块/资金流/公告/分时趋势，有频率限制
+    """
     try:
         import re
         index_map = [
