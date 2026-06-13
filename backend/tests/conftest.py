@@ -1,6 +1,13 @@
 import os
+import tempfile
+from pathlib import Path
 
 os.environ.setdefault("REDIS_ENABLED", "false")
+
+_TEST_LOG_DIR = Path(tempfile.gettempdir()) / "today-highlights-test-logs"
+os.environ.setdefault("LOG_DIR", str(_TEST_LOG_DIR))
+os.environ.setdefault("LOG_CONSOLE_ENABLED", "false")
+os.environ.setdefault("LOG_RETENTION_DAYS", "1")
 
 from collections.abc import Generator
 

@@ -1,25 +1,30 @@
 import logging
+from pathlib import Path
 
 from app.core.logging import (
+    LoggingConfig,
     StructuredTextFormatter,
     bind_log_context,
     build_event_record,
+    create_logging_runtime,
+    log_event,
     redact_text,
     sanitize_fields,
 )
 
 
 def test_logging_settings_have_production_defaults():
-    from app.core.config import settings
-
-    assert settings.log_dir == "logs"
-    assert settings.log_level == "INFO"
-    assert settings.log_rotation == "daily"
-    assert settings.log_retention_days == 14
-    assert settings.log_max_message_length == 4000
-    assert settings.log_console_enabled is True
-    assert settings.log_slow_request_ms == 2000
-    assert settings.log_trust_proxy_headers is False
+    from app.core.config import Settings
+    # Check field defaults directly (os.environ may override via conftest)
+    fields = Settings.model_fields
+    assert fields["log_dir"].default == "logs"
+    assert fields["log_level"].default == "INFO"
+    assert fields["log_rotation"].default == "daily"
+    assert fields["log_retention_days"].default == 14
+    assert fields["log_max_message_length"].default == 4000
+    assert fields["log_console_enabled"].default is True
+    assert fields["log_slow_request_ms"].default == 2000
+    assert fields["log_trust_proxy_headers"].default is False
 
 
 def test_structured_formatter_merges_bound_context():
@@ -75,3 +80,91 @@ def test_formatter_quotes_values_and_truncates_long_messages():
     assert "\n" not in text
     assert "truncated=true" in text
     assert len(text) < 220
+
+
+# --- Runtime tests ---
+
+def _config(tmp_path: Path, **overrides) -> LoggingConfig:
+    values = {
+        "log_dir": tmp_path,
+        "level": logging.DEBUG,
+        "rotation": "daily",
+        "retention_days": 14,
+        "max_message_length": 4000,
+        "console_enabled": False,
+        "queue_size": 32,
+    }
+    values.update(overrides)
+    return LoggingConfig(**values)
+
+
+def test_runtime_routes_each_event_to_one_file(tmp_path):
+    runtime = create_logging_runtime(_config(tmp_path))
+    runtime.start()
+    try:
+        logger = logging.getLogger("test.routing")
+        log_event(logger, channel="access", event="http_request_completed", status=200)
+        log_event(logger, channel="application", category="crawler", event="crawl_finished")
+        log_event(logger, channel="error", event="unhandled_exception", level=logging.ERROR)
+    finally:
+        runtime.stop()
+
+    access = (tmp_path / "access.log").read_text()
+    application = (tmp_path / "application.log").read_text()
+    error = (tmp_path / "error.log").read_text()
+    assert "http_request_completed" in access
+    assert "crawl_finished" not in access
+    assert "crawl_finished" in application
+    assert "unhandled_exception" not in application
+    assert "unhandled_exception" in error
+
+
+def test_hourly_and_daily_rotation_configuration(tmp_path):
+    daily = create_logging_runtime(_config(tmp_path / "daily", rotation="daily"))
+    daily.start()
+    hourly = create_logging_runtime(_config(tmp_path / "hourly", rotation="hourly"))
+    hourly.start()
+    try:
+        assert daily.file_handlers[0].when == "MIDNIGHT"
+        assert hourly.file_handlers[0].when == "H"
+        assert daily.file_handlers[0].backupCount == 14
+    finally:
+        daily.stop()
+        hourly.stop()
+
+
+def test_unwritable_directory_falls_back_to_console(monkeypatch, tmp_path):
+    def fail_mkdir(*args, **kwargs):
+        raise PermissionError("read-only")
+
+    monkeypatch.setattr(Path, "mkdir", fail_mkdir)
+    runtime = create_logging_runtime(_config(tmp_path, console_enabled=True))
+    runtime.start()
+    try:
+        assert runtime.file_logging_enabled is False
+        assert runtime.console_handler is not None
+    finally:
+        runtime.stop()
+
+
+def test_error_record_preserves_exception_stack(tmp_path):
+    runtime = create_logging_runtime(_config(tmp_path))
+    runtime.start()
+    try:
+        logger = logging.getLogger("test.exception")
+        try:
+            raise RuntimeError("boom")
+        except RuntimeError:
+            log_event(
+                logger,
+                channel="error",
+                event="unhandled_exception",
+                level=logging.ERROR,
+                exc_info=True,
+            )
+    finally:
+        runtime.stop()
+
+    text = (tmp_path / "error.log").read_text()
+    assert "RuntimeError: boom" in text
+    assert "Traceback" in text
