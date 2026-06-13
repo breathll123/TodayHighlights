@@ -19,6 +19,7 @@ from queue import Full, Queue
 from typing import Any, Callable, Iterator
 
 from app.core.config import SH_TZ
+from app.core.logging_catalog import event_spec
 
 _LOG_CONTEXT: ContextVar[dict[str, Any]] = ContextVar("log_context", default={})
 
@@ -104,6 +105,9 @@ def build_event_record(
 
 
 class StructuredTextFormatter(logging.Formatter):
+    LEVEL_WIDTH = 8
+    CATEGORY_WIDTH = 12
+
     def __init__(self, max_message_length: int = 4000, **kwargs):
         super().__init__(**kwargs)
         self.max_message_length = max_message_length
@@ -115,32 +119,52 @@ class StructuredTextFormatter(logging.Formatter):
 
         level = record.levelname
         channel = getattr(record, "log_channel", "application")
-        event = getattr(record, "event", record.getMessage())
-        fields = dict(getattr(record, "event_fields", {}))
-
-        parts = [f"{ts_str}.{ms}", level, f"channel={channel}", f"event={event}"]
-
-        # category
+        event = redact_text(str(getattr(record, "event", record.getMessage())))
+        fields = sanitize_fields(dict(getattr(record, "event_fields", {})))
         cat = fields.pop("category", None) or getattr(record, "category", None)
-        if cat:
-            parts.insert(3, f"category={cat}")
+        category = str(cat or channel)
+        spec = event_spec(event)
+        lines = [
+            f"{ts_str}.{ms} {level:<{self.LEVEL_WIDTH}} "
+            f"{category:<{self.CATEGORY_WIDTH}} {event} {spec.description}"
+        ]
 
-        # sorted fields
-        for key in sorted(fields):
-            val = fields[key]
-            parts.append(f"{key}={_format_value(val)}")
+        expanded = set(spec.expanded_fields)
+        regular_fields = {
+            key: value for key, value in fields.items() if key not in expanded
+        }
+        ordered_keys = _ordered_field_names(regular_fields, spec.field_order)
+        if ordered_keys:
+            details = " ".join(
+                f"{key}={_format_value(regular_fields[key])}" for key in ordered_keys
+            )
+            lines.append(f"  {details}")
 
-        line = " ".join(parts)
+        for key in spec.expanded_fields:
+            if key in fields:
+                lines.append(f"  {key}={_format_value(fields[key])}")
 
-        if len(line) > self.max_message_length:
-            line = line[:self.max_message_length]
-            line += " truncated=true"
+        text = "\n".join(lines)
+        if len(text) > self.max_message_length:
+            text = text[:self.max_message_length].rstrip()
+            text += " truncated=true"
 
         if record.exc_info and record.exc_info[1]:
             exc_text = redact_text(self.formatException(record.exc_info))
-            line += "\n" + exc_text
+            text += "\n" + exc_text
+        elif getattr(record, "exc_text", None):
+            text += "\n" + redact_text(record.exc_text)
 
-        return line
+        return text
+
+
+def _ordered_field_names(
+    fields: dict[str, Any],
+    field_order: tuple[str, ...],
+) -> list[str]:
+    ordered = [key for key in field_order if key in fields]
+    ordered.extend(key for key in fields if key not in field_order)
+    return ordered
 
 
 def _format_value(val: Any) -> str:
@@ -321,6 +345,8 @@ class SafeQueueHandler(logging.handlers.QueueHandler):
         rec.event_fields = dict(getattr(record, "event_fields", {}))
         if record.exc_info and not isinstance(record.exc_info, bool) and record.exc_info[1]:
             rec.exc_text = self.formatter.formatException(record.exc_info) if hasattr(self, "formatter") and self.formatter else ""
+        if not hasattr(record, "event"):
+            rec.event = record.getMessage()
         rec.args = None
         return rec
 

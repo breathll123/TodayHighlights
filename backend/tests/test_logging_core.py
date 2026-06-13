@@ -43,9 +43,10 @@ def test_structured_formatter_merges_bound_context():
         )
 
     text = formatter.format(record)
-    assert "INFO" in text
-    assert "category=crawler" in text
-    assert "event=crawl_job_finished" in text
+    lines = text.splitlines()
+    assert "INFO" in lines[0]
+    assert "crawler" in lines[0]
+    assert "crawl_job_finished" in lines[0]
     assert "request_id=req-12345678" in text
     assert "crawl_job_id=42" in text
     assert "items_saved=6" in text
@@ -80,7 +81,7 @@ def test_formatter_quotes_values_and_truncates_long_messages():
     )
 
     text = formatter.format(record)
-    assert "\n" not in text
+    assert len(text.splitlines()) == 2
     assert "truncated=true" in text
     assert len(text) < 220
 
@@ -148,7 +149,7 @@ def test_console_event_is_emitted_once(tmp_path):
     finally:
         runtime.stop()
 
-    assert stream.getvalue().count("event=console_once") == 1
+    assert stream.getvalue().count("console_once") == 1
 
 
 def test_queue_overflow_warning_uses_direct_fallback():
@@ -164,7 +165,7 @@ def test_queue_overflow_warning_uses_direct_fallback():
     )
 
     text = stream.getvalue()
-    assert "event=logging_queue_full" in text
+    assert "logging_queue_full" in text
     assert "dropped_event" not in text
 
 
