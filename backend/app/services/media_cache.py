@@ -281,8 +281,15 @@ class MediaCacheService:
         try:
             if path.exists():
                 path.unlink()
-        except OSError:
-            pass
+        except OSError as exc:
+            log_event(
+                logger,
+                channel="application",
+                category="media",
+                event="media_cleanup_failed",
+                level=logging.WARNING,
+                exception_type=type(exc).__name__,
+            )
 
     def _return_existing_cached(self, sess: Session, digest: str, used_at: datetime) -> str:
         try:

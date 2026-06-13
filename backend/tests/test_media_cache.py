@@ -239,3 +239,24 @@ def test_media_cache_returns_existing_asset_after_unique_race(client, tmp_path: 
     )
 
     assert result == f"/api/public/media/{digest}"
+
+
+def test_media_cleanup_failure_is_logged(tmp_path: Path, monkeypatch, caplog) -> None:
+    caplog.set_level(logging.INFO)
+    path = tmp_path / "cleanup.png"
+    path.write_bytes(b"data")
+
+    def fail_unlink(self):
+        raise OSError("permission denied")
+
+    monkeypatch.setattr(Path, "unlink", fail_unlink)
+
+    MediaCacheService._remove_file(path)
+
+    record = next(
+        record
+        for record in caplog.records
+        if getattr(record, "event", "") == "media_cleanup_failed"
+    )
+    assert record.event_fields["exception_type"] == "OSError"
+    assert str(path) not in str(record.event_fields)

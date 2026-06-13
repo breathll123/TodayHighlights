@@ -327,8 +327,16 @@ def execute_sync_run(
                     run.error_message = str(exc)
                     run.finished_at = datetime.utcnow()
                     session.commit()
-            except Exception:
-                pass
+            except Exception as persist_exc:
+                log_event(
+                    logger,
+                    channel="error",
+                    category="ai",
+                    event="aa_sync_status_persist_failed",
+                    level=logging.ERROR,
+                    ai_job_id=run_id,
+                    exception_type=type(persist_exc).__name__,
+                )
         finally:
             session.close()
 

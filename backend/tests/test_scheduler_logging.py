@@ -1,4 +1,5 @@
 import logging
+from contextlib import contextmanager
 from types import SimpleNamespace
 
 from apscheduler.events import (
@@ -9,7 +10,7 @@ from apscheduler.events import (
 )
 
 from app.core.scheduler import _handle_scheduler_event
-from app.services.artificial_analysis.sync import scheduled_sync
+from app.services.artificial_analysis.sync import execute_sync_run, scheduled_sync
 
 
 def test_scheduler_listener_emits_structured_events(caplog):
@@ -49,3 +50,48 @@ def test_scheduled_aa_sync_logs_missing_api_key_skip(monkeypatch, caplog):
     )
     assert record.event_fields["reason"] == "missing_api_key"
     assert record.event_fields["trigger_type"] == "scheduled"
+
+
+def test_aa_sync_logs_failure_status_persistence_error(monkeypatch, caplog):
+    caplog.set_level(logging.INFO)
+
+    @contextmanager
+    def acquired_lock(*, timeout_seconds=0):
+        yield True
+
+    class FailingSession:
+        def get(self, _model, _run_id):
+            return SimpleNamespace(
+                status="running",
+                error_message="",
+                finished_at=None,
+            )
+
+        def commit(self):
+            raise RuntimeError("database unavailable")
+
+        def close(self):
+            return None
+
+    monkeypatch.setattr(
+        "app.services.artificial_analysis.sync.artificial_analysis_lock",
+        acquired_lock,
+    )
+    monkeypatch.setattr(
+        "app.services.artificial_analysis.sync.SessionLocal",
+        lambda: FailingSession(),
+    )
+    monkeypatch.setattr(
+        "app.services.artificial_analysis.sync.mark_abandoned_runs",
+        lambda _session: (_ for _ in ()).throw(RuntimeError("primary failure")),
+    )
+
+    execute_sync_run(42)
+
+    record = next(
+        record
+        for record in caplog.records
+        if getattr(record, "event", "") == "aa_sync_status_persist_failed"
+    )
+    assert record.event_fields["ai_job_id"] == 42
+    assert record.event_fields["exception_type"] == "RuntimeError"
