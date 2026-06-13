@@ -39,3 +39,6 @@ backend/storage/
 
 # Project docs (design plans, specs)
 docs/
+
+# Runtime logs
+backend/logs/

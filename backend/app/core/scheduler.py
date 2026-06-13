@@ -1,13 +1,19 @@
+import logging
 from datetime import datetime
 
+from apscheduler.events import (EVENT_JOB_ERROR, EVENT_JOB_EXECUTED, EVENT_JOB_MAX_INSTANCES,
+                                 EVENT_JOB_MISSED, EVENT_SCHEDULER_START, EVENT_SCHEDULER_SHUTDOWN)
 from apscheduler.schedulers.background import BackgroundScheduler
 from sqlalchemy import select
 
 from app.core.config import SH_TZ, settings
 from app.core.database import SessionLocal
+from app.core.logging import log_event
 from app.models.entities import Source
 from app.services.cleanup import run_full_cleanup
 from app.services.jobs import run_crawl_job
+
+logger = logging.getLogger("today_highlights.scheduler")
 
 
 def crawl_enabled_sources() -> None:
@@ -28,10 +34,31 @@ def scheduled_cleanup() -> None:
         run_full_cleanup(session)
 
 
+def _handle_scheduler_event(event) -> None:
+    if event.code == EVENT_JOB_EXECUTED:
+        log_event(logger, channel="application", category="scheduler", event="scheduled_job_finished",
+                  job_id=str(event.job_id))
+    elif event.code == EVENT_JOB_ERROR:
+        log_event(logger, channel="application", category="scheduler", event="scheduled_job_failed",
+                  level=logging.ERROR, job_id=str(event.job_id),
+                  exception_type=type(event.exception).__name__ if event.exception else "-",
+                  message=str(event.exception or ""))
+    elif event.code == EVENT_JOB_MISSED:
+        log_event(logger, channel="application", category="scheduler", event="scheduled_job_missed",
+                  level=logging.WARNING, job_id=str(event.job_id))
+    elif event.code == EVENT_JOB_MAX_INSTANCES:
+        log_event(logger, channel="application", category="scheduler", event="scheduled_job_skipped",
+                  level=logging.WARNING, job_id=str(event.job_id), reason="max_instances")
+
+
 def create_scheduler() -> BackgroundScheduler:
     scheduler = BackgroundScheduler(timezone="Asia/Shanghai")
+    scheduler.add_listener(_handle_scheduler_event, EVENT_JOB_EXECUTED | EVENT_JOB_ERROR | EVENT_JOB_MISSED | EVENT_JOB_MAX_INSTANCES)
     scheduler.add_job(crawl_enabled_sources, "interval", minutes=1, id="crawl_enabled_sources", replace_existing=True)
     scheduler.add_job(scheduled_cleanup, "interval", hours=6, id="scheduled_cleanup", replace_existing=True)
+
+    log_event(logger, channel="application", category="scheduler", event="scheduler_started",
+              job_ids=[job.id for job in scheduler.get_jobs()])
 
     if settings.artificial_analysis_sync_enabled and settings.artificial_analysis_api_key:
         from app.services.artificial_analysis.sync import scheduled_sync

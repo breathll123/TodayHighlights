@@ -1,4 +1,6 @@
 import asyncio
+import logging
+import time
 from datetime import datetime, timedelta
 
 from sqlalchemy import select
@@ -6,8 +8,11 @@ from sqlalchemy.orm import Session
 
 from app.core.config import SH_TZ, settings
 from app.core.crypto import CryptoService
+from app.core.logging import bind_log_context, log_event
 from app.models.entities import CrawlJob, Highlight, Source
 from app.services.ai_enrichment import create_pending_enrichments, process_item_enrichment, select_item_candidates
+
+logger = logging.getLogger("today_highlights.crawler")
 from app.services.content import save_raw_items
 from app.services.settings import get_plain_setting, get_secret_setting
 from app.services.summarizer import HighlightDraft, SummarizerClient
@@ -77,34 +82,70 @@ def run_crawl_job(session: Session, source_id: int, trigger_type: str) -> CrawlJ
     session.add(job)
     session.flush()
 
-    try:
-        cookie = CryptoService(settings.app_secret_key).decrypt(source.cookie_encrypted)
-        adapter = get_adapter(source.site)
-        drafts = adapter.fetch(source.entry_url, cookie)
-        raw_items = save_raw_items(session, source.id, drafts)
+    with bind_log_context(crawl_job_id=job.id, source_id=source_id):
+        log_event(logger, channel="application", category="crawler", event="crawl_job_started",
+                  site=source.site, trigger_type=trigger_type)
+        started = time.perf_counter()
+        stage = "fetch"
 
-        if source.enable_highlight:
-            candidates = select_item_candidates(session, source.topic_id, raw_items, limit=50)
-            if candidates:
-                enrichments = create_pending_enrichments(session, source.topic_id, candidates)
-                for enrichment in enrichments:
-                    try:
-                        process_item_enrichment(session, enrichment.id, trigger_type=trigger_type)
-                    except Exception:
-                        pass  # Individual enrichment failures don't block the crawl job
+        try:
+            stage = "decrypt"
+            cookie = CryptoService(settings.app_secret_key).decrypt(source.cookie_encrypted)
 
-        job.status = "success"
-        job.items_found = len(drafts)
-        job.items_saved = len(raw_items)
-        job.finished_at = datetime.now(SH_TZ)
-        source.last_crawled_at = job.finished_at
-        source.next_crawl_at = (job.finished_at or datetime.now(SH_TZ)).replace(tzinfo=None) + timedelta(minutes=source.crawl_interval_minutes)
-    except Exception as exc:
-        job.status = "failed"
-        job.error_message = str(exc)
-        job.log_excerpt = str(exc)[:500]
-        job.finished_at = datetime.now(SH_TZ)
-        source.last_crawled_at = job.finished_at
-        source.next_crawl_at = job.finished_at.replace(tzinfo=None) + timedelta(minutes=source.crawl_interval_minutes)
+            stage = "fetch"
+            adapter = get_adapter(source.site)
+            drafts = adapter.fetch(source.entry_url, cookie)
+            log_event(logger, channel="application", category="crawler", event="crawl_fetch_finished",
+                      stage=stage, items_found=len(drafts),
+                      duration_ms=round((time.perf_counter() - started) * 1000, 2))
+
+            stage = "persist"
+            raw_items = save_raw_items(session, source.id, drafts)
+            items_received = len(drafts)
+            items_saved = len(raw_items)
+            items_deduplicated = max(0, items_received - items_saved)
+            log_event(logger, channel="application", category="crawler", event="crawl_persist_finished",
+                      stage=stage, items_received=items_received, items_saved=items_saved,
+                      items_deduplicated=items_deduplicated)
+
+            if source.enable_highlight:
+                stage = "enrichment"
+                candidates = select_item_candidates(session, source.topic_id, raw_items, limit=50)
+                if candidates:
+                    enrichments = create_pending_enrichments(session, source.topic_id, candidates)
+                    for enrichment in enrichments:
+                        try:
+                            process_item_enrichment(session, enrichment.id, trigger_type=trigger_type)
+                        except Exception as exc:
+                            log_event(
+                                logger, channel="application", category="crawler",
+                                event="crawl_enrichment_failed", level=logging.WARNING,
+                                stage="enrichment", enrichment_id=enrichment.id,
+                                exception_type=type(exc).__name__, message=str(exc),
+                            )
+
+            job.status = "success"
+            job.items_found = len(drafts)
+            job.items_saved = len(raw_items)
+            job.finished_at = datetime.now(SH_TZ)
+            source.last_crawled_at = job.finished_at
+            source.next_crawl_at = (job.finished_at or datetime.now(SH_TZ)).replace(tzinfo=None) + timedelta(minutes=source.crawl_interval_minutes)
+
+            log_event(logger, channel="application", category="crawler", event="crawl_job_finished",
+                      status="success", items_saved=job.items_saved,
+                      duration_ms=round((time.perf_counter() - started) * 1000, 2))
+
+        except Exception as exc:
+            job.status = "failed"
+            job.error_message = str(exc)
+            job.log_excerpt = str(exc)[:500]
+            job.finished_at = datetime.now(SH_TZ)
+            source.last_crawled_at = job.finished_at
+            source.next_crawl_at = job.finished_at.replace(tzinfo=None) + timedelta(minutes=source.crawl_interval_minutes)
+
+            log_event(logger, channel="application", category="crawler", event="crawl_job_failed",
+                      level=logging.ERROR, stage=stage,
+                      exception_type=type(exc).__name__, message=str(exc),
+                      duration_ms=round((time.perf_counter() - started) * 1000, 2))
     session.commit()
     return job
