@@ -98,7 +98,7 @@ def test_formatter_prioritizes_names_and_results_before_ids():
     lines = formatter.format(record).splitlines()
 
     assert len(lines) == 2
-    assert "INFO     crawler  crawl.completed 抓取任务完成" in lines[0]
+    assert "INFO     crawler      crawl.completed 抓取任务完成" in lines[0]
     assert lines[1].index("source_name=") < lines[1].index("status=")
     assert lines[1].index("status=") < lines[1].index("source_id=")
     assert lines[1].index("items_saved=") < lines[1].index("request_id=")
@@ -179,26 +179,38 @@ def test_failure_url_and_response_preview_are_expanded_and_redacted():
     assert "\\nbad gateway" in lines[3]
 
 
-def test_long_category_does_not_shift_event_column():
+def test_canonical_categories_share_event_column_without_truncation():
     formatter = StructuredTextFormatter()
-    short = build_event_record(
-        logging.INFO,
-        channel="application",
-        category="ai",
-        event="crawl.completed",
-    )
-    long = build_event_record(
+    categories = ("ai", "block", "cache", "crawler", "media", "scheduler", "application")
+    lines = []
+    for category in categories:
+        record = build_event_record(
+            logging.INFO,
+            channel="application",
+            category=category,
+            event="crawl.completed",
+        )
+        lines.append(formatter.format(record).splitlines()[0])
+
+    event_columns = {line.index("crawl.completed") for line in lines}
+
+    assert len(event_columns) == 1
+    assert any("application" in line for line in lines)
+    assert any("scheduler" in line for line in lines)
+
+
+def test_unknown_long_category_is_preserved_and_expands_column():
+    formatter = StructuredTextFormatter()
+    record = build_event_record(
         logging.INFO,
         channel="application",
         category="artificial-analysis",
         event="crawl.completed",
     )
 
-    short_line = formatter.format(short).splitlines()[0]
-    long_line = formatter.format(long).splitlines()[0]
+    line = formatter.format(record).splitlines()[0]
 
-    assert short_line.index("crawl.completed") == long_line.index("crawl.completed")
-    assert "artifici crawl.completed" in long_line
+    assert "artificial-analysis crawl.completed" in line
 
 
 def test_queue_prepare_resolves_third_party_message_placeholders():
@@ -219,4 +231,25 @@ def test_queue_prepare_resolves_third_party_message_placeholders():
     assert "Cleanup deleted 3 rows from cache" in text
     assert "%d" not in text
     assert prepared.getMessage() == "Cleanup deleted 3 rows from cache"
+    assert prepared.args is None
+
+
+def test_queue_prepare_resolves_message_when_custom_event_exists():
+    handler = SafeQueueHandler(Queue())
+    record = logging.LogRecord(
+        "third.party",
+        logging.WARNING,
+        "",
+        0,
+        "Retry %d failed for %s",
+        (2, "upstream"),
+        None,
+    )
+    record.event = "upstream.failed"
+
+    prepared = handler.prepare(record)
+
+    assert prepared.event == "upstream.failed"
+    assert prepared.getMessage() == "Retry 2 failed for upstream"
+    assert prepared.msg == "Retry 2 failed for upstream"
     assert prepared.args is None
