@@ -1,3 +1,4 @@
+import logging
 import time
 
 import fakeredis
@@ -73,7 +74,9 @@ def test_redis_lock_requires_matching_token_to_release():
     assert backend.acquire_lock("lock-key", "owner-c", 45)
 
 
-def test_resilient_backend_uses_memory_when_redis_fails():
+def test_resilient_backend_uses_memory_when_redis_fails(caplog):
+    caplog.set_level(logging.INFO)
+
     class BrokenRedis:
         def ping(self):
             raise ConnectionError("offline")
@@ -89,6 +92,34 @@ def test_resilient_backend_uses_memory_when_redis_fails():
     )
     backend.initialize()
     assert backend.status() == "memory-fallback"
+    record = next(
+        record
+        for record in caplog.records
+        if getattr(record, "event", "") == "cache_backend_fallback"
+    )
+    assert record.event_fields["exception_type"] == "ConnectionError"
+    assert record.event_fields["backend"] == "redis"
+
+
+def test_redis_operation_failure_is_structured_and_omits_key(caplog):
+    caplog.set_level(logging.INFO)
+
+    class BrokenClient:
+        def get(self, _key):
+            raise ConnectionError("redis unavailable")
+
+    backend = RedisCacheBackend(BrokenClient(), prefix="secret-prefix", lock_ttl_seconds=45)
+    assert backend.get("sensitive-cache-key") is None
+
+    record = next(
+        record
+        for record in caplog.records
+        if getattr(record, "event", "") == "cache_operation_failed"
+    )
+    assert record.event_fields["operation"] == "get"
+    assert record.event_fields["exception_type"] == "ConnectionError"
+    assert "sensitive-cache-key" not in str(record.event_fields)
+    assert "secret-prefix" not in str(record.event_fields)
 
 
 def test_ttl_cache_fresh_hit_calls_function_once():

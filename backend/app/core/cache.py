@@ -8,10 +8,28 @@ from functools import wraps
 from hashlib import sha256
 from typing import Any
 
-logger = logging.getLogger(__name__)
+from app.core.logging import log_event, log_event_rate_limited
+
+logger = logging.getLogger("today_highlights.cache")
 
 # Shared background executor for SWR refreshes — bounded to avoid runaway threads
 _swr_executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="swr-refresh")
+
+
+def _log_cache_failure(operation: str, exc: Exception, *, level: int = logging.WARNING) -> None:
+    log_event_rate_limited(
+        logger,
+        fingerprint=f"cache:{operation}:{type(exc).__name__}",
+        interval_seconds=30,
+        channel="application",
+        category="cache",
+        event="cache_operation_failed",
+        level=level,
+        operation=operation,
+        backend="redis",
+        exception_type=type(exc).__name__,
+        status="fallback",
+    )
 
 
 def shutdown_swr_executor():
@@ -207,7 +225,8 @@ class RedisCacheBackend:
     def get(self, key: str) -> dict | None:
         try:
             raw = self._client.get(self._cache_key(key))
-        except Exception:
+        except Exception as exc:
+            _log_cache_failure("get", exc)
             return None
         if raw is None:
             return None
@@ -230,8 +249,8 @@ class RedisCacheBackend:
                 json.dumps(envelope, ensure_ascii=False),
                 ex=ttl_seconds,
             )
-        except Exception:
-            pass
+        except Exception as exc:
+            _log_cache_failure("set", exc)
 
     # -- fallback delegation (managed by ResilientCacheBackend) --
 
@@ -249,7 +268,8 @@ class RedisCacheBackend:
                 self._lock_key(key), token, nx=True, ex=ttl_seconds
             )
             return bool(result)
-        except Exception:
+        except Exception as exc:
+            _log_cache_failure("acquire_lock", exc)
             return False
 
     def release_lock(self, key: str, token: str) -> None:
@@ -258,8 +278,8 @@ class RedisCacheBackend:
             current = self._client.get(lock_key)
             if current == token:
                 self._client.delete(lock_key)
-        except Exception:
-            pass
+        except Exception as exc:
+            _log_cache_failure("release_lock", exc)
 
     # -- generation-based invalidation --
 
@@ -267,14 +287,15 @@ class RedisCacheBackend:
         try:
             val = self._client.get(self._generation_key(function_id))
             return int(val) if val is not None else 0
-        except Exception:
+        except Exception as exc:
+            _log_cache_failure("get_generation", exc)
             return 0
 
     def clear_function(self, function_id: str) -> None:
         try:
             self._client.incr(self._generation_key(function_id))
-        except Exception:
-            pass
+        except Exception as exc:
+            _log_cache_failure("clear_function", exc)
 
     def close(self) -> None:
         pass
@@ -324,11 +345,26 @@ class ResilientCacheBackend:
                 client, prefix=self._prefix, lock_ttl_seconds=self._lock_ttl_seconds
             )
             self._status = "redis"
-            logger.info("cache backend: redis")
-        except Exception:
+            log_event(
+                logger,
+                channel="application",
+                category="cache",
+                event="cache_backend_ready",
+                backend="redis",
+            )
+        except Exception as exc:
             self._redis = None
             self._status = "memory-fallback"
-            logger.warning("cache backend: memory-fallback")
+            log_event(
+                logger,
+                channel="application",
+                category="cache",
+                event="cache_backend_fallback",
+                level=logging.WARNING,
+                backend="redis",
+                fallback="memory",
+                exception_type=type(exc).__name__,
+            )
 
     def status(self) -> str:
         return self._status
@@ -351,10 +387,17 @@ class ResilientCacheBackend:
                 client, prefix=self._prefix, lock_ttl_seconds=self._lock_ttl_seconds
             )
             self._status = "redis"
-            logger.info("cache backend: redis (recovered)")
+            log_event(
+                logger,
+                channel="application",
+                category="cache",
+                event="cache_backend_recovered",
+                backend="redis",
+            )
             return self._redis
-        except Exception:
+        except Exception as exc:
             self._status = "memory-fallback"
+            _log_cache_failure("reconnect", exc)
             return None
 
     # -- envelope storage --
@@ -366,8 +409,8 @@ class ResilientCacheBackend:
                 result = redis.get(key)
                 if result is not None:
                     return result
-            except Exception:
-                pass
+            except Exception as exc:
+                _log_cache_failure("get", exc)
         return None
 
     def set(self, key: str, envelope: dict, ttl_seconds: int) -> None:
@@ -377,8 +420,8 @@ class ResilientCacheBackend:
                 redis.set(key, envelope, ttl_seconds)
                 # Mirror to memory fallback
                 self._memory.set_fallback(key, envelope, ttl_seconds)
-            except Exception:
-                pass
+            except Exception as exc:
+                _log_cache_failure("set", exc)
         else:
             # Use memory directly when Redis is unavailable
             self._memory.set(key, envelope, ttl_seconds)
@@ -398,8 +441,8 @@ class ResilientCacheBackend:
         if redis is not None:
             try:
                 return redis.acquire_lock(key, token, ttl_seconds)
-            except Exception:
-                pass
+            except Exception as exc:
+                _log_cache_failure("acquire_lock", exc)
         return self._memory.acquire_lock(key, token, ttl_seconds)
 
     def release_lock(self, key: str, token: str) -> None:
@@ -407,8 +450,8 @@ class ResilientCacheBackend:
         if redis is not None:
             try:
                 redis.release_lock(key, token)
-            except Exception:
-                pass
+            except Exception as exc:
+                _log_cache_failure("release_lock", exc)
         self._memory.release_lock(key, token)
 
     # -- generation-based invalidation --
@@ -418,8 +461,8 @@ class ResilientCacheBackend:
         if redis is not None:
             try:
                 return redis.get_generation(function_id)
-            except Exception:
-                pass
+            except Exception as exc:
+                _log_cache_failure("get_generation", exc)
         return self._memory.get_generation(function_id)
 
     def clear_function(self, function_id: str) -> None:
@@ -427,8 +470,8 @@ class ResilientCacheBackend:
         if redis is not None:
             try:
                 redis.clear_function(function_id)
-            except Exception:
-                pass
+            except Exception as exc:
+                _log_cache_failure("clear_function", exc)
         self._memory.clear_function(function_id)
 
     def close(self) -> None:
@@ -452,7 +495,14 @@ def initialize_cache() -> None:
     memory = MemoryCacheBackend(maxsize=256)
     if not settings.redis_enabled:
         _cache_backend = memory
-        logger.info("cache backend: memory-disabled")
+        log_event(
+            logger,
+            channel="application",
+            category="cache",
+            event="cache_backend_ready",
+            backend="memory",
+            reason="redis_disabled",
+        )
         return
 
     try:
@@ -473,9 +523,19 @@ def initialize_cache() -> None:
         )
         backend.initialize()
         _cache_backend = backend
-    except Exception:
+    except Exception as exc:
         _cache_backend = memory
-        logger.warning("cache backend: memory-fallback", exc_info=True)
+        log_event(
+            logger,
+            channel="application",
+            category="cache",
+            event="cache_backend_fallback",
+            level=logging.WARNING,
+            backend="redis",
+            fallback="memory",
+            exception_type=type(exc).__name__,
+            exc_info=True,
+        )
 
 
 def shutdown_cache() -> None:
@@ -614,8 +674,18 @@ def ttl_cache(ttl_seconds: int = 30, swr: int = 0, shared: bool = True, maxsize:
                                 "fresh_until": now + ttl_seconds,
                                 "value": result,
                             }, ttl_seconds + swr)
-                        except Exception:
-                            logger.warning("SWR background refresh failed for %s", function_id)
+                        except Exception as exc:
+                            log_event_rate_limited(
+                                logger,
+                                fingerprint=f"swr:{function_id}:{type(exc).__name__}",
+                                interval_seconds=30,
+                                channel="application",
+                                category="cache",
+                                event="swr_refresh_failed",
+                                level=logging.WARNING,
+                                function_id=function_id,
+                                exception_type=type(exc).__name__,
+                            )
                         finally:
                             with _local_refreshing_lock:
                                 _local_refreshing.discard(cache_key)

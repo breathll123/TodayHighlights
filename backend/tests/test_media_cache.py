@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime
 from pathlib import Path
 
@@ -81,7 +82,8 @@ class _FakeClient:
         return _FakeImageResponse()
 
 
-def test_media_cache_downloads_once_and_reuses_asset(client, tmp_path: Path) -> None:
+def test_media_cache_downloads_once_and_reuses_asset(client, tmp_path: Path, caplog) -> None:
+    caplog.set_level(logging.INFO)
     session = next(client.app.dependency_overrides[get_session]())
     fake_client = _FakeClient()
     service = MediaCacheService(session, storage_root=tmp_path, http_client=fake_client)
@@ -106,6 +108,11 @@ def test_media_cache_downloads_once_and_reuses_asset(client, tmp_path: Path) -> 
     assert fake_client.calls == 1
     asset_hash = url_hash("https://file.qiumiwu.com/team/a.png")
     assert (tmp_path / "football" / f"{asset_hash}.png").exists()
+    events = [getattr(record, "event", "") for record in caplog.records]
+    assert "media_download_finished" in events
+    assert "media_cache_hit" in events
+    rendered = " ".join(str(getattr(record, "event_fields", {})) for record in caplog.records)
+    assert "https://file.qiumiwu.com/team/a.png" not in rendered
 
 
 def test_public_media_route_serves_cached_file(client, tmp_path: Path) -> None:
@@ -140,7 +147,8 @@ def test_public_media_route_serves_cached_file(client, tmp_path: Path) -> None:
     assert response.content.startswith(b"\x89PNG")
 
 
-def test_media_cache_removes_file_when_commit_fails(client, tmp_path: Path, monkeypatch) -> None:
+def test_media_cache_removes_file_when_commit_fails(client, tmp_path: Path, monkeypatch, caplog) -> None:
+    caplog.set_level(logging.INFO)
     session = next(client.app.dependency_overrides[get_session]())
     service = MediaCacheService(session, storage_root=tmp_path, http_client=_FakeClient())
 
@@ -159,6 +167,13 @@ def test_media_cache_removes_file_when_commit_fails(client, tmp_path: Path, monk
 
     assert result == ""
     assert not list(tmp_path.rglob("*.png"))
+    record = next(
+        record
+        for record in caplog.records
+        if getattr(record, "event", "") == "media_cache_failed"
+    )
+    assert record.event_fields["exception_type"] == "RuntimeError"
+    assert "cleanup.png" not in str(record.event_fields)
 
 
 def test_media_cache_returns_existing_asset_after_unique_race(client, tmp_path: Path, monkeypatch) -> None:

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+import time
 from datetime import datetime
 from hashlib import sha256
 from pathlib import Path
@@ -10,8 +12,10 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core.logging import log_event
 from app.models.entities import MediaAsset
 
+logger = logging.getLogger("today_highlights.media")
 
 DEFAULT_STORAGE_ROOT = Path(__file__).resolve().parents[2] / "storage" / "media"
 ALLOWED_CONTENT_TYPES = {
@@ -98,19 +102,53 @@ class MediaCacheService:
     ) -> str:
         normalized = normalize_url(source_url)
         if not normalized or not is_safe_remote_url(normalized):
+            log_event(
+                logger,
+                channel="application",
+                category="media",
+                event="media_cache_skipped",
+                level=logging.WARNING,
+                provider=provider,
+                asset_type=asset_type,
+                entity_type=entity_type,
+                reason="unsafe_url",
+            )
             return ""
 
+        digest = url_hash(normalized)
         sess = self._new_session()
         if sess is None:
+            log_event(
+                logger,
+                channel="application",
+                category="media",
+                event="media_cache_failed",
+                level=logging.ERROR,
+                provider=provider,
+                asset_type=asset_type,
+                entity_type=entity_type,
+                url_hash=digest,
+                reason="session_creation",
+            )
             return ""
         local_file: Path | None = None
+        started = time.perf_counter()
         try:
-            digest = url_hash(normalized)
             existing = sess.scalar(select(MediaAsset).where(MediaAsset.url_hash == digest))
             now = datetime.utcnow()
             if existing and existing.status == "cached" and existing.local_path and Path(existing.local_path).exists():
                 existing.last_used_at = now
                 sess.commit()
+                log_event(
+                    logger,
+                    channel="application",
+                    category="media",
+                    event="media_cache_hit",
+                    provider=provider,
+                    asset_type=asset_type,
+                    entity_type=entity_type,
+                    url_hash=digest,
+                )
                 return existing.public_path
 
             asset = existing or MediaAsset(
@@ -135,6 +173,19 @@ class MediaCacheService:
             body = response.content
             if not body:
                 raise ValueError("empty image body")
+            log_event(
+                logger,
+                channel="application",
+                category="media",
+                event="media_download_finished",
+                provider=provider,
+                asset_type=asset_type,
+                entity_type=entity_type,
+                url_hash=digest,
+                status=getattr(response, "status_code", 200),
+                bytes=len(body),
+                duration_ms=round((time.perf_counter() - started) * 1000, 2),
+            )
 
             content_type = response.headers.get("content-type", "application/octet-stream").split(";")[0].lower()
             extension = extension_for(content_type, normalized)
@@ -153,25 +204,74 @@ class MediaCacheService:
             asset.error_message = ""
             asset.last_fetched_at = now
             sess.commit()
+            log_event(
+                logger,
+                channel="application",
+                category="media",
+                event="media_cache_finished",
+                provider=provider,
+                asset_type=asset_type,
+                entity_type=entity_type,
+                url_hash=digest,
+                bytes=len(body),
+                duration_ms=round((time.perf_counter() - started) * 1000, 2),
+            )
             return asset.public_path
-        except IntegrityError:
+        except IntegrityError as exc:
             try:
                 sess.rollback()
             except Exception:
                 pass
             existing_path = self._return_existing_cached(sess, url_hash(normalized), datetime.utcnow())
             if existing_path:
+                log_event(
+                    logger,
+                    channel="application",
+                    category="media",
+                    event="media_cache_race_reused",
+                    provider=provider,
+                    asset_type=asset_type,
+                    entity_type=entity_type,
+                    url_hash=digest,
+                )
                 return existing_path
             if local_file is not None:
                 self._remove_file(local_file)
+            log_event(
+                logger,
+                channel="application",
+                category="media",
+                event="media_cache_failed",
+                level=logging.WARNING,
+                provider=provider,
+                asset_type=asset_type,
+                entity_type=entity_type,
+                url_hash=digest,
+                exception_type=type(exc).__name__,
+                reason="integrity",
+            )
             return ""
-        except Exception:
+        except Exception as exc:
             try:
                 sess.rollback()
             except Exception:
                 pass
             if local_file is not None:
                 self._remove_file(local_file)
+            log_event(
+                logger,
+                channel="application",
+                category="media",
+                event="media_cache_failed",
+                level=logging.ERROR,
+                provider=provider,
+                asset_type=asset_type,
+                entity_type=entity_type,
+                url_hash=digest,
+                exception_type=type(exc).__name__,
+                reason="download_or_persist",
+                duration_ms=round((time.perf_counter() - started) * 1000, 2),
+            )
             return ""
         finally:
             sess.close()

@@ -1,10 +1,13 @@
 import logging
 import threading
-from concurrent.futures import ThreadPoolExecutor, as_completed
+import time
+from concurrent.futures import ThreadPoolExecutor, wait
+from contextvars import copy_context
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
+from app.core.logging import log_event
 from app.models.entities import Highlight, PageBlock, RawItem, Source
 from app.services.adapters.xueqiu import (
     fetch_hot_events, fetch_hot_stocks, fetch_hot_stocks_cn,
@@ -15,7 +18,7 @@ from app.services.adapters.eastmoney import (
     fetch_indices, fetch_industry, fetch_sectors,
 )
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("today_highlights.blocks")
 
 # Module-level shared executor — avoids per-request creation/destruction overhead
 _BLOCK_EXECUTOR: ThreadPoolExecutor | None = None
@@ -265,8 +268,16 @@ def get_page_blocks(session: Session, route: str) -> list[dict]:
     try:
         from app.services.media_cache import MediaCacheService
         media_cache = MediaCacheService(session)
-    except Exception:
-        pass
+    except Exception as exc:
+        log_event(
+            logger,
+            channel="application",
+            category="block",
+            event="media_cache_init_failed",
+            level=logging.WARNING,
+            route=route,
+            exception_type=type(exc).__name__,
+        )
 
     # Separate DB-dependent blocks (topic, raw) from live-API blocks
     db_types = {"topic", "raw", "eastmoney_longhu", "tonghuashun_news", "artificial_analysis_ranking"}
@@ -289,21 +300,75 @@ def get_page_blocks(session: Session, route: str) -> list[dict]:
     # Pre-fetch cookie for live blocks (may fail if key changed)
     try:
         cookie = get_cookie(session)
-    except Exception:
+    except Exception as exc:
         cookie = None
+        log_event(
+            logger,
+            channel="application",
+            category="block",
+            event="block_cookie_unavailable",
+            level=logging.WARNING,
+            route=route,
+            exception_type=type(exc).__name__,
+        )
 
     # Resolve live-API blocks in parallel using shared executor
     if live_blocks:
-        futures = {_get_executor().submit(resolve_block_data, None, b, cookie, media_cache): b for b in live_blocks}
-        for future in as_completed(futures):
+        started_at = {b.id: time.perf_counter() for b in live_blocks}
+        futures = {
+            _get_executor().submit(
+                copy_context().run,
+                resolve_block_data,
+                None,
+                b,
+                cookie,
+                media_cache,
+            ): b
+            for b in live_blocks
+        }
+        done, pending = wait(futures, timeout=15)
+        for future in pending:
+            b = futures[future]
+            future.cancel()
+            log_event(
+                logger,
+                channel="application",
+                category="block",
+                event="block_resolve_failed",
+                level=logging.WARNING,
+                block_id=b.id,
+                source_type=b.source_type,
+                route=route,
+                reason="timeout",
+                duration_ms=round((time.perf_counter() - started_at[b.id]) * 1000, 2),
+            )
+            items.append({
+                "id": b.id, "title": b.title, "sort_order": b.sort_order,
+                "page_route": b.page_route,
+                "display_style": b.display_style, "display_count": b.display_count,
+                "source_type": b.source_type, "source_config": b.source_config or {},
+                "col_span": b.col_span, "row_span": b.row_span,
+                "grid_x": b.grid_x, "grid_y": b.grid_y,
+                "data": [],
+            })
+        for future in done:
             b = futures[future]
             try:
-                data = future.result(timeout=15)
-            except TimeoutError:
-                logger.warning("Block %s (type=%s) timed out after 15s", b.id, b.source_type)
-                data = []
-            except Exception:
-                logger.warning("Block %s (type=%s) failed", b.id, b.source_type, exc_info=True)
+                data = future.result()
+            except Exception as exc:
+                log_event(
+                    logger,
+                    channel="application",
+                    category="block",
+                    event="block_resolve_failed",
+                    level=logging.WARNING,
+                    block_id=b.id,
+                    source_type=b.source_type,
+                    route=route,
+                    reason="exception",
+                    exception_type=type(exc).__name__,
+                    duration_ms=round((time.perf_counter() - started_at[b.id]) * 1000, 2),
+                )
                 data = []
             items.append({
                 "id": b.id, "title": b.title, "sort_order": b.sort_order,
