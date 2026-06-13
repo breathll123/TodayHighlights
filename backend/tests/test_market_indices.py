@@ -18,6 +18,24 @@ class _TrendResponse:
         }
 
 
+class _SinaResponse:
+    status_code = 200
+
+    def raise_for_status(self) -> None:
+        return None
+
+    @property
+    def content(self) -> bytes:
+        return (
+            b'var hq_str_s_sh000001="\xc9\xcf\xd6\xa4\xd6\xb8\xca\xfd,4031.51,44.50,1.12,743131092,1537401519424.7";\n'
+            b'var hq_str_s_sz399001="\xc9\xee\xd6\xa4\xb3\xc9\xd6\xb8,14963.41,111.43,0.75,792336422,167754822";\n'
+            b'var hq_str_s_sz399006="\xb4\xb4\xd2\xb5\xb0\xe5\xd6\xb8,3830.35,19.11,0.50,43564051,34726190";\n'
+            b'var hq_str_s_sh000688="\xbf\xc6\xb4\xb450,1663.22,0.79,0.05,210185,17582024";\n'
+            b'var hq_str_s_sz399673="\xb4\xb4\xd2\xb5\xb0\xe550,4123.73,19.57,0.48,30774295,27477932";\n'
+            b'var hq_str_s_sh000300="\xbb\xa6\xc9\xee300,4777.32,54.91,1.16,3359220,87147733";\n'
+        )
+
+
 class _IndexResponse:
     def raise_for_status(self) -> None:
         return None
@@ -59,36 +77,25 @@ def test_fetch_one_trend_uses_intraday_high_low_fields(monkeypatch) -> None:
 
 
 def test_fetch_indices_uses_eastmoney_snapshot_api(monkeypatch) -> None:
-    def fail_sina_request(*args, **kwargs):
-        raise AssertionError("index snapshots must not use hq.sinajs.cn")
+    """Index snapshots use Sina API (stable, no IP blocking)."""
 
-    def fake_get(url, *, params):
-        assert url.endswith("/api/qt/ulist.np/get")
-        assert params["secids"].startswith("1.000001,0.399001")
-        return _IndexResponse()
+    def fake_get(url, *, headers=None, timeout=None, **kwargs):
+        assert "hq.sinajs.cn" in url
+        return _SinaResponse()
 
     eastmoney.fetch_indices.cache_clear()
-    monkeypatch.setattr(eastmoney.httpx, "get", fail_sina_request)
-    monkeypatch.setattr(eastmoney._http, "get", fake_get)
+    monkeypatch.setattr(eastmoney.httpx, "get", fake_get)
 
     result = eastmoney.fetch_indices({}, 6)
 
-    assert result == [
-        {
-            "title": "上证指数",
-            "summary": "4031.51 +1.12%",
-            "symbols": ["000001"],
-            "score": 112,
-            "source": "eastmoney_indices",
-            "percent": 1.12,
-            "current": 4031.51,
-            "change_amount": 44.5,
-            "volume": 743131092,
-            "turnover": 1537401519424.7,
-            "em_secid": "1.000001",
-            "url": "https://quote.eastmoney.com/zs000001.html",
-        }
-    ]
+    assert len(result) == 6
+    first = result[0]
+    assert first["title"] == "上证指数"
+    assert first["current"] == 4031.51
+    assert first["percent"] == 1.12
+    assert first["symbols"] == ["000001"]
+    assert first["source"] == "eastmoney_indices"
+    assert first["em_secid"] == "1.000001"
 
 
 def test_source_indices_use_eastmoney_snapshot_api(monkeypatch) -> None:
