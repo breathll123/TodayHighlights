@@ -1,5 +1,6 @@
 import gzip
 import json
+import logging
 
 import httpx
 import pytest
@@ -47,7 +48,8 @@ def _make_run(session) -> AASyncRun:
     return run
 
 
-def test_collect_language_follows_has_more_and_persists_each_page_before_decode(session):
+def test_collect_language_follows_has_more_and_persists_each_page_before_decode(session, caplog):
+    caplog.set_level(logging.INFO)
     page_1 = {
         "tier": "free",
         "intelligence_index_version": 4,
@@ -73,6 +75,15 @@ def test_collect_language_follows_has_more_and_persists_each_page_before_decode(
     result = collector.collect(run, DATASETS["language_global"])
     assert len(result.snapshot_ids) == 2
     assert len(result.payloads) == 2
+    events = [
+        record
+        for record in caplog.records
+        if getattr(record, "event", "") == "aa_page_collected"
+    ]
+    assert [record.event_fields["page"] for record in events] == [1, 2]
+    assert all(record.event_fields["dataset_key"] == "language_global" for record in events)
+    assert all(record.event_fields["ai_job_id"] == run.id for record in events)
+    assert all(record.event_fields["response_bytes"] > 0 for record in events)
 
 
 def test_collect_saves_only_allowlisted_headers(session):
@@ -110,7 +121,8 @@ def test_collect_stops_before_next_request_at_quota_reserve(session):
     assert len(result.snapshot_ids) == 1  # first request succeeded, would stop before second
 
 
-def test_collect_handles_429(session):
+def test_collect_handles_429(session, caplog):
+    caplog.set_level(logging.INFO)
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(429, request=request,
                               headers={"Retry-After": "60", "Content-Type": "application/json"})
@@ -121,6 +133,15 @@ def test_collect_handles_429(session):
     with pytest.raises(UpstreamRateLimited) as exc:
         collector.collect(run, DATASETS["text_to_image"])
     assert exc.value.retry_after_seconds == 60
+    failed = [
+        record
+        for record in caplog.records
+        if getattr(record, "event", "") == "aa_request_failed"
+    ]
+    assert len(failed) == 1
+    assert failed[0].event_fields["stage"] == "rate_limit"
+    assert failed[0].event_fields["dataset_key"] == "text_to_image"
+    assert "x-api-key" not in str(failed[0].event_fields).lower()
 
 
 def test_collect_rejects_body_over_limit(session, monkeypatch):

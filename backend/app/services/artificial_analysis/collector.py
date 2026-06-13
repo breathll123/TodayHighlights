@@ -1,5 +1,6 @@
 import gzip
 import json
+import logging
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -10,8 +11,11 @@ import httpx
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.core.logging import bind_log_context, log_event
 from app.models.entities import AARawSnapshot, AASyncRun
 from app.services.artificial_analysis.constants import DatasetDefinition
+
+logger = logging.getLogger("today_highlights.artificial_analysis")
 
 
 @dataclass(frozen=True)
@@ -158,80 +162,193 @@ class ArtificialAnalysisCollector:
         last_quota: QuotaState | None = None
 
         try:
-            while page <= pages_to_fetch:
+            with bind_log_context(ai_job_id=run.id):
+                while page <= pages_to_fetch:
+                    request_started = time.perf_counter()
+                    stage = "quota"
                 # Quota check before next request (first request always proceeds)
-                if page > 1:
-                    self._check_quota(run)
-
-                headers = {"x-api-key": self._api_key}
-                params = {"page": page} if definition.paginated else {}
-
-                response = client.get(url, headers=headers, params=params)
-
-                # Check rate limit
-                if response.status_code == 429:
-                    retry_after = None
-                    raw = response.headers.get("retry-after")
-                    if raw and raw.isdigit():
-                        retry_after = int(raw)
-                    raise UpstreamRateLimited(retry_after)
-
-                # Check size before reading all bytes
-                if response.status_code == 200:
-                    content_length = response.headers.get("content-length")
-                    if content_length and content_length.isdigit():
-                        if int(content_length) > settings.artificial_analysis_max_response_bytes:
-                            raise ResponseTooLarge(
-                                f"Response {int(content_length)} bytes exceeds limit"
+                    if page > 1:
+                        try:
+                            self._check_quota(run)
+                        except QuotaReserveReached as exc:
+                            log_event(
+                                logger,
+                                channel="application",
+                                category="ai",
+                                event="aa_request_failed",
+                                level=logging.WARNING,
+                                dataset_key=definition.key,
+                                page=page,
+                                stage=stage,
+                                exception_type=type(exc).__name__,
+                                message=str(exc),
                             )
+                            raise
 
-                body_bytes = response.read()
-                response.close()
+                    headers = {"x-api-key": self._api_key}
+                    params = {"page": page} if definition.paginated else {}
+                    log_event(
+                        logger,
+                        channel="application",
+                        category="ai",
+                        event="aa_request_started",
+                        dataset_key=definition.key,
+                        page=page,
+                        endpoint=definition.endpoint,
+                    )
 
-                # Persist snapshot before decoding
-                snapshot_id = self._persist_snapshot(run, definition, page, response, body_bytes)
-                snapshot_ids.append(snapshot_id)
+                    stage = "transport"
+                    try:
+                        response = client.get(url, headers=headers, params=params)
+                    except Exception as exc:
+                        log_event(
+                            logger,
+                            channel="application",
+                            category="ai",
+                            event="aa_request_failed",
+                            level=logging.ERROR,
+                            dataset_key=definition.key,
+                            page=page,
+                            stage=stage,
+                            exception_type=type(exc).__name__,
+                            message=str(exc),
+                            duration_ms=round((time.perf_counter() - request_started) * 1000, 2),
+                        )
+                        raise
 
-                # Update quota from response headers
-                safe_hdrs = _safe_headers(response)
-                last_quota = _parse_quota_from_headers(safe_hdrs)
-                run.quota_tier = last_quota.tier or run.quota_tier
-                run.quota_limit = last_quota.limit
-                run.quota_remaining = last_quota.remaining
-                run.quota_reset_at = last_quota.reset_at
-                run.request_count = (run.request_count or 0) + 1
-                run.heartbeat_at = datetime.utcnow()
+                    # Check rate limit
+                    if response.status_code == 429:
+                        retry_after = None
+                        raw = response.headers.get("retry-after")
+                        if raw and raw.isdigit():
+                            retry_after = int(raw)
+                        exc = UpstreamRateLimited(retry_after)
+                        log_event(
+                            logger,
+                            channel="application",
+                            category="ai",
+                            event="aa_request_failed",
+                            level=logging.WARNING,
+                            dataset_key=definition.key,
+                            page=page,
+                            stage="rate_limit",
+                            status=429,
+                            retry_after_seconds=retry_after,
+                            exception_type=type(exc).__name__,
+                            message=str(exc),
+                            duration_ms=round((time.perf_counter() - request_started) * 1000, 2),
+                        )
+                        raise exc
 
-                # Decode after persistence
-                if response.status_code != 200:
-                    response.request = None  # avoid logging api key
-                    break
+                    # Check size before reading all bytes
+                    if response.status_code == 200:
+                        content_length = response.headers.get("content-length")
+                        if content_length and content_length.isdigit():
+                            if int(content_length) > settings.artificial_analysis_max_response_bytes:
+                                exc = ResponseTooLarge(
+                                    f"Response {int(content_length)} bytes exceeds limit"
+                                )
+                                log_event(
+                                    logger,
+                                    channel="application",
+                                    category="ai",
+                                    event="aa_request_failed",
+                                    level=logging.WARNING,
+                                    dataset_key=definition.key,
+                                    page=page,
+                                    stage="size",
+                                    status=response.status_code,
+                                    response_bytes=int(content_length),
+                                    exception_type=type(exc).__name__,
+                                    message=str(exc),
+                                )
+                                raise exc
 
-                if not body_bytes:
-                    break
+                    body_bytes = response.read()
+                    response.close()
 
-                try:
-                    payload = json.loads(body_bytes)
-                except Exception:
-                    # Mark snapshot parse_status failed but continue
-                    self.session.commit()
-                    break
+                    # Persist snapshot before decoding
+                    snapshot_id = self._persist_snapshot(run, definition, page, response, body_bytes)
+                    snapshot_ids.append(snapshot_id)
 
-                if not isinstance(payload, dict):
-                    break
+                    # Update quota from response headers
+                    safe_hdrs = _safe_headers(response)
+                    last_quota = _parse_quota_from_headers(safe_hdrs)
+                    run.quota_tier = last_quota.tier or run.quota_tier
+                    run.quota_limit = last_quota.limit
+                    run.quota_remaining = last_quota.remaining
+                    run.quota_reset_at = last_quota.reset_at
+                    run.request_count = (run.request_count or 0) + 1
+                    run.heartbeat_at = datetime.utcnow()
+                    log_event(
+                        logger,
+                        channel="application",
+                        category="ai",
+                        event="aa_page_collected",
+                        dataset_key=definition.key,
+                        page=page,
+                        endpoint=definition.endpoint,
+                        status=response.status_code,
+                        response_bytes=len(body_bytes),
+                        snapshot_id=snapshot_id,
+                        tier=last_quota.tier or "-",
+                        quota_remaining=last_quota.remaining,
+                        duration_ms=round((time.perf_counter() - request_started) * 1000, 2),
+                    )
 
-                payloads.append(payload)
-                tier = str(payload.get("tier") or tier)
-                source_version = str(payload.get("intelligence_index_version") or source_version)
+                    # Decode after persistence
+                    if response.status_code != 200:
+                        response.request = None  # avoid retaining api key
+                        break
 
-                # Handle pagination
-                if definition.paginated:
-                    pagination = payload.get("pagination")
-                    if isinstance(pagination, dict) and pagination.get("has_more"):
-                        pages_to_fetch = max(pages_to_fetch, page + 1)
-                page += 1
+                    if not body_bytes:
+                        break
 
-                # Note: quota check moved to top of next loop iteration
+                    try:
+                        payload = json.loads(body_bytes)
+                    except Exception as exc:
+                        log_event(
+                            logger,
+                            channel="application",
+                            category="ai",
+                            event="aa_request_failed",
+                            level=logging.WARNING,
+                            dataset_key=definition.key,
+                            page=page,
+                            stage="decode",
+                            snapshot_id=snapshot_id,
+                            exception_type=type(exc).__name__,
+                            message=str(exc),
+                        )
+                        self.session.commit()
+                        break
+
+                    if not isinstance(payload, dict):
+                        log_event(
+                            logger,
+                            channel="application",
+                            category="ai",
+                            event="aa_request_failed",
+                            level=logging.WARNING,
+                            dataset_key=definition.key,
+                            page=page,
+                            stage="decode",
+                            snapshot_id=snapshot_id,
+                            exception_type="TypeError",
+                            message="response root must be an object",
+                        )
+                        break
+
+                    payloads.append(payload)
+                    tier = str(payload.get("tier") or tier)
+                    source_version = str(payload.get("intelligence_index_version") or source_version)
+
+                    # Handle pagination
+                    if definition.paginated:
+                        pagination = payload.get("pagination")
+                        if isinstance(pagination, dict) and pagination.get("has_more"):
+                            pages_to_fetch = max(pages_to_fetch, page + 1)
+                    page += 1
 
         finally:
             client.close()
