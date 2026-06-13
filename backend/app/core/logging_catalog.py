@@ -36,9 +36,11 @@ _COMMON_FIELD_ORDER = (
     "client_ip",
     "url_hash",
     "status",
+    "content_type",
     "retry_after_seconds",
     "reason",
     "stage",
+    "attempt",
     "fallback",
     "slow",
     "page",
@@ -70,6 +72,7 @@ _COMMON_FIELD_ORDER = (
     "output_keys",
     "bytes",
     "duration_ms",
+    "error_type",
     "exception_type",
     "message",
     "source_id",
@@ -183,6 +186,16 @@ EVENT_SPECS = {
     )
     for event, description in _EVENT_DESCRIPTIONS.items()
 }
+EVENT_SPECS["upstream.completed"] = EventSpec(
+    description=_EVENT_DESCRIPTIONS["upstream.completed"],
+    field_order=_COMMON_FIELD_ORDER,
+    expanded_fields=("url",),
+)
+EVENT_SPECS["upstream.failed"] = EventSpec(
+    description=_EVENT_DESCRIPTIONS["upstream.failed"],
+    field_order=_COMMON_FIELD_ORDER,
+    expanded_fields=("url", "request_headers", "response_preview"),
+)
 
 _FALLBACK_SPEC = EventSpec(description="业务事件", field_order=())
 

@@ -155,7 +155,7 @@ def test_formatter_keeps_unlisted_fields_in_insertion_order():
     assert details.index("zebra=1") < details.index("alpha=2")
 
 
-def test_failure_url_and_response_preview_are_expanded_and_redacted():
+def test_upstream_failure_details_are_expanded_and_redacted():
     formatter = StructuredTextFormatter()
     record = build_event_record(
         logging.ERROR,
@@ -165,18 +165,40 @@ def test_failure_url_and_response_preview_are_expanded_and_redacted():
         provider="example",
         status=502,
         url="https://example.test/data?token=secret-value",
+        request_headers={"user-agent": "DataFlow", "referer": "token=referer-secret"},
         response_preview="authorization=Bearer private-value\nbad gateway",
     )
 
     lines = formatter.format(record).splitlines()
 
-    assert len(lines) == 4
+    assert len(lines) == 5
     assert "provider=example status=502" in lines[1]
     assert lines[2].startswith("  url=")
-    assert lines[3].startswith("  response_preview=")
+    assert lines[3].startswith("  request_headers=")
+    assert lines[4].startswith("  response_preview=")
     assert "secret-value" not in lines[2]
-    assert "private-value" not in lines[3]
-    assert "\\nbad gateway" in lines[3]
+    assert "referer-secret" not in lines[3]
+    assert "private-value" not in lines[4]
+    assert "\\nbad gateway" in lines[4]
+
+
+def test_upstream_success_url_is_expanded():
+    formatter = StructuredTextFormatter()
+    record = build_event_record(
+        logging.INFO,
+        channel="application",
+        category="crawler",
+        event="upstream.completed",
+        provider="example",
+        status=200,
+        url="https://example.test/data?page=2",
+    )
+
+    lines = formatter.format(record).splitlines()
+
+    assert len(lines) == 3
+    assert "provider=example status=200" in lines[1]
+    assert lines[2] == "  url=https://example.test/data?page=2"
 
 
 def test_canonical_categories_share_event_column_without_truncation():

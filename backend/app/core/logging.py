@@ -18,15 +18,18 @@ from pathlib import Path
 from queue import Full, Queue
 from typing import Any, Callable, Iterator
 
-from app.core.config import SH_TZ
+from app.core.config import SH_TZ, settings
 from app.core.logging_catalog import event_spec
+from app.core.logging_safety import (
+    SENSITIVE_KEYS,
+    redact_text,
+    response_preview,
+    safe_request_headers,
+    sanitize_fields,
+    sanitize_url,
+)
 
 _LOG_CONTEXT: ContextVar[dict[str, Any]] = ContextVar("log_context", default={})
-
-SENSITIVE_KEYS = {
-    "api_key", "x-api-key", "authorization", "cookie", "set-cookie",
-    "password", "secret", "token", "access_token", "refresh_token",
-}
 
 
 @contextmanager
@@ -42,43 +45,6 @@ def bind_log_context(**fields: Any) -> Iterator[None]:
 
 def current_log_context() -> dict[str, Any]:
     return dict(_LOG_CONTEXT.get())
-
-
-def redact_text(value: str) -> str:
-    text = value
-    text = re.sub(r"(?i)(Bearer\s+)[^\s,;]+", r"\1[REDACTED]", text)
-    text = re.sub(
-        r"(?i)\b(mysql(?:\+pymysql)?|redis|rediss)://([^:/@\s]+):([^@\s]+)@",
-        r"\1://\2:[REDACTED]@",
-        text,
-    )
-    text = re.sub(
-        r"(?i)\b(api[_-]?key|x-api-key|authorization|cookie|password|secret|token)"
-        r"\s*[:=]\s*[^\s,;]+",
-        lambda match: f"{match.group(1)}=[REDACTED]",
-        text,
-    )
-    return text
-
-
-def sanitize_fields(fields: dict[str, Any]) -> dict[str, Any]:
-    sanitized: dict[str, Any] = {}
-    for key, value in fields.items():
-        lowered = key.lower()
-        if lowered in SENSITIVE_KEYS or any(part in lowered for part in ("password", "secret", "token", "api_key")):
-            sanitized[key] = "[REDACTED]"
-        elif isinstance(value, str):
-            sanitized[key] = redact_text(value)
-        elif isinstance(value, dict):
-            sanitized[key] = sanitize_fields(value)
-        elif isinstance(value, (list, tuple)):
-            sanitized[key] = [
-                sanitize_fields({"value": item})["value"] if isinstance(item, (str, dict)) else item
-                for item in value
-            ]
-        else:
-            sanitized[key] = value
-    return sanitized
 
 
 def build_event_record(
@@ -214,11 +180,17 @@ def observed_http_get(
     operation: str,
     host: str,
     path: str,
+    attempt: int = 1,
     **kwargs: Any,
 ) -> Any:
-    """Execute one HTTP GET while logging only allowlisted request metadata."""
+    """Execute one HTTP GET while logging safe request and response diagnostics."""
     started = time.perf_counter()
     logger = logging.getLogger("today_highlights.external")
+    query_mode = getattr(settings, "log_url_query_mode", "safe")
+    preview_chars = getattr(settings, "log_response_preview_chars", 500)
+    detail_crawler = getattr(settings, "log_detail_crawler", True)
+    safe_url = sanitize_url(url, mode=query_mode)
+    request_headers = safe_request_headers(kwargs.get("headers"))
     try:
         response = get(url, **kwargs)
     except Exception as exc:
@@ -226,35 +198,99 @@ def observed_http_get(
             logger,
             channel="application",
             category="crawler",
-            event="external_request_failed",
+            event="upstream.failed",
             level=logging.WARNING,
             provider=provider,
             operation=operation,
             host=host,
             path=path,
+            url=safe_url,
+            request_headers=request_headers,
+            attempt=attempt,
             stage="transport",
-            exception_type=type(exc).__name__,
+            error_type=type(exc).__name__,
             duration_ms=round((time.perf_counter() - started) * 1000, 2),
         )
         raise
 
     status = int(getattr(response, "status_code", 0) or 0)
+    response_bytes = _response_bytes(response)
+    content_type = _response_content_type(response)
+    duration_ms = round((time.perf_counter() - started) * 1000, 2)
     failed = status >= 400
+    fields: dict[str, Any] = {
+        "provider": provider,
+        "operation": operation,
+        "host": host,
+        "path": path,
+        "status": status,
+        "attempt": attempt,
+        "duration_ms": duration_ms,
+        "response_bytes": response_bytes,
+        "content_type": content_type,
+    }
+    if failed:
+        fields.update(
+            url=safe_url,
+            request_headers=request_headers,
+            response_preview=response_preview(
+                _response_text(response),
+                max_chars=preview_chars,
+            ),
+            stage="status",
+        )
+    elif detail_crawler:
+        fields["url"] = safe_url
+
     log_event(
         logger,
         channel="application",
         category="crawler",
-        event="external_request_failed" if failed else "external_request_finished",
+        event="upstream.failed" if failed else "upstream.completed",
         level=logging.WARNING if failed else logging.INFO,
-        provider=provider,
-        operation=operation,
-        host=host,
-        path=path,
-        stage="status" if failed else "response",
-        status=status,
-        duration_ms=round((time.perf_counter() - started) * 1000, 2),
+        **fields,
     )
     return response
+
+
+def _response_bytes(response: Any) -> int:
+    content = getattr(response, "content", None)
+    if content is not None:
+        if isinstance(content, str):
+            return len(content.encode())
+        try:
+            return len(content)
+        except TypeError:
+            return 0
+
+    text = getattr(response, "text", None)
+    if text is None:
+        return 0
+    return len(str(text).encode())
+
+
+def _response_content_type(response: Any) -> str:
+    headers = getattr(response, "headers", None)
+    if not headers:
+        return ""
+    if hasattr(headers, "items"):
+        for key, value in headers.items():
+            if str(key).lower() == "content-type":
+                return str(value)
+    if hasattr(headers, "get"):
+        return str(headers.get("Content-Type") or headers.get("content-type") or "")
+    return ""
+
+
+def _response_text(response: Any) -> str:
+    text = getattr(response, "text", None)
+    if text is not None:
+        return str(text)
+
+    content = getattr(response, "content", b"")
+    if isinstance(content, bytes):
+        return content.decode(errors="replace")
+    return str(content or "")
 
 
 # Rate-limited logging
