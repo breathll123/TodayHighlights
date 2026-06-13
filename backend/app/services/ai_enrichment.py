@@ -1,7 +1,12 @@
+import logging
 from datetime import datetime, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+
+from app.core.logging import bind_log_context, log_event
+
+logger = logging.getLogger("today_highlights.ai")
 
 from app.core.config import settings
 from app.core.crypto import CryptoService
@@ -185,14 +190,28 @@ def process_item_enrichment(
             post_json=post_json,
         )
 
-        # Call AI - need to run async in sync context
-        import asyncio
+        # Create AI job before call
+        job = _build_job(
+            job_type="item_enrichment", trigger_type=trigger_type, status="processing",
+            topic_id=enrichment.topic_id, raw_item_id=enrichment.raw_item_id,
+            item_enrichment_id=enrichment.id, model_config_id=model_cfg.id,
+            input_count=1, started_at=datetime.utcnow(),
+        )
+        session.add(job)
+        session.flush()
 
-        raw = session.get(RawItem, raw_item)
-        if raw is None:
-            raise ValueError("Raw item not found")
+        with bind_log_context(ai_job_id=job.id):
+            log_event(logger, channel="application", category="ai", event="ai_enrichment_started",
+                      enrichment_id=enrichment.id, model=model_cfg.model)
 
-        result = asyncio.run(
+            # Call AI - need to run async in sync context
+            import asyncio
+
+            raw = session.get(RawItem, raw_item)
+            if raw is None:
+                raise ValueError("Raw item not found")
+
+            result = asyncio.run(
             client.complete_json(
                 ITEM_SYSTEM_PROMPT,
                 item_user_prompt(
@@ -224,43 +243,36 @@ def process_item_enrichment(
         # Sync to highlight
         sync_highlight_from_enrichment(session, enrichment)
 
-        # Log success job
-        job = _build_job(
-            job_type="item_enrichment",
-            trigger_type=trigger_type,
-            status="succeeded",
-            topic_id=enrichment.topic_id,
-            raw_item_id=enrichment.raw_item_id,
-            item_enrichment_id=enrichment.id,
-            model_config_id=model_cfg.id,
-            input_count=1,
-            success_count=1,
-            retry_of_job_id=retry_of_job_id,
-            started_at=started_at,
-            finished_at=datetime.utcnow(),
-        )
-        session.add(job)
+        # Update job to succeeded
+        job.status = "succeeded"
+        job.success_count = 1
+        job.finished_at = datetime.utcnow()
+        log_event(logger, channel="application", category="ai", event="ai_enrichment_finished",
+                  enrichment_id=enrichment.id, model=model_cfg.model)
 
     except Exception as exc:
         enrichment.status = "failed"
         enrichment.error_message = str(exc)[:500]
         session.flush()
 
-        # Log failure job
-        job = _build_job(
-            job_type="item_enrichment",
-            trigger_type=trigger_type,
-            status="failed",
-            topic_id=enrichment.topic_id,
-            raw_item_id=enrichment.raw_item_id,
-            item_enrichment_id=enrichment.id,
-            model_config_id=model_cfg.id if model_cfg else None,
-            retry_of_job_id=retry_of_job_id,
-            error_message=str(exc)[:500],
-            started_at=started_at,
-            finished_at=datetime.utcnow(),
-        )
-        session.add(job)
+        log_event(logger, channel="application", category="ai", event="ai_enrichment_failed",
+                  level=logging.ERROR, enrichment_id=enrichment.id,
+                  exception_type=type(exc).__name__, message=str(exc)[:500])
+
+        # Log failure job (job may already exist from pre-AI creation)
+        try:
+            job = _build_job(
+                job_type="item_enrichment", trigger_type=trigger_type, status="failed",
+                topic_id=enrichment.topic_id, raw_item_id=enrichment.raw_item_id,
+                item_enrichment_id=enrichment.id,
+                model_config_id=model_cfg.id if model_cfg else None,
+                retry_of_job_id=retry_of_job_id,
+                error_message=str(exc)[:500],
+                started_at=started_at, finished_at=datetime.utcnow(),
+            )
+            session.add(job)
+        except UnboundLocalError:
+            pass  # job not created yet
 
     return enrichment
 

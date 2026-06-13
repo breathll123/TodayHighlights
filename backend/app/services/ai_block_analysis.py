@@ -7,8 +7,13 @@ from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+import logging
+
 from app.core.config import settings
 from app.core.crypto import CryptoService
+from app.core.logging import bind_log_context, log_event
+
+logger = logging.getLogger("today_highlights.ai")
 from app.models.entities import AIGenerationJob, AIBlockAnalysis, AITokenUsage, PageBlock, User
 from app.schemas.ai_block_analysis import BlockAnalysisValidated
 from app.services.ai_block_prompts import (
@@ -192,6 +197,10 @@ def analyze_block(
     session.add(job)
     session.flush()
 
+    with bind_log_context(ai_job_id=job.id, user_id=user.id):
+        log_event(logger, channel="application", category="ai", event="block_analysis_started",
+                  block_id=block_id, model=model_cfg.model)
+
     try:
         crypto = CryptoService(settings.app_secret_key)
         client = AIClient(model_cfg.base_url, crypto.decrypt(model_cfg.api_key_encrypted), model_cfg.model, post_json=post_json)
@@ -214,6 +223,8 @@ def analyze_block(
         job.status = "succeeded"
         job.success_count = 1
         job.finished_at = datetime.utcnow()
+        log_event(logger, channel="application", category="ai", event="block_analysis_finished",
+                  block_id=block_id, model=model_cfg.model, summary_points=len(validated.summary_points))
 
         usage = AITokenUsage(
             user_id=user.id,
@@ -240,5 +251,8 @@ def analyze_block(
         job.failed_count = 1
         job.error_message = str(exc)[:500]
         job.finished_at = datetime.utcnow()
+        log_event(logger, channel="application", category="ai", event="block_analysis_failed",
+                  level=logging.ERROR, block_id=block_id, exception_type=type(exc).__name__,
+                  message=str(exc)[:300])
     session.flush()
     return analysis
