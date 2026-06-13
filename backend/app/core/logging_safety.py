@@ -29,10 +29,67 @@ _SAFE_REQUEST_HEADER_NAMES = {
     "content-type",
     "accept",
 }
+_JSON_SENSITIVE_KEY_PATTERN = (
+    r"api[_-]?key|x-api-key|access_token|refresh_token|authorization|cookie|"
+    r"password|passwd|secret|token|session|signature|sign|credential"
+)
+_JSON_PRIMITIVE_PATTERN = r"-?(?:\d+(?:\.\d+)?(?:[eE][+-]?\d+)?|true|false|null)"
+_JSON_SENSITIVE_FIELD_RE = re.compile(
+    rf"""
+    (?P<prefix>
+        (?P<key_quote>["'])
+        (?:{_JSON_SENSITIVE_KEY_PATTERN})
+        (?P=key_quote)
+        \s*:\s*
+    )
+    (?P<value>
+        "(?:\\.|[^"\\])*"
+        |
+        '(?:\\.|[^'\\])*'
+        |
+        {_JSON_PRIMITIVE_PATTERN}
+    )
+    """,
+    re.IGNORECASE | re.VERBOSE,
+)
+_ESCAPED_JSON_SENSITIVE_FIELD_RE = re.compile(
+    rf"""
+    (?P<prefix>
+        \\(?P<key_quote>["'])
+        (?:{_JSON_SENSITIVE_KEY_PATTERN})
+        \\(?P=key_quote)
+        \s*:\s*
+    )
+    (?P<value>
+        \\"(?:\\\\.|[^"\\])*\\"
+        |
+        \\'(?:\\\\.|[^'\\])*\\'
+        |
+        {_JSON_PRIMITIVE_PATTERN}
+    )
+    """,
+    re.IGNORECASE | re.VERBOSE,
+)
+
+
+def _redact_json_field(match: re.Match[str], *, escaped: bool = False) -> str:
+    value = match.group("value")
+    if escaped and value.startswith(('\\"', "\\'")):
+        replacement = f"\\{value[1]}[REDACTED]\\{value[1]}"
+    elif value.startswith(("\"", "'")):
+        replacement = f"{value[0]}[REDACTED]{value[0]}"
+    else:
+        replacement = r'\"[REDACTED]\"' if escaped else '"[REDACTED]"'
+    return f"{match.group('prefix')}{replacement}"
 
 
 def redact_text(value: str) -> str:
     text = value
+    text = _ESCAPED_JSON_SENSITIVE_FIELD_RE.sub(
+        lambda match: _redact_json_field(match, escaped=True),
+        text,
+    )
+    text = _JSON_SENSITIVE_FIELD_RE.sub(_redact_json_field, text)
     text = re.sub(
         r"(?i)\b(mysql(?:\+pymysql)?|redis|rediss)://([^:/@\s]+):([^@\s]+)@",
         r"\1://\2:[REDACTED]@",

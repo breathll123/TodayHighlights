@@ -113,6 +113,53 @@ def test_response_preview_redacts_collapses_whitespace_and_truncates():
     assert len(preview) == 42
 
 
+def test_redact_text_redacts_json_style_sensitive_fields():
+    text = (
+        '{"access_token":"access-secret","refresh_token":\'refresh-secret\','
+        '"password":1234,\'cookie\':null,"authorization":true,'
+        '"api_key":false,"secret":"nested-secret","signature":"signed-secret",'
+        '"message":"still readable"}'
+    )
+
+    redacted = redact_text(text)
+
+    assert redacted == (
+        '{"access_token":"[REDACTED]","refresh_token":\'[REDACTED]\','
+        '"password":"[REDACTED]",\'cookie\':"[REDACTED]",'
+        '"authorization":"[REDACTED]","api_key":"[REDACTED]",'
+        '"secret":"[REDACTED]","signature":"[REDACTED]",'
+        '"message":"still readable"}'
+    )
+    for secret in ("access-secret", "refresh-secret", "nested-secret", "signed-secret"):
+        assert secret not in redacted
+
+
+def test_redact_text_redacts_backslash_escaped_json_fields():
+    redacted = redact_text(
+        r'{\"access_token\":\"escaped-secret\",\"password\":null,\"ok\":true}'
+    )
+
+    assert redacted == (
+        r'{\"access_token\":\"[REDACTED]\",\"password\":\"[REDACTED]\",'
+        r'\"ok\":true}'
+    )
+    assert "escaped-secret" not in redacted
+
+
+def test_response_preview_redacts_json_body_and_keeps_readable_fields():
+    preview = response_preview(
+        ' { "access_token": "preview-secret", "status": 403, '
+        '"password": null, "allowed": true } ',
+        max_chars=500,
+    )
+
+    assert preview == (
+        '{ "access_token": "[REDACTED]", "status": 403, '
+        '"password": "[REDACTED]", "allowed": true }'
+    )
+    assert "preview-secret" not in preview
+
+
 def test_response_preview_returns_empty_when_disabled():
     assert response_preview("secret token=value", max_chars=0) == ""
     assert response_preview("secret token=value", max_chars=-1) == ""

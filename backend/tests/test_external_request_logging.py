@@ -142,6 +142,50 @@ def test_observed_http_get_logs_403_diagnostics(caplog, monkeypatch):
     )
 
 
+def test_observed_http_get_redacts_403_json_body(caplog, monkeypatch):
+    caplog.set_level(logging.INFO)
+    monkeypatch.setattr(
+        logging_core,
+        "settings",
+        SimpleNamespace(
+            log_url_query_mode="safe",
+            log_response_preview_chars=500,
+            log_detail_crawler=True,
+        ),
+        raising=False,
+    )
+    body = (
+        '{"access_token":"json-access-secret","password":"json-password-secret",'
+        '"signature":"json-signature-secret","status":403,"allowed":false}'
+    )
+
+    observed_http_get(
+        lambda _url, **_kwargs: _Response(
+            403,
+            content=body.encode(),
+            text=body,
+            headers={"Content-Type": "application/json"},
+        ),
+        "https://provider.example/api",
+        provider="example",
+        operation="ranking",
+        host="provider.example",
+        path="/api",
+    )
+
+    fields = _event_record(caplog, "upstream.failed").event_fields
+    assert fields["response_preview"] == (
+        '{"access_token":"[REDACTED]","password":"[REDACTED]",'
+        '"signature":"[REDACTED]","status":403,"allowed":false}'
+    )
+    for secret in (
+        "json-access-secret",
+        "json-password-secret",
+        "json-signature-secret",
+    ):
+        assert secret not in repr(fields)
+
+
 def test_observed_http_get_logs_transport_failure_and_reraises(caplog):
     caplog.set_level(logging.INFO)
 
