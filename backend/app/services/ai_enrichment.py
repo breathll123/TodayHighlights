@@ -178,32 +178,40 @@ def process_item_enrichment(
     raw_item = enrichment.raw_item_id
 
     started_at = datetime.utcnow()
+    job = _build_job(
+        job_type="item_enrichment",
+        trigger_type=trigger_type,
+        status="processing",
+        topic_id=enrichment.topic_id,
+        raw_item_id=enrichment.raw_item_id,
+        item_enrichment_id=enrichment.id,
+        model_config_id=model_cfg.id,
+        input_count=1,
+        retry_of_job_id=retry_of_job_id,
+        started_at=started_at,
+    )
+    session.add(job)
+    session.flush()
 
-    try:
-        # Decrypt API key and build client
-        crypto = CryptoService(settings.app_secret_key)
-        api_key = crypto.decrypt(model_cfg.api_key_encrypted)
-        client = AIClient(
-            base_url=model_cfg.base_url,
-            api_key=api_key,
+    with bind_log_context(ai_job_id=job.id):
+        log_event(
+            logger,
+            channel="application",
+            category="ai",
+            event="ai_enrichment_started",
+            enrichment_id=enrichment.id,
             model=model_cfg.model,
-            post_json=post_json,
         )
 
-        # Create AI job before call
-        job = _build_job(
-            job_type="item_enrichment", trigger_type=trigger_type, status="processing",
-            topic_id=enrichment.topic_id, raw_item_id=enrichment.raw_item_id,
-            item_enrichment_id=enrichment.id, model_config_id=model_cfg.id,
-            input_count=1, started_at=datetime.utcnow(),
-        )
-        session.add(job)
-        session.flush()
-
-        with bind_log_context(ai_job_id=job.id):
-            log_event(logger, channel="application", category="ai", event="ai_enrichment_started",
-                      enrichment_id=enrichment.id, model=model_cfg.model)
-
+        try:
+            crypto = CryptoService(settings.app_secret_key)
+            api_key = crypto.decrypt(model_cfg.api_key_encrypted)
+            client = AIClient(
+                base_url=model_cfg.base_url,
+                api_key=api_key,
+                model=model_cfg.model,
+                post_json=post_json,
+            )
             # Call AI - need to run async in sync context
             import asyncio
 
@@ -212,67 +220,65 @@ def process_item_enrichment(
                 raise ValueError("Raw item not found")
 
             result = asyncio.run(
-            client.complete_json(
-                ITEM_SYSTEM_PROMPT,
-                item_user_prompt(
-                    title=raw.title,
-                    source_name=raw.author or "未知来源",
-                    published_at=raw.published_at.isoformat() if raw.published_at else "",
-                    body=raw.body,
-                ),
+                client.complete_json(
+                    ITEM_SYSTEM_PROMPT,
+                    item_user_prompt(
+                        title=raw.title,
+                        source_name=raw.author or "未知来源",
+                        published_at=raw.published_at.isoformat() if raw.published_at else "",
+                        body=raw.body,
+                    ),
+                )
             )
-        )
 
-        # Validate
-        validated = validate_item_enrichment_payload(result)
+            validated = validate_item_enrichment_payload(result)
+            enrichment.generated_title = validated.title
+            enrichment.summary = validated.summary
+            enrichment.tags_json = validated.tags
+            enrichment.related_symbols_json = validated.related_symbols
+            enrichment.importance_score = validated.importance_score
+            enrichment.focus_points_json = validated.focus_points
+            enrichment.risk_points_json = validated.risk_points
+            enrichment.model_config_id = model_cfg.id
+            enrichment.generated_by_model = model_cfg.model
+            enrichment.generated_at = datetime.utcnow()
+            enrichment.status = "generated"
+            session.flush()
 
-        # Save generated fields
-        enrichment.generated_title = validated.title
-        enrichment.summary = validated.summary
-        enrichment.tags_json = validated.tags
-        enrichment.related_symbols_json = validated.related_symbols
-        enrichment.importance_score = validated.importance_score
-        enrichment.focus_points_json = validated.focus_points
-        enrichment.risk_points_json = validated.risk_points
-        enrichment.model_config_id = model_cfg.id
-        enrichment.generated_by_model = model_cfg.model
-        enrichment.generated_at = datetime.utcnow()
-        enrichment.status = "generated"
-        session.flush()
+            sync_highlight_from_enrichment(session, enrichment)
 
-        # Sync to highlight
-        sync_highlight_from_enrichment(session, enrichment)
-
-        # Update job to succeeded
-        job.status = "succeeded"
-        job.success_count = 1
-        job.finished_at = datetime.utcnow()
-        log_event(logger, channel="application", category="ai", event="ai_enrichment_finished",
-                  enrichment_id=enrichment.id, model=model_cfg.model)
-
-    except Exception as exc:
-        enrichment.status = "failed"
-        enrichment.error_message = str(exc)[:500]
-        session.flush()
-
-        log_event(logger, channel="application", category="ai", event="ai_enrichment_failed",
-                  level=logging.ERROR, enrichment_id=enrichment.id,
-                  exception_type=type(exc).__name__, message=str(exc)[:500])
-
-        # Log failure job (job may already exist from pre-AI creation)
-        try:
-            job = _build_job(
-                job_type="item_enrichment", trigger_type=trigger_type, status="failed",
-                topic_id=enrichment.topic_id, raw_item_id=enrichment.raw_item_id,
-                item_enrichment_id=enrichment.id,
-                model_config_id=model_cfg.id if model_cfg else None,
-                retry_of_job_id=retry_of_job_id,
-                error_message=str(exc)[:500],
-                started_at=started_at, finished_at=datetime.utcnow(),
+            job.status = "succeeded"
+            job.success_count = 1
+            job.finished_at = datetime.utcnow()
+            log_event(
+                logger,
+                channel="application",
+                category="ai",
+                event="ai_enrichment_finished",
+                enrichment_id=enrichment.id,
+                model=model_cfg.model,
             )
-            session.add(job)
-        except UnboundLocalError:
-            pass  # job not created yet
+
+        except Exception as exc:
+            error_message = str(exc)[:500]
+            enrichment.status = "failed"
+            enrichment.error_message = error_message
+            job.status = "failed"
+            job.failed_count = 1
+            job.error_message = error_message
+            job.finished_at = datetime.utcnow()
+            session.flush()
+
+            log_event(
+                logger,
+                channel="application",
+                category="ai",
+                event="ai_enrichment_failed",
+                level=logging.ERROR,
+                enrichment_id=enrichment.id,
+                exception_type=type(exc).__name__,
+                message=error_message,
+            )
 
     return enrichment
 

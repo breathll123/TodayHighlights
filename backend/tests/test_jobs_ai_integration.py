@@ -21,6 +21,10 @@ async def _fake_post_json(_payload: dict) -> dict:
     return FAKE_ITEM_RESPONSE
 
 
+async def _failing_post_json(_payload: dict) -> dict:
+    raise RuntimeError("upstream unavailable")
+
+
 def test_process_item_enrichment_creates_highlight_and_job(client) -> None:
     session = next(client.app.dependency_overrides[get_session]())
 
@@ -93,3 +97,62 @@ def test_process_item_enrichment_creates_highlight_and_job(client) -> None:
     assert job.status == "succeeded"
     assert job.job_type == "item_enrichment"
     assert job.trigger_type == "crawl"
+
+
+def test_process_item_enrichment_failure_updates_existing_job(client) -> None:
+    session = next(client.app.dependency_overrides[get_session]())
+    topic = Topic(name="股票", slug="stocks", sort_order=1, enabled=True)
+    session.add(topic)
+    session.flush()
+    source = Source(
+        topic_id=topic.id,
+        site="tonghuashun",
+        name="同花顺",
+        entry_url="https://example.com",
+        enabled=True,
+        enable_highlight=True,
+    )
+    session.add(source)
+    session.flush()
+    crypto = CryptoService(settings.app_secret_key)
+    model_cfg = AIModelConfig(
+        name="Test Model",
+        base_url="https://api.test.com/v1",
+        model="test-model",
+        api_key_encrypted=crypto.encrypt("test-api-key"),
+        is_default=True,
+        enabled=True,
+    )
+    session.add(model_cfg)
+    session.flush()
+    raw = RawItem(
+        source_id=source.id,
+        external_id="test-failure",
+        url="https://example.com/failure",
+        title="测试失败",
+        body="这是一条长度足够的测试正文，用于触发 AI 加工失败并验证任务状态不会永久停留在处理中。",
+        published_at=datetime.utcnow(),
+        metrics_json={},
+        content_hash="test-failure-hash",
+    )
+    session.add(raw)
+    session.commit()
+
+    enrichment = create_pending_enrichments(session, topic.id, [raw])[0]
+    result = process_item_enrichment(
+        session,
+        enrichment.id,
+        post_json=_failing_post_json,
+        trigger_type="crawl",
+    )
+    session.flush()
+
+    jobs = (
+        session.query(AIGenerationJob)
+        .filter(AIGenerationJob.item_enrichment_id == enrichment.id)
+        .all()
+    )
+    assert result.status == "failed"
+    assert len(jobs) == 1
+    assert jobs[0].status == "failed"
+    assert jobs[0].finished_at is not None

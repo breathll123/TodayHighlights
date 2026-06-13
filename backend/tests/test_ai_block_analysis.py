@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime, timedelta
 
 import pytest
@@ -6,7 +7,15 @@ from sqlalchemy import inspect
 from app.core.config import settings
 from app.core.crypto import CryptoService
 from app.core.database import get_session
-from app.models.entities import AIBlockAnalysis, AIModelConfig, AIPromptTemplate, PageBlock, Topic, User
+from app.models.entities import (
+    AIGenerationJob,
+    AIBlockAnalysis,
+    AIModelConfig,
+    AIPromptTemplate,
+    PageBlock,
+    Topic,
+    User,
+)
 from app.services.ai_block_analysis import analyze_block, build_block_data_hash, validate_block_analysis_payload
 from app.services.ai_client import AIClient
 from app.services.token_usage import estimate_tokens, extract_token_usage
@@ -119,9 +128,10 @@ def test_build_block_data_hash_is_stable():
     assert build_block_data_hash(data) == build_block_data_hash(list(data))
 
 
-def test_analyze_block_generates_and_records_token_usage(client):
+def test_analyze_block_generates_and_records_token_usage(client, caplog):
     session = next(client.app.dependency_overrides[get_session]())
     user, block = _seed_user_model_block(session)
+    caplog.set_level(logging.INFO)
 
     async def fake_post(payload):
         return {
@@ -144,6 +154,18 @@ def test_analyze_block_generates_and_records_token_usage(client):
     assert analysis.summary_points_json == ["多条内容集中在AI算力"]
     assert analysis.token_usage_id is not None
     assert analysis.generated_by_user_id == user.id
+    job = (
+        session.query(AIGenerationJob)
+        .filter(AIGenerationJob.block_analysis_id == analysis.id)
+        .one()
+    )
+    correlated_events = {
+        record.event: record.event_fields
+        for record in caplog.records
+        if getattr(record, "event", "") in {"ai_request_finished", "block_analysis_finished"}
+    }
+    assert correlated_events["ai_request_finished"]["ai_job_id"] == job.id
+    assert correlated_events["block_analysis_finished"]["ai_job_id"] == job.id
 
 
 def test_analyze_block_uses_valid_cache(client):

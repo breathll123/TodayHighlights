@@ -1,8 +1,11 @@
 import logging
+from io import StringIO
 from pathlib import Path
+from queue import Queue
 
 from app.core.logging import (
     LoggingConfig,
+    SafeQueueHandler,
     StructuredTextFormatter,
     bind_log_context,
     build_event_record,
@@ -128,9 +131,41 @@ def test_hourly_and_daily_rotation_configuration(tmp_path):
         assert daily.file_handlers[0].when == "MIDNIGHT"
         assert hourly.file_handlers[0].when == "H"
         assert daily.file_handlers[0].backupCount == 14
+        assert hourly.file_handlers[0].backupCount == 14 * 24
     finally:
         daily.stop()
         hourly.stop()
+
+
+def test_console_event_is_emitted_once(tmp_path):
+    stream = StringIO()
+    runtime = create_logging_runtime(_config(tmp_path, console_enabled=True))
+    runtime.start()
+    assert runtime.console_handler is not None
+    runtime.console_handler.setStream(stream)
+    try:
+        log_event(logging.getLogger("test.console"), event="console_once")
+    finally:
+        runtime.stop()
+
+    assert stream.getvalue().count("event=console_once") == 1
+
+
+def test_queue_overflow_warning_uses_direct_fallback():
+    queue = Queue(maxsize=1)
+    queue.put(build_event_record(logging.INFO, channel="application", event="already_full"))
+    stream = StringIO()
+    fallback = logging.StreamHandler(stream)
+    fallback.setFormatter(StructuredTextFormatter())
+    handler = SafeQueueHandler(queue, error_fallback=fallback)
+
+    handler.enqueue(
+        build_event_record(logging.INFO, channel="application", event="dropped_event")
+    )
+
+    text = stream.getvalue()
+    assert "event=logging_queue_full" in text
+    assert "dropped_event" not in text
 
 
 def test_unwritable_directory_falls_back_to_console(monkeypatch, tmp_path):
@@ -168,3 +203,25 @@ def test_error_record_preserves_exception_stack(tmp_path):
     text = (tmp_path / "error.log").read_text()
     assert "RuntimeError: boom" in text
     assert "Traceback" in text
+
+
+def test_error_stack_redacts_connection_credentials(tmp_path):
+    runtime = create_logging_runtime(_config(tmp_path))
+    runtime.start()
+    try:
+        try:
+            raise RuntimeError("mysql+pymysql://user:secret-value@db/app")
+        except RuntimeError:
+            log_event(
+                logging.getLogger("test.exception.redaction"),
+                channel="error",
+                event="unhandled_exception",
+                level=logging.ERROR,
+                exc_info=True,
+            )
+    finally:
+        runtime.stop()
+
+    text = (tmp_path / "error.log").read_text()
+    assert "secret-value" not in text
+    assert "[REDACTED]" in text

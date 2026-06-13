@@ -209,7 +209,8 @@ def analyze_block(
         template = get_enabled_prompt_template(session, topic_slug, content_class)
         system_prompt = build_block_system_prompt(topic_slug, content_class, template)
         prompt = block_user_prompt(block, data)
-        result = asyncio.run(client.complete_json_with_usage(system_prompt, prompt))
+        with bind_log_context(ai_job_id=job.id, user_id=user.id):
+            result = asyncio.run(client.complete_json_with_usage(system_prompt, prompt))
         validated = validate_block_analysis_payload(result.content)
 
         analysis.summary_points_json = validated.summary_points
@@ -224,7 +225,8 @@ def analyze_block(
         job.success_count = 1
         job.finished_at = datetime.utcnow()
         log_event(logger, channel="application", category="ai", event="block_analysis_finished",
-                  block_id=block_id, model=model_cfg.model, summary_points=len(validated.summary_points))
+                  ai_job_id=job.id, user_id=user.id, block_id=block_id,
+                  model=model_cfg.model, summary_points=len(validated.summary_points))
 
         usage = AITokenUsage(
             user_id=user.id,
@@ -252,7 +254,7 @@ def analyze_block(
         job.error_message = str(exc)[:500]
         job.finished_at = datetime.utcnow()
         log_event(logger, channel="application", category="ai", event="block_analysis_failed",
-                  level=logging.ERROR, block_id=block_id, exception_type=type(exc).__name__,
-                  message=str(exc)[:300])
+                  level=logging.ERROR, ai_job_id=job.id, user_id=user.id,
+                  block_id=block_id, exception_type=type(exc).__name__, message=str(exc)[:300])
     session.flush()
     return analysis

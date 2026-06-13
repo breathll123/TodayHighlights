@@ -137,7 +137,8 @@ class StructuredTextFormatter(logging.Formatter):
             line += " truncated=true"
 
         if record.exc_info and record.exc_info[1]:
-            line += "\n" + self.formatException(record.exc_info)
+            exc_text = redact_text(self.formatException(record.exc_info))
+            line += "\n" + exc_text
 
         return line
 
@@ -175,7 +176,21 @@ def log_event(
 
 # Rate-limited logging
 _rate_limit_store: dict[str, float] = {}
-_rate_limit_lock = __import__("threading").Lock()
+_rate_limit_lock = threading.Lock()
+
+
+def _rate_limit_allows(fingerprint: str, interval_seconds: float) -> bool:
+    now = time.monotonic()
+    with _rate_limit_lock:
+        last = _rate_limit_store.get(fingerprint, 0)
+        if now - last < interval_seconds:
+            return False
+        _rate_limit_store[fingerprint] = now
+        if len(_rate_limit_store) > 256:
+            expired = [k for k, v in _rate_limit_store.items() if now - v > interval_seconds * 4]
+            for key in expired:
+                del _rate_limit_store[key]
+    return True
 
 
 def log_event_rate_limited(
@@ -185,17 +200,8 @@ def log_event_rate_limited(
     interval_seconds: float,
     **event_kwargs: Any,
 ) -> bool:
-    now = time.monotonic()
-    with _rate_limit_lock:
-        last = _rate_limit_store.get(fingerprint, 0)
-        if now - last < interval_seconds:
-            return False
-        _rate_limit_store[fingerprint] = now
-        # Cleanup old entries
-        if len(_rate_limit_store) > 256:
-            expired = [k for k, v in _rate_limit_store.items() if now - v > interval_seconds * 4]
-            for k in expired:
-                del _rate_limit_store[k]
+    if not _rate_limit_allows(fingerprint, interval_seconds):
+        return False
     log_event(logger, **event_kwargs)
     return True
 
@@ -250,17 +256,14 @@ class SafeQueueHandler(logging.handlers.QueueHandler):
             self.queue.put_nowait(record)
         except Full:
             if record.levelno >= logging.ERROR and self._error_fallback:
-                if not self._fallback_used:
-                    self._fallback_used = True
                 self._error_fallback.handle(record)
-            else:
-                log_event_rate_limited(
-                    logging.getLogger("today_highlights"),
-                    fingerprint="queue-full",
-                    interval_seconds=30,
-                    channel="error",
-                    event="logging_queue_full",
-                    level=logging.WARNING,
+            elif self._error_fallback and _rate_limit_allows("queue-full", 30):
+                self._error_fallback.handle(
+                    build_event_record(
+                        logging.WARNING,
+                        channel="error",
+                        event="logging_queue_full",
+                    )
                 )
 
 
@@ -289,12 +292,16 @@ class LoggingRuntime:
             self.console_handler.setLevel(self.config.level)
             fmtr = StructuredTextFormatter(max_message_length=self.config.max_message_length)
             self.console_handler.setFormatter(fmtr)
-            root.addHandler(self.console_handler)
 
         # File handlers
         try:
             self.config.log_dir.mkdir(parents=True, exist_ok=True)
             rotation_when = "MIDNIGHT" if self.config.rotation == "daily" else "H"
+            backup_count = (
+                self.config.retention_days
+                if self.config.rotation == "daily"
+                else self.config.retention_days * 24
+            )
             channels = ["access", "application", "error"]
             self.file_handlers = []
             for ch in channels:
@@ -303,7 +310,7 @@ class LoggingRuntime:
                     when=rotation_when,
                     encoding="utf-8",
                     utc=False,
-                    backupCount=self.config.retention_days,
+                    backupCount=backup_count,
                 )
                 fh.addFilter(ChannelFilter(ch))
                 fh.setFormatter(StructuredTextFormatter(max_message_length=self.config.max_message_length))
@@ -315,7 +322,7 @@ class LoggingRuntime:
                 when=rotation_when,
                 encoding="utf-8",
                 utc=False,
-                backupCount=self.config.retention_days,
+                backupCount=backup_count,
             )
             self._error_fallback.setFormatter(
                 StructuredTextFormatter(max_message_length=self.config.max_message_length)
@@ -327,7 +334,8 @@ class LoggingRuntime:
 
         # Queue + listener
         self.queue = Queue(maxsize=self.config.queue_size)
-        queue_handler = SafeQueueHandler(self.queue, error_fallback=self._error_fallback)
+        overflow_fallback = self._error_fallback or self.console_handler
+        queue_handler = SafeQueueHandler(self.queue, error_fallback=overflow_fallback)
         queue_handler.setLevel(self.config.level)
         root.addHandler(queue_handler)
 
@@ -353,6 +361,12 @@ class LoggingRuntime:
                 fh.close()
             except Exception:
                 pass
+        if self._error_fallback is not None:
+            try:
+                self._error_fallback.close()
+            except Exception:
+                pass
+            self._error_fallback = None
         self.file_handlers.clear()
         self.queue = None
         self.listener = None
