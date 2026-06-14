@@ -100,6 +100,9 @@ def set_media_cache(mc):
 - `logs/application.log` — 业务事件（category=crawler|ai|scheduler）
 - `logs/error.log` — 未处理异常（自动关联 request_id）
 - 日志脱敏自动处理 API Key、Bearer token、数据库密码、Cookie
+- 业务实体日志必须同时包含名称和 ID；ID 只用于精确关联
+- 事件使用稳定英文码和中文说明；失败事件可展开脱敏 URL 与响应摘要
+- AI 日志只记录模型、任务、输入输出规模、Token 和耗时，不记录 Prompt
 - 本地开发命令：`APP_SECRET_KEY=.. REDIS_ENABLED=false python3 -m pytest tests/ -v`（LOG_DIR 自动隔离）
 
 ## 踩坑记录

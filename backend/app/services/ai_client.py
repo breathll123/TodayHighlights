@@ -7,7 +7,7 @@ from urllib.parse import urlparse
 
 import httpx
 
-from app.core.logging import log_event
+from app.core.logging import format_duration, log_event
 from app.services.token_usage import extract_token_usage
 
 logger = logging.getLogger("today_highlights.ai")
@@ -23,10 +23,21 @@ class AIJSONResult:
 
 
 class AIClient:
-    def __init__(self, base_url: str, api_key: str, model: str, post_json: PostJson | None = None) -> None:
+    def __init__(
+        self,
+        base_url: str,
+        api_key: str,
+        model: str,
+        post_json: PostJson | None = None,
+        *,
+        model_name: str | None = None,
+        task_name: str = "内容分析",
+    ) -> None:
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
         self.model = model
+        self.model_name = model_name or model
+        self.task_name = task_name
         self._post_json = post_json
         self._host = urlparse(base_url).hostname or "unknown"
 
@@ -37,8 +48,17 @@ class AIClient:
     async def complete_json_with_usage(self, system_prompt: str, user_prompt: str) -> AIJSONResult:
         started = time.perf_counter()
         stage = "transport"
-        log_event(logger, channel="application", category="ai", event="ai_request_started",
-                  model=self.model, host=self._host)
+        input_chars = len(system_prompt) + len(user_prompt)
+        log_event(
+            logger,
+            channel="application",
+            category="ai",
+            event="ai.request.started",
+            model_name=self.model_name,
+            task_name=self.task_name,
+            input_chars=input_chars,
+            host=self._host,
+        )
 
         try:
             payload = {
@@ -56,12 +76,25 @@ class AIClient:
             parsed = json.loads(content_text)
             usage = extract_token_usage(response, f"{system_prompt}\n{user_prompt}", content_text)
 
-            log_event(logger, channel="application", category="ai", event="ai_request_finished",
-                      model=self.model, host=self._host,
-                      prompt_tokens=usage["prompt_tokens"], completion_tokens=usage["completion_tokens"],
-                      total_tokens=usage["total_tokens"], usage_estimated=usage["estimated"],
-                      output_chars=len(content_text), output_keys=sorted(parsed.keys()),
-                      duration_ms=round((time.perf_counter() - started) * 1000, 2))
+            log_event(
+                logger,
+                channel="application",
+                category="ai",
+                event="ai.request.completed",
+                model_name=self.model_name,
+                task_name=self.task_name,
+                host=self._host,
+                input_chars=input_chars,
+                output_chars=len(content_text),
+                output_keys=sorted(parsed.keys()),
+                tokens={
+                    "prompt": usage["prompt_tokens"],
+                    "completion": usage["completion_tokens"],
+                    "total": usage["total_tokens"],
+                    "estimated": usage["estimated"],
+                },
+                duration=format_duration(time.perf_counter() - started),
+            )
 
             return AIJSONResult(
                 content=parsed,
@@ -75,14 +108,34 @@ class AIClient:
             )
 
         except json.JSONDecodeError as exc:
-            log_event(logger, channel="application", category="ai", event="ai_request_failed",
-                      level=logging.ERROR, stage=stage, exception_type=type(exc).__name__,
-                      message=str(exc), duration_ms=round((time.perf_counter() - started) * 1000, 2))
+            log_event(
+                logger,
+                channel="application",
+                category="ai",
+                event="ai.request.failed",
+                level=logging.ERROR,
+                model_name=self.model_name,
+                task_name=self.task_name,
+                stage=stage,
+                error_type=type(exc).__name__,
+                error=str(exc),
+                duration=format_duration(time.perf_counter() - started),
+            )
             raise
         except Exception as exc:
-            log_event(logger, channel="application", category="ai", event="ai_request_failed",
-                      level=logging.ERROR, stage=stage, exception_type=type(exc).__name__,
-                      message=str(exc), duration_ms=round((time.perf_counter() - started) * 1000, 2))
+            log_event(
+                logger,
+                channel="application",
+                category="ai",
+                event="ai.request.failed",
+                level=logging.ERROR,
+                model_name=self.model_name,
+                task_name=self.task_name,
+                stage=stage,
+                error_type=type(exc).__name__,
+                error=str(exc),
+                duration=format_duration(time.perf_counter() - started),
+            )
             raise
 
     async def _send(self, payload: dict) -> dict:

@@ -178,12 +178,27 @@ def fetch_indices(_config: dict, limit: int) -> list[dict]:
             ("s_sh000300", "000300", "1.000300"),   # 沪深300
         ]
         codes = ",".join(c for c, _, _ in index_map[:limit])
-        resp = httpx.get(
+    except Exception as exc:
+        log_adapter_failure(provider="sina", operation="indices", stage="prepare", exc=exc)
+        return []
+
+    try:
+        resp = observed_http_get(
+            httpx.get,
             f"https://hq.sinajs.cn/list={codes}",
+            provider="sina",
+            operation="indices",
+            host="hq.sinajs.cn",
+            path="/",
             headers={"User-Agent": "Mozilla/5.0 TodayHighlights/0.1", "Referer": "https://finance.sina.com.cn/"},
             timeout=10,
         )
         resp.raise_for_status()
+    except Exception as exc:
+        log_adapter_failure(provider="sina", operation="indices", stage="request", exc=exc)
+        return []
+
+    try:
         text = resp.content.decode("gbk")
         result = []
         for symbol, code, em_secid in index_map[:limit]:
@@ -214,7 +229,8 @@ def fetch_indices(_config: dict, limit: int) -> list[dict]:
                 "url": f"https://quote.eastmoney.com/zs{code}.html",
             })
         return result
-    except Exception:
+    except Exception as exc:
+        log_adapter_failure(provider="sina", operation="indices", stage="parse", exc=exc)
         return []
 
 

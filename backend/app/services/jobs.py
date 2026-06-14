@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import SH_TZ, settings
 from app.core.crypto import CryptoService
-from app.core.logging import bind_log_context, log_event
+from app.core.logging import bind_log_context, format_duration, log_event
 from app.models.entities import CrawlJob, Highlight, Source
 from app.services.ai_enrichment import create_pending_enrichments, process_item_enrichment, select_item_candidates
 
@@ -82,9 +82,22 @@ def run_crawl_job(session: Session, source_id: int, trigger_type: str) -> CrawlJ
     session.add(job)
     session.flush()
 
-    with bind_log_context(crawl_job_id=job.id, source_id=source_id):
-        log_event(logger, channel="application", category="crawler", event="crawl_job_started",
-                  site=source.site, trigger_type=trigger_type)
+    topic_name = source.topic.name if source.topic else "-"
+    with bind_log_context(
+        crawl_job_id=job.id,
+        job_id=job.id,
+        source_id=source.id,
+        source_name=source.name,
+        topic_name=topic_name,
+    ):
+        log_event(
+            logger,
+            channel="application",
+            category="crawler",
+            event="crawl.started",
+            site=source.site,
+            trigger=trigger_type,
+        )
         started = time.perf_counter()
         stage = "fetch"
 
@@ -95,18 +108,31 @@ def run_crawl_job(session: Session, source_id: int, trigger_type: str) -> CrawlJ
             stage = "fetch"
             adapter = get_adapter(source.site)
             drafts = adapter.fetch(source.entry_url, cookie)
-            log_event(logger, channel="application", category="crawler", event="crawl_fetch_finished",
-                      stage=stage, items_found=len(drafts),
-                      duration_ms=round((time.perf_counter() - started) * 1000, 2))
+            log_event(
+                logger,
+                channel="application",
+                category="crawler",
+                event="crawl.fetch.completed",
+                stage=stage,
+                found=len(drafts),
+                duration=format_duration(time.perf_counter() - started),
+            )
 
             stage = "persist"
             raw_items = save_raw_items(session, source.id, drafts)
             items_received = len(drafts)
             items_saved = len(raw_items)
             items_deduplicated = max(0, items_received - items_saved)
-            log_event(logger, channel="application", category="crawler", event="crawl_persist_finished",
-                      stage=stage, items_received=items_received, items_saved=items_saved,
-                      items_deduplicated=items_deduplicated)
+            log_event(
+                logger,
+                channel="application",
+                category="crawler",
+                event="crawl.persist.completed",
+                stage=stage,
+                received=items_received,
+                saved=items_saved,
+                deduplicated=items_deduplicated,
+            )
 
             if source.enable_highlight:
                 stage = "enrichment"
@@ -119,9 +145,9 @@ def run_crawl_job(session: Session, source_id: int, trigger_type: str) -> CrawlJ
                         except Exception as exc:
                             log_event(
                                 logger, channel="application", category="crawler",
-                                event="crawl_enrichment_failed", level=logging.WARNING,
+                                event="crawl.enrichment.failed", level=logging.WARNING,
                                 stage="enrichment", enrichment_id=enrichment.id,
-                                exception_type=type(exc).__name__, message=str(exc),
+                                error_type=type(exc).__name__, error=str(exc),
                             )
 
             job.status = "success"
@@ -131,9 +157,16 @@ def run_crawl_job(session: Session, source_id: int, trigger_type: str) -> CrawlJ
             source.last_crawled_at = job.finished_at
             source.next_crawl_at = (job.finished_at or datetime.now(SH_TZ)).replace(tzinfo=None) + timedelta(minutes=source.crawl_interval_minutes)
 
-            log_event(logger, channel="application", category="crawler", event="crawl_job_finished",
-                      status="success", items_saved=job.items_saved,
-                      duration_ms=round((time.perf_counter() - started) * 1000, 2))
+            log_event(
+                logger,
+                channel="application",
+                category="crawler",
+                event="crawl.completed",
+                status="success",
+                found=job.items_found,
+                saved=job.items_saved,
+                duration=format_duration(time.perf_counter() - started),
+            )
 
         except Exception as exc:
             job.status = "failed"
@@ -143,9 +176,16 @@ def run_crawl_job(session: Session, source_id: int, trigger_type: str) -> CrawlJ
             source.last_crawled_at = job.finished_at
             source.next_crawl_at = job.finished_at.replace(tzinfo=None) + timedelta(minutes=source.crawl_interval_minutes)
 
-            log_event(logger, channel="application", category="crawler", event="crawl_job_failed",
-                      level=logging.ERROR, stage=stage,
-                      exception_type=type(exc).__name__, message=str(exc),
-                      duration_ms=round((time.perf_counter() - started) * 1000, 2))
+            log_event(
+                logger,
+                channel="application",
+                category="crawler",
+                event="crawl.failed",
+                level=logging.ERROR,
+                stage=stage,
+                error_type=type(exc).__name__,
+                error=str(exc),
+                duration=format_duration(time.perf_counter() - started),
+            )
     session.commit()
     return job

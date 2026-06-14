@@ -15,6 +15,17 @@ from app.services.jobs import run_crawl_job
 
 logger = logging.getLogger("today_highlights.scheduler")
 
+SCHEDULER_JOB_NAMES = {
+    "crawl_enabled_sources": "采集已启用数据源",
+    "scheduled_cleanup": "清理过期数据",
+    "artificial_analysis_morning": "同步模型榜单（早间）",
+    "artificial_analysis_evening": "同步模型榜单（晚间）",
+}
+
+
+def _scheduler_job_name(job_id: str) -> str:
+    return SCHEDULER_JOB_NAMES.get(job_id, job_id)
+
 
 def crawl_enabled_sources() -> None:
     with SessionLocal() as session:
@@ -35,20 +46,50 @@ def scheduled_cleanup() -> None:
 
 
 def _handle_scheduler_event(event) -> None:
+    job_id = str(event.job_id)
+    job_name = _scheduler_job_name(job_id)
     if event.code == EVENT_JOB_EXECUTED:
-        log_event(logger, channel="application", category="scheduler", event="scheduled_job_finished",
-                  job_id=str(event.job_id))
+        log_event(
+            logger,
+            channel="application",
+            category="scheduler",
+            event="scheduler.job.completed",
+            job_id=job_id,
+            job_name=job_name,
+        )
     elif event.code == EVENT_JOB_ERROR:
-        log_event(logger, channel="application", category="scheduler", event="scheduled_job_failed",
-                  level=logging.ERROR, job_id=str(event.job_id),
-                  exception_type=type(event.exception).__name__ if event.exception else "-",
-                  message=str(event.exception or ""))
+        log_event(
+            logger,
+            channel="application",
+            category="scheduler",
+            event="scheduler.job.failed",
+            level=logging.ERROR,
+            job_id=job_id,
+            job_name=job_name,
+            error_type=type(event.exception).__name__ if event.exception else "-",
+            error=str(event.exception or ""),
+        )
     elif event.code == EVENT_JOB_MISSED:
-        log_event(logger, channel="application", category="scheduler", event="scheduled_job_missed",
-                  level=logging.WARNING, job_id=str(event.job_id))
+        log_event(
+            logger,
+            channel="application",
+            category="scheduler",
+            event="scheduler.job.missed",
+            level=logging.WARNING,
+            job_id=job_id,
+            job_name=job_name,
+        )
     elif event.code == EVENT_JOB_MAX_INSTANCES:
-        log_event(logger, channel="application", category="scheduler", event="scheduled_job_skipped",
-                  level=logging.WARNING, job_id=str(event.job_id), reason="max_instances")
+        log_event(
+            logger,
+            channel="application",
+            category="scheduler",
+            event="scheduler.job.skipped",
+            level=logging.WARNING,
+            job_id=job_id,
+            job_name=job_name,
+            reason="max_instances",
+        )
 
 
 def create_scheduler() -> BackgroundScheduler:
@@ -57,7 +98,7 @@ def create_scheduler() -> BackgroundScheduler:
     scheduler.add_job(crawl_enabled_sources, "interval", minutes=1, id="crawl_enabled_sources", replace_existing=True)
     scheduler.add_job(scheduled_cleanup, "interval", hours=6, id="scheduled_cleanup", replace_existing=True)
 
-    log_event(logger, channel="application", category="scheduler", event="scheduler_started",
+    log_event(logger, channel="application", category="scheduler", event="scheduler.started",
               job_ids=[job.id for job in scheduler.get_jobs()])
 
     if settings.artificial_analysis_sync_enabled and settings.artificial_analysis_api_key:

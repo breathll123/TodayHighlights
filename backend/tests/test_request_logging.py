@@ -5,8 +5,11 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from app.core.database import get_session
 from app.core.logging import LoggingConfig, create_logging_runtime
+from app.models.entities import User
 from app.core.request_logging import install_request_logging
+from app.services.auth_service import create_token
 
 
 def _app(tmp_path: Path, *, trust_proxy=False):
@@ -51,7 +54,9 @@ def test_request_id_is_returned_and_access_log_has_no_query_values(tmp_path):
 
     assert response.headers["X-Request-ID"] == "req-12345678"
     text = (tmp_path / "access.log").read_text()
-    assert "request_id=req-12345678" in text
+    assert "http.completed HTTP请求完成" in text
+    assert "request=req-123" in text
+    assert "request_id=" not in text
     assert "query_keys=symbol" in text
     assert "secret-value" not in text
     assert "hidden" not in text
@@ -79,7 +84,8 @@ def test_unhandled_500_is_correlated_between_access_and_error(tmp_path):
     assert response.status_code == 500
     access = (tmp_path / "access.log").read_text()
     error = (tmp_path / "error.log").read_text()
-    assert f"request_id={request_id}" in access
+    assert f"request={request_id[:8]}" in access
+    assert "request_id=" not in access
     assert f"request_id={request_id}" in error
     assert "RuntimeError" in error
     assert "secret" not in error
@@ -128,3 +134,51 @@ def test_x_forwarded_for_used_when_trusted(tmp_path):
 
     text = (tmp_path / "access.log").read_text()
     assert "1.2.3.4" in text
+
+
+def test_authenticated_access_log_contains_username_and_response_size(client, caplog):
+    session = next(client.app.dependency_overrides[get_session]())
+    user = User(
+        username="admin",
+        email=None,
+        password_hash="hash",
+        role="admin",
+        status="active",
+    )
+    session.add(user)
+    session.commit()
+    token = create_token(user)
+    caplog.set_level(logging.INFO)
+
+    response = client.get(
+        "/api/auth/me",
+        headers={
+            "Authorization": f"Bearer {token}",
+            "X-Request-ID": "request-readable-1234",
+        },
+    )
+
+    assert response.status_code == 200
+    record = next(
+        record
+        for record in caplog.records
+        if getattr(record, "event", "") == "http.completed"
+        and record.event_fields.get("path") == "/api/auth/me"
+    )
+    assert record.event_fields["username"] == "admin"
+    assert record.event_fields["user_id"] == user.id
+    assert record.event_fields["request"] == "request-"
+    assert record.event_fields["response_bytes"] != "-"
+    assert "request_id" not in record.event_fields
+
+
+def test_access_log_normalizes_repeated_slashes_for_display(tmp_path):
+    app, runtime = _app(tmp_path)
+    try:
+        TestClient(app).get("/api//ok")
+    finally:
+        runtime.stop()
+
+    text = (tmp_path / "access.log").read_text()
+    assert "path=/api/ok" in text
+    assert "path=/api//ok" not in text

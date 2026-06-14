@@ -20,6 +20,7 @@ from app.services.ai_models import create_ai_model, list_ai_models, serialize_ai
 from app.services.content import update_highlight_review
 from app.services.jobs import run_crawl_job
 from app.services.settings import get_plain_setting, get_secret_setting, set_plain_setting, set_secret_setting
+from app.services.audit_logging import log_admin_change
 
 router = APIRouter(prefix="/api/admin", tags=["admin"], dependencies=[Depends(verify_admin)])
 
@@ -51,7 +52,7 @@ def list_sources(type: str | None = None, session: Session = Depends(get_session
 
 
 @router.post("/sources", response_model=SourceRead)
-def create_source(payload: SourceCreate, session: Session = Depends(get_session)) -> dict:
+def create_source(payload: SourceCreate, request: Request, session: Session = Depends(get_session)) -> dict:
     crypto = CryptoService(settings.app_secret_key)
     source = Source(
         topic_id=payload.topic_id,
@@ -65,6 +66,14 @@ def create_source(payload: SourceCreate, session: Session = Depends(get_session)
     session.add(source)
     session.commit()
     session.refresh(source)
+    log_admin_change(
+        request=request,
+        action="create",
+        object_type="source",
+        object_name=source.name,
+        object_id=source.id,
+        changed_fields=payload.model_fields_set,
+    )
     return {
         "id": source.id,
         "topic_id": source.topic_id,
@@ -79,7 +88,7 @@ def create_source(payload: SourceCreate, session: Session = Depends(get_session)
 
 
 @router.put("/sources/{source_id}", response_model=SourceRead)
-def update_source(source_id: int, payload: SourceUpdate, session: Session = Depends(get_session)) -> dict:
+def update_source(source_id: int, payload: SourceUpdate, request: Request, session: Session = Depends(get_session)) -> dict:
     source = session.get(Source, source_id)
     if source is None:
         raise HTTPException(status_code=404, detail="Source not found")
@@ -98,6 +107,14 @@ def update_source(source_id: int, payload: SourceUpdate, session: Session = Depe
         source.enable_highlight = payload.enable_highlight
     session.commit()
     session.refresh(source)
+    log_admin_change(
+        request=request,
+        action="update",
+        object_type="source",
+        object_name=source.name,
+        object_id=source.id,
+        changed_fields=payload.model_fields_set,
+    )
     return {
         "id": source.id,
         "topic_id": source.topic_id,
@@ -113,8 +130,19 @@ def update_source(source_id: int, payload: SourceUpdate, session: Session = Depe
 
 
 @router.post("/sources/{source_id}/crawl")
-def trigger_crawl(source_id: int, session: Session = Depends(get_session)) -> dict:
+def trigger_crawl(source_id: int, request: Request, session: Session = Depends(get_session)) -> dict:
+    source = session.get(Source, source_id)
+    if source is None:
+        raise HTTPException(status_code=404, detail="Source not found")
     job = run_crawl_job(session, source_id, "manual")
+    log_admin_change(
+        request=request,
+        action="trigger",
+        object_type="source",
+        object_name=source.name,
+        object_id=source.id,
+        changed_fields=["crawl"],
+    )
     return {"id": job.id, "status": job.status, "items_found": job.items_found, "items_saved": job.items_saved}
 
 
@@ -149,7 +177,7 @@ def list_jobs(page: int = 1, page_size: int = 20, session: Session = Depends(get
 
 
 @router.patch("/highlights/{highlight_id}")
-def update_highlight(highlight_id: int, payload: HighlightUpdate, session: Session = Depends(get_session)) -> dict:
+def update_highlight(highlight_id: int, payload: HighlightUpdate, request: Request, session: Session = Depends(get_session)) -> dict:
     highlight = update_highlight_review(
         session,
         highlight_id,
@@ -159,6 +187,14 @@ def update_highlight(highlight_id: int, payload: HighlightUpdate, session: Sessi
         is_hidden=payload.is_hidden,
     )
     session.commit()
+    log_admin_change(
+        request=request,
+        action="update",
+        object_type="highlight",
+        object_name=highlight.title,
+        object_id=highlight.id,
+        changed_fields=payload.model_fields_set,
+    )
     return {"id": highlight.id, "review_status": highlight.review_status}
 
 
@@ -169,9 +205,17 @@ class ModelSettingsWrite(BaseModel):
 
 
 @router.post("/ai/topic-summaries/stocks/regenerate")
-def regenerate_stocks_ai_summary(session: Session = Depends(get_session)) -> dict:
+def regenerate_stocks_ai_summary(request: Request, session: Session = Depends(get_session)) -> dict:
     summary = generate_topic_summary(session, topic_slug="stocks", trigger_type="manual")
     session.commit()
+    log_admin_change(
+        request=request,
+        action="regenerate",
+        object_type="topic_summary",
+        object_name="股票今日看点",
+        object_id=summary.id,
+        changed_fields=["generated"],
+    )
     return {"id": summary.id, "version": summary.version, "status": summary.status}
 
 
@@ -264,7 +308,8 @@ def get_ai_jobs_stats(session: Session = Depends(get_session)) -> dict:
 
 
 @router.post("/ai-jobs/{job_id}/retry")
-def retry_ai_job(job_id: int, session: Session = Depends(get_session)) -> dict:
+def retry_ai_job(job_id: int, request: Request, session: Session = Depends(get_session)) -> dict:
+    original_job = session.get(AIGenerationJob, job_id)
     try:
         enrichment = retry_item_enrichment(session, job_id)
     except ValueError as exc:
@@ -275,6 +320,14 @@ def retry_ai_job(job_id: int, session: Session = Depends(get_session)) -> dict:
             raise HTTPException(status_code=400, detail=msg) from exc
         raise HTTPException(status_code=500, detail=msg) from exc
     session.commit()
+    log_admin_change(
+        request=request,
+        action="retry",
+        object_type="ai_job",
+        object_name=original_job.job_type if original_job else "AI任务",
+        object_id=job_id,
+        changed_fields=["retry"],
+    )
     return {"id": enrichment.id, "status": enrichment.status, "retry_count": enrichment.retry_count}
 
 
@@ -296,7 +349,7 @@ def list_users(session: Session = Depends(get_session)) -> list[dict]:
 
 
 @router.patch("/users/{user_id}")
-def update_user_status(user_id: int, payload: dict, session: Session = Depends(get_session)) -> dict:
+def update_user_status(user_id: int, payload: dict, request: Request, session: Session = Depends(get_session)) -> dict:
     user = session.get(User, user_id)
     if user is None:
         raise HTTPException(status_code=404, detail="User not found")
@@ -305,6 +358,14 @@ def update_user_status(user_id: int, payload: dict, session: Session = Depends(g
         raise HTTPException(status_code=400, detail="Invalid status")
     user.status = status
     session.commit()
+    log_admin_change(
+        request=request,
+        action="update",
+        object_type="user",
+        object_name=user.username,
+        object_id=user.id,
+        changed_fields=payload.keys(),
+    )
     return {"id": user.id, "status": user.status}
 
 
@@ -536,7 +597,12 @@ def get_token_usage_detail(usage_id: int, session: Session = Depends(get_session
 
 
 @router.post("/ai/block-analyses/{analysis_id}/regenerate")
-def regenerate_block_analysis(analysis_id: int, session: Session = Depends(get_session), admin: User = Depends(get_current_user)) -> dict:
+def regenerate_block_analysis(
+    analysis_id: int,
+    request: Request,
+    session: Session = Depends(get_session),
+    admin: User = Depends(get_current_user),
+) -> dict:
     previous = session.get(AIBlockAnalysis, analysis_id)
     if previous is None:
         raise HTTPException(status_code=404, detail="Analysis not found")
@@ -548,6 +614,15 @@ def regenerate_block_analysis(analysis_id: int, session: Session = Depends(get_s
         force=True,
     )
     session.commit()
+    log_admin_change(
+        request=request,
+        user=admin,
+        action="regenerate",
+        object_type="block_analysis",
+        object_name=previous.block_title,
+        object_id=analysis.id,
+        changed_fields=["generated"],
+    )
     return {"id": analysis.id, "status": analysis.status}
 
 
@@ -578,6 +653,7 @@ def list_prompt_templates(session: Session = Depends(get_session)) -> list[AIPro
 @router.post("/ai-prompt-templates", response_model=AIPromptTemplateRead)
 def create_prompt_template(
     payload: AIPromptTemplateWrite,
+    request: Request,
     session: Session = Depends(get_session),
     user: User = Depends(get_current_user),
 ) -> AIPromptTemplateRead:
@@ -593,6 +669,15 @@ def create_prompt_template(
     session.add(template)
     session.commit()
     session.refresh(template)
+    log_admin_change(
+        request=request,
+        user=user,
+        action="create",
+        object_type="prompt_template",
+        object_name=f"{template.topic_slug}/{template.content_class}",
+        object_id=template.id,
+        changed_fields=payload.model_fields_set,
+    )
     return _serialize_prompt_template(template)
 
 
@@ -600,6 +685,7 @@ def create_prompt_template(
 def update_prompt_template(
     template_id: int,
     payload: AIPromptTemplateWrite,
+    request: Request,
     session: Session = Depends(get_session),
     user: User = Depends(get_current_user),
 ) -> AIPromptTemplateRead:
@@ -616,16 +702,40 @@ def update_prompt_template(
     template.template_version += 1
     session.commit()
     session.refresh(template)
+    log_admin_change(
+        request=request,
+        user=user,
+        action="update",
+        object_type="prompt_template",
+        object_name=f"{template.topic_slug}/{template.content_class}",
+        object_id=template.id,
+        changed_fields=payload.model_fields_set,
+    )
     return _serialize_prompt_template(template)
 
 
 @router.delete("/ai-prompt-templates/{template_id}")
-def delete_prompt_template(template_id: int, session: Session = Depends(get_session)) -> dict:
+def delete_prompt_template(
+    template_id: int,
+    request: Request,
+    session: Session = Depends(get_session),
+    user: User = Depends(get_current_user),
+) -> dict:
     template = session.get(AIPromptTemplate, template_id)
     if template is None:
         raise HTTPException(status_code=404, detail="Prompt template not found")
+    object_name = f"{template.topic_slug}/{template.content_class}"
     session.delete(template)
     session.commit()
+    log_admin_change(
+        request=request,
+        user=user,
+        action="delete",
+        object_type="prompt_template",
+        object_name=object_name,
+        object_id=template_id,
+        changed_fields=["deleted"],
+    )
     return {"deleted": True}
 
 
@@ -635,32 +745,56 @@ def list_admin_ai_models(session: Session = Depends(get_session)) -> list[dict]:
 
 
 @router.post("/ai-models")
-def create_admin_ai_model(payload: AIModelConfigWrite, session: Session = Depends(get_session)) -> dict:
+def create_admin_ai_model(payload: AIModelConfigWrite, request: Request, session: Session = Depends(get_session)) -> dict:
     model = create_ai_model(session, payload)
     session.commit()
     session.refresh(model)
+    log_admin_change(
+        request=request,
+        action="create",
+        object_type="ai_model",
+        object_name=model.name,
+        object_id=model.id,
+        changed_fields=payload.model_fields_set,
+    )
     return serialize_ai_model(model)
 
 
 @router.put("/ai-models/{model_id}")
-def update_admin_ai_model(model_id: int, payload: AIModelConfigWrite, session: Session = Depends(get_session)) -> dict:
+def update_admin_ai_model(model_id: int, payload: AIModelConfigWrite, request: Request, session: Session = Depends(get_session)) -> dict:
     try:
         model = update_ai_model(session, model_id, payload)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     session.commit()
     session.refresh(model)
+    log_admin_change(
+        request=request,
+        action="update",
+        object_type="ai_model",
+        object_name=model.name,
+        object_id=model.id,
+        changed_fields=payload.model_fields_set,
+    )
     return serialize_ai_model(model)
 
 
 @router.post("/ai-models/{model_id}/set-default")
-def set_admin_ai_model_default(model_id: int, session: Session = Depends(get_session)) -> dict:
+def set_admin_ai_model_default(model_id: int, request: Request, session: Session = Depends(get_session)) -> dict:
     try:
         model = set_default_ai_model(session, model_id)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     session.commit()
     session.refresh(model)
+    log_admin_change(
+        request=request,
+        action="set_default",
+        object_type="ai_model",
+        object_name=model.name,
+        object_id=model.id,
+        changed_fields=["is_default"],
+    )
     return serialize_ai_model(model)
 
 
@@ -674,12 +808,20 @@ def read_model_settings(session: Session = Depends(get_session)) -> dict:
 
 
 @router.put("/settings/model")
-def write_model_settings(payload: ModelSettingsWrite, session: Session = Depends(get_session)) -> dict:
+def write_model_settings(payload: ModelSettingsWrite, request: Request, session: Session = Depends(get_session)) -> dict:
     set_plain_setting(session, "llm.base_url", payload.base_url)
     set_plain_setting(session, "llm.model", payload.model)
     if payload.api_key:
         set_secret_setting(session, "llm.api_key", payload.api_key)
     session.commit()
+    log_admin_change(
+        request=request,
+        action="update",
+        object_type="legacy_model_settings",
+        object_name=payload.model,
+        object_id="llm",
+        changed_fields=payload.model_fields_set,
+    )
     return {"saved": True, "has_api_key": bool(payload.api_key)}
 
 
@@ -689,16 +831,24 @@ def list_blocks(session: Session = Depends(get_session)) -> list[PageBlock]:
 
 
 @router.post("/blocks", response_model=BlockRead)
-def create_block(payload: BlockCreate, session: Session = Depends(get_session)) -> PageBlock:
+def create_block(payload: BlockCreate, request: Request, session: Session = Depends(get_session)) -> PageBlock:
     block = PageBlock(**payload.model_dump())
     session.add(block)
     session.commit()
     session.refresh(block)
+    log_admin_change(
+        request=request,
+        action="create",
+        object_type="block",
+        object_name=block.title,
+        object_id=block.id,
+        changed_fields=payload.model_fields_set,
+    )
     return block
 
 
 @router.put("/blocks/{block_id}", response_model=BlockRead)
-def update_block(block_id: int, payload: BlockUpdate, session: Session = Depends(get_session)) -> PageBlock:
+def update_block(block_id: int, payload: BlockUpdate, request: Request, session: Session = Depends(get_session)) -> PageBlock:
     block = session.get(PageBlock, block_id)
     if block is None:
         raise HTTPException(status_code=404, detail="Block not found")
@@ -707,26 +857,51 @@ def update_block(block_id: int, payload: BlockUpdate, session: Session = Depends
         setattr(block, key, value)
     session.commit()
     session.refresh(block)
+    log_admin_change(
+        request=request,
+        action="update",
+        object_type="block",
+        object_name=block.title,
+        object_id=block.id,
+        changed_fields=update_data.keys(),
+    )
     return block
 
 
 @router.delete("/blocks/{block_id}")
-def delete_block(block_id: int, session: Session = Depends(get_session)) -> dict:
+def delete_block(block_id: int, request: Request, session: Session = Depends(get_session)) -> dict:
     block = session.get(PageBlock, block_id)
     if block is None:
         return {"deleted": False, "reason": "not found"}
+    object_name = block.title
     session.delete(block)
     session.commit()
+    log_admin_change(
+        request=request,
+        action="delete",
+        object_type="block",
+        object_name=object_name,
+        object_id=block_id,
+        changed_fields=["deleted"],
+    )
     return {"deleted": True}
 
 
 @router.patch("/blocks/reorder")
-def reorder_blocks(payload: ReorderRequest, session: Session = Depends(get_session)) -> dict:
+def reorder_blocks(payload: ReorderRequest, request: Request, session: Session = Depends(get_session)) -> dict:
     for item in payload.items:
         block = session.get(PageBlock, item["id"])
         if block:
             block.sort_order = item["sort_order"]
     session.commit()
+    log_admin_change(
+        request=request,
+        action="reorder",
+        object_type="block",
+        object_name="页面区块排序",
+        object_id="-",
+        changed_fields=["sort_order"],
+    )
     return {"updated": True}
 
 
@@ -744,16 +919,24 @@ def list_admin_topics(session: Session = Depends(get_session)) -> list[dict]:
 
 
 @router.post("/topics")
-def create_topic(payload: TopicWrite, session: Session = Depends(get_session)) -> dict:
+def create_topic(payload: TopicWrite, request: Request, session: Session = Depends(get_session)) -> dict:
     t = Topic(name=payload.name, slug=payload.slug, sort_order=payload.sort_order, enabled=payload.enabled)
     session.add(t)
     session.commit()
     session.refresh(t)
+    log_admin_change(
+        request=request,
+        action="create",
+        object_type="topic",
+        object_name=t.name,
+        object_id=t.id,
+        changed_fields=payload.model_fields_set,
+    )
     return {"id": t.id, "name": t.name, "slug": t.slug, "sort_order": t.sort_order, "enabled": t.enabled}
 
 
 @router.put("/topics/{topic_id}")
-def update_topic(topic_id: int, payload: TopicWrite, session: Session = Depends(get_session)) -> dict:
+def update_topic(topic_id: int, payload: TopicWrite, request: Request, session: Session = Depends(get_session)) -> dict:
     t = session.get(Topic, topic_id)
     if t is None:
         raise HTTPException(status_code=404, detail="Topic not found")
@@ -763,21 +946,38 @@ def update_topic(topic_id: int, payload: TopicWrite, session: Session = Depends(
     t.enabled = payload.enabled
     session.commit()
     session.refresh(t)
+    log_admin_change(
+        request=request,
+        action="update",
+        object_type="topic",
+        object_name=t.name,
+        object_id=t.id,
+        changed_fields=payload.model_fields_set,
+    )
     return {"id": t.id, "name": t.name, "slug": t.slug, "sort_order": t.sort_order, "enabled": t.enabled}
 
 
 @router.delete("/topics/{topic_id}")
-def delete_topic(topic_id: int, session: Session = Depends(get_session)) -> dict:
+def delete_topic(topic_id: int, request: Request, session: Session = Depends(get_session)) -> dict:
     t = session.get(Topic, topic_id)
     if t is None:
         return {"deleted": False, "reason": "not found"}
+    object_name = t.name
     session.delete(t)
     session.commit()
+    log_admin_change(
+        request=request,
+        action="delete",
+        object_type="topic",
+        object_name=object_name,
+        object_id=topic_id,
+        changed_fields=["deleted"],
+    )
     return {"deleted": True}
 
 
 @router.post("/pages/{route:path}/publish")
-def publish_page(route: str, session: Session = Depends(get_session)) -> dict:
+def publish_page(route: str, request: Request, session: Session = Depends(get_session)) -> dict:
     route = "/" + route if not route.startswith("/") else route
 
     # Cascade cleanup: null FK → delete children → delete parents
@@ -843,4 +1043,12 @@ def publish_page(route: str, session: Session = Depends(get_session)) -> dict:
         count += 1
 
     session.commit()
+    log_admin_change(
+        request=request,
+        action="publish",
+        object_type="page",
+        object_name=route,
+        object_id=route,
+        changed_fields=["published"],
+    )
     return {"published": True, "blocks": count}

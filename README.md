@@ -114,6 +114,10 @@ Redis 故障时自动降级为进程内存缓存，不会阻止应用启动。`/
 | `LOG_SLOW_REQUEST_MS` | 慢请求阈值（毫秒），超时标记 `slow=true`，默认 2000 |
 | `LOG_ACCESS_EXCLUDE_PATHS` | 逗号分隔的排除路径（如 `/health`），这些路径不写入 access 日志 |
 | `LOG_TRUST_PROXY_HEADERS` | 是否信任 `X-Forwarded-For`，Nginx 反代时设为 `true` |
+| `LOG_DETAIL_CRAWLER` | 是否记录脱敏后的完整上游 URL，默认 `true` |
+| `LOG_DETAIL_AI` | 是否记录 AI 输入输出规模和 Token 用量，默认 `true` |
+| `LOG_RESPONSE_PREVIEW_CHARS` | 上游失败响应摘要长度，范围 0–2000，默认 500 |
+| `LOG_URL_QUERY_MODE` | URL 查询参数模式：`safe` 保留普通值并隐藏敏感值，`keys` 只保留参数名 |
 
 **生产部署命令**（宝塔面板）：
 ```bash
@@ -128,12 +132,17 @@ python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --workers 1 --no-acc
 tail -f logs/access.log        # HTTP 请求（含 request_id, status, duration）
 tail -f logs/application.log   # 业务事件（crawler/ai/scheduler/cache）
 tail -f logs/error.log         # 异常（自动关联 request_id）
-grep 'category=crawler' logs/application.log
-grep 'crawl_job_id=128' logs/application.log
-grep 'request_id=<id>' logs/access.log logs/error.log  # 跨文件关联
+grep -B1 -A3 'upstream.failed' logs/application.log
+grep -B1 'job_id=43766' logs/application.log
+grep -B1 'source_name="指数行情"' logs/application.log
+grep -B1 'ai_job_id=829' logs/application.log
+grep -B1 'request=0edcd5f9' logs/access.log logs/error.log
 ```
 
-日志自动脱敏：API Key、Bearer token、数据库密码、Cookie 不会出现在日志中。
+日志中的业务对象始终同时包含名称和 ID，无需再查询数据库才能理解。上游 URL
+会完整记录，但 API Key、Token、签名、Cookie、数据库密码等敏感值自动替换为
+`[REDACTED]`。失败响应只记录脱敏且截断后的摘要；AI Prompt 和完整模型响应不会
+写入日志文件。
 
 生成 `APP_SECRET_KEY`：
 

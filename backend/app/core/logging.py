@@ -18,14 +18,18 @@ from pathlib import Path
 from queue import Full, Queue
 from typing import Any, Callable, Iterator
 
-from app.core.config import SH_TZ
+from app.core.config import SH_TZ, settings
+from app.core.logging_catalog import event_spec
+from app.core.logging_safety import (
+    SENSITIVE_KEYS,
+    redact_text,
+    response_preview,
+    safe_request_headers,
+    sanitize_fields,
+    sanitize_url,
+)
 
 _LOG_CONTEXT: ContextVar[dict[str, Any]] = ContextVar("log_context", default={})
-
-SENSITIVE_KEYS = {
-    "api_key", "x-api-key", "authorization", "cookie", "set-cookie",
-    "password", "secret", "token", "access_token", "refresh_token",
-}
 
 
 @contextmanager
@@ -43,41 +47,10 @@ def current_log_context() -> dict[str, Any]:
     return dict(_LOG_CONTEXT.get())
 
 
-def redact_text(value: str) -> str:
-    text = value
-    text = re.sub(r"(?i)(Bearer\s+)[^\s,;]+", r"\1[REDACTED]", text)
-    text = re.sub(
-        r"(?i)\b(mysql(?:\+pymysql)?|redis|rediss)://([^:/@\s]+):([^@\s]+)@",
-        r"\1://\2:[REDACTED]@",
-        text,
-    )
-    text = re.sub(
-        r"(?i)\b(api[_-]?key|x-api-key|authorization|cookie|password|secret|token)"
-        r"\s*[:=]\s*[^\s,;]+",
-        lambda match: f"{match.group(1)}=[REDACTED]",
-        text,
-    )
-    return text
-
-
-def sanitize_fields(fields: dict[str, Any]) -> dict[str, Any]:
-    sanitized: dict[str, Any] = {}
-    for key, value in fields.items():
-        lowered = key.lower()
-        if lowered in SENSITIVE_KEYS or any(part in lowered for part in ("password", "secret", "token", "api_key")):
-            sanitized[key] = "[REDACTED]"
-        elif isinstance(value, str):
-            sanitized[key] = redact_text(value)
-        elif isinstance(value, dict):
-            sanitized[key] = sanitize_fields(value)
-        elif isinstance(value, (list, tuple)):
-            sanitized[key] = [
-                sanitize_fields({"value": item})["value"] if isinstance(item, (str, dict)) else item
-                for item in value
-            ]
-        else:
-            sanitized[key] = value
-    return sanitized
+def update_log_context(**fields: Any) -> None:
+    current = dict(_LOG_CONTEXT.get())
+    current.update({key: value for key, value in fields.items() if value is not None})
+    _LOG_CONTEXT.set(current)
 
 
 def build_event_record(
@@ -104,6 +77,9 @@ def build_event_record(
 
 
 class StructuredTextFormatter(logging.Formatter):
+    LEVEL_WIDTH = 8
+    CATEGORY_WIDTH = 12
+
     def __init__(self, max_message_length: int = 4000, **kwargs):
         super().__init__(**kwargs)
         self.max_message_length = max_message_length
@@ -115,32 +91,66 @@ class StructuredTextFormatter(logging.Formatter):
 
         level = record.levelname
         channel = getattr(record, "log_channel", "application")
-        event = getattr(record, "event", record.getMessage())
-        fields = dict(getattr(record, "event_fields", {}))
-
-        parts = [f"{ts_str}.{ms}", level, f"channel={channel}", f"event={event}"]
-
-        # category
+        event = redact_text(str(getattr(record, "event", record.getMessage())))
+        fields = sanitize_fields(dict(getattr(record, "event_fields", {})))
         cat = fields.pop("category", None) or getattr(record, "category", None)
-        if cat:
-            parts.insert(3, f"category={cat}")
+        category = str(cat or channel)
+        spec = event_spec(event)
+        headline_event = _headline_token(event)
+        headline_category = _headline_token(category)
+        headline_description = _headline_token(spec.description)
+        lines = [
+            f"{ts_str}.{ms} {level:<{self.LEVEL_WIDTH}} "
+            f"{headline_category:<{self.CATEGORY_WIDTH}} "
+            f"{headline_event} {headline_description}"
+        ]
 
-        # sorted fields
-        for key in sorted(fields):
-            val = fields[key]
-            parts.append(f"{key}={_format_value(val)}")
+        expanded = set(spec.expanded_fields)
+        regular_fields = {
+            key: value for key, value in fields.items() if key not in expanded
+        }
+        ordered_keys = _ordered_field_names(regular_fields, spec.field_order)
+        if ordered_keys:
+            details = " ".join(
+                f"{key}={_format_value(regular_fields[key])}" for key in ordered_keys
+            )
+            lines.append(f"  {details}")
 
-        line = " ".join(parts)
+        for key in spec.expanded_fields:
+            if key in fields:
+                lines.append(f"  {key}={_format_value(fields[key])}")
 
-        if len(line) > self.max_message_length:
-            line = line[:self.max_message_length]
-            line += " truncated=true"
+        text = "\n".join(lines)
+        if len(text) > self.max_message_length:
+            text = text[:self.max_message_length].rstrip()
+            text += " truncated=true"
 
         if record.exc_info and record.exc_info[1]:
             exc_text = redact_text(self.formatException(record.exc_info))
-            line += "\n" + exc_text
+            text += "\n" + exc_text
+        elif getattr(record, "exc_text", None):
+            text += "\n" + redact_text(record.exc_text)
 
-        return line
+        return text
+
+
+def _headline_token(value: Any) -> str:
+    return re.sub(r"\s+", " ", str(value)).strip()
+
+
+def format_duration(seconds: float) -> str:
+    if seconds < 1:
+        return f"{round(seconds * 1000):d}ms"
+    return f"{seconds:.2f}s"
+
+
+def _ordered_field_names(
+    fields: dict[str, Any],
+    field_order: tuple[str, ...],
+) -> list[str]:
+    ordered = [key for key in field_order if key in fields]
+    ordered.extend(key for key in fields if key not in field_order)
+    return ordered
 
 
 def _format_value(val: Any) -> str:
@@ -182,11 +192,22 @@ def observed_http_get(
     operation: str,
     host: str,
     path: str,
+    attempt: int = 1,
     **kwargs: Any,
 ) -> Any:
-    """Execute one HTTP GET while logging only allowlisted request metadata."""
+    """Execute one HTTP GET while logging safe request and response diagnostics."""
     started = time.perf_counter()
     logger = logging.getLogger("today_highlights.external")
+    query_mode = getattr(settings, "log_url_query_mode", "safe")
+    if query_mode not in {"safe", "keys"}:
+        query_mode = "safe"
+    preview_chars = max(
+        0,
+        min(2000, int(getattr(settings, "log_response_preview_chars", 500))),
+    )
+    detail_crawler = getattr(settings, "log_detail_crawler", True)
+    safe_url = sanitize_url(url, mode=query_mode)
+    request_headers = safe_request_headers(kwargs.get("headers"))
     try:
         response = get(url, **kwargs)
     except Exception as exc:
@@ -194,35 +215,99 @@ def observed_http_get(
             logger,
             channel="application",
             category="crawler",
-            event="external_request_failed",
+            event="upstream.failed",
             level=logging.WARNING,
             provider=provider,
             operation=operation,
             host=host,
             path=path,
+            url=safe_url,
+            request_headers=request_headers,
+            attempt=attempt,
             stage="transport",
-            exception_type=type(exc).__name__,
+            error_type=type(exc).__name__,
             duration_ms=round((time.perf_counter() - started) * 1000, 2),
         )
         raise
 
     status = int(getattr(response, "status_code", 0) or 0)
+    response_bytes = _response_bytes(response)
+    content_type = _response_content_type(response)
+    duration_ms = round((time.perf_counter() - started) * 1000, 2)
     failed = status >= 400
+    fields: dict[str, Any] = {
+        "provider": provider,
+        "operation": operation,
+        "host": host,
+        "path": path,
+        "status": status,
+        "attempt": attempt,
+        "duration_ms": duration_ms,
+        "response_bytes": response_bytes,
+        "content_type": content_type,
+    }
+    if failed:
+        fields.update(
+            url=safe_url,
+            request_headers=request_headers,
+            response_preview=response_preview(
+                _response_text(response),
+                max_chars=preview_chars,
+            ),
+            stage="status",
+        )
+    elif detail_crawler:
+        fields["url"] = safe_url
+
     log_event(
         logger,
         channel="application",
         category="crawler",
-        event="external_request_failed" if failed else "external_request_finished",
+        event="upstream.failed" if failed else "upstream.completed",
         level=logging.WARNING if failed else logging.INFO,
-        provider=provider,
-        operation=operation,
-        host=host,
-        path=path,
-        stage="status" if failed else "response",
-        status=status,
-        duration_ms=round((time.perf_counter() - started) * 1000, 2),
+        **fields,
     )
     return response
+
+
+def _response_bytes(response: Any) -> int:
+    content = getattr(response, "content", None)
+    if content is not None:
+        if isinstance(content, str):
+            return len(content.encode())
+        try:
+            return len(content)
+        except TypeError:
+            return 0
+
+    text = getattr(response, "text", None)
+    if text is None:
+        return 0
+    return len(str(text).encode())
+
+
+def _response_content_type(response: Any) -> str:
+    headers = getattr(response, "headers", None)
+    if not headers:
+        return ""
+    if hasattr(headers, "items"):
+        for key, value in headers.items():
+            if str(key).lower() == "content-type":
+                return str(value)
+    if hasattr(headers, "get"):
+        return str(headers.get("Content-Type") or headers.get("content-type") or "")
+    return ""
+
+
+def _response_text(response: Any) -> str:
+    text = getattr(response, "text", None)
+    if text is not None:
+        return str(text)
+
+    content = getattr(response, "content", b"")
+    if isinstance(content, bytes):
+        return content.decode(errors="replace")
+    return str(content or "")
 
 
 # Rate-limited logging
@@ -270,12 +355,12 @@ def log_adapter_failure(
         interval_seconds=30,
         channel="application",
         category="crawler",
-        event="adapter_operation_failed",
+        event="adapter.failed",
         level=logging.WARNING,
         provider=provider,
         operation=operation,
         stage=stage,
-        exception_type=type(exc).__name__,
+        error_type=type(exc).__name__,
     )
 
 
@@ -311,16 +396,22 @@ class ChannelFilter(logging.Filter):
 
 
 class SafeQueueHandler(logging.handlers.QueueHandler):
-    def __init__(self, queue, *, error_fallback=None):
+    def __init__(self, queue, *, error_fallback=None, critical_fallbacks=None):
         super().__init__(queue)
         self._error_fallback = error_fallback
-        self._fallback_used = False
+        self._critical_fallbacks = list(critical_fallbacks or ())
 
     def prepare(self, record: logging.LogRecord) -> logging.LogRecord:
         rec = copy.copy(record)
         rec.event_fields = dict(getattr(record, "event_fields", {}))
         if record.exc_info and not isinstance(record.exc_info, bool) and record.exc_info[1]:
             rec.exc_text = self.formatter.formatException(record.exc_info) if hasattr(self, "formatter") and self.formatter else ""
+        resolved = None
+        if record.args:
+            resolved = record.getMessage()
+            rec.msg = resolved
+        if not hasattr(record, "event"):
+            rec.event = resolved if resolved is not None else record.getMessage()
         rec.args = None
         return rec
 
@@ -328,16 +419,26 @@ class SafeQueueHandler(logging.handlers.QueueHandler):
         try:
             self.queue.put_nowait(record)
         except Full:
-            if record.levelno >= logging.ERROR and self._error_fallback:
+            event = str(getattr(record, "event", ""))
+            critical = record.levelno >= logging.ERROR or event == "admin.changed"
+            if critical and self._critical_fallbacks:
+                for handler in self._critical_fallbacks:
+                    handler.handle(record)
+            elif record.levelno >= logging.ERROR and self._error_fallback:
                 self._error_fallback.handle(record)
             elif self._error_fallback and _rate_limit_allows("queue-full", 30):
                 self._error_fallback.handle(
                     build_event_record(
                         logging.WARNING,
                         channel="error",
-                        event="logging_queue_full",
+                        event="logging.queue.full",
                     )
                 )
+
+
+class SafeQueueListener(logging.handlers.QueueListener):
+    def enqueue_sentinel(self) -> None:
+        self.queue.put(self._sentinel)
 
 
 class LoggingRuntime:
@@ -351,6 +452,7 @@ class LoggingRuntime:
         self._saved_root_handlers: list[logging.Handler] = []
         self._saved_root_level: int = logging.WARNING
         self._error_fallback: logging.Handler | None = None
+        self._saved_library_levels: dict[str, int] = {}
 
     def start(self) -> None:
         root = logging.getLogger()
@@ -358,6 +460,12 @@ class LoggingRuntime:
         self._saved_root_level = root.level
         root.handlers.clear()
         root.setLevel(self.config.level)
+        noisy_loggers = ("httpx", "httpcore", "apscheduler.executors.default")
+        self._saved_library_levels = {
+            name: logging.getLogger(name).level for name in noisy_loggers
+        }
+        for name in noisy_loggers:
+            logging.getLogger(name).setLevel(logging.WARNING)
 
         # Console handler
         if self.config.console_enabled:
@@ -389,36 +497,53 @@ class LoggingRuntime:
                 fh.setFormatter(StructuredTextFormatter(max_message_length=self.config.max_message_length))
                 fh.setLevel(self.config.level)
                 self.file_handlers.append(fh)
-            # Error fallback for queue saturation
-            self._error_fallback = logging.handlers.TimedRotatingFileHandler(
-                filename=str(self.config.log_dir / "error.log"),
-                when=rotation_when,
-                encoding="utf-8",
-                utc=False,
-                backupCount=backup_count,
-            )
-            self._error_fallback.setFormatter(
-                StructuredTextFormatter(max_message_length=self.config.max_message_length)
-            )
-            self._error_fallback.setLevel(logging.ERROR)
+                if ch == "error":
+                    self._error_fallback = fh
             self.file_logging_enabled = True
         except Exception:
             self.file_logging_enabled = False
+            for handler in self.file_handlers:
+                try:
+                    handler.close()
+                except Exception:
+                    pass
+            self.file_handlers.clear()
+            if self._error_fallback is not None:
+                try:
+                    self._error_fallback.close()
+                except Exception:
+                    pass
+                self._error_fallback = None
+
+        if not self.file_logging_enabled and self.console_handler is None:
+            self.console_handler = logging.StreamHandler(sys.stderr)
+            self.console_handler.setLevel(self.config.level)
+            self.console_handler.setFormatter(
+                StructuredTextFormatter(max_message_length=self.config.max_message_length)
+            )
 
         # Queue + listener
         self.queue = Queue(maxsize=self.config.queue_size)
         overflow_fallback = self._error_fallback or self.console_handler
-        queue_handler = SafeQueueHandler(self.queue, error_fallback=overflow_fallback)
-        queue_handler.setLevel(self.config.level)
-        root.addHandler(queue_handler)
-
         targets: list[logging.Handler] = []
         if self.file_logging_enabled:
             targets.extend(self.file_handlers)
-        if self.config.console_enabled and self.console_handler:
+        if self.console_handler:
             targets.append(self.console_handler)
+        queue_handler = SafeQueueHandler(
+            self.queue,
+            error_fallback=overflow_fallback,
+            critical_fallbacks=targets,
+        )
+        queue_handler.setLevel(self.config.level)
+        root.addHandler(queue_handler)
+
         if targets:
-            self.listener = logging.handlers.QueueListener(self.queue, *targets, respect_handler_level=True)
+            self.listener = SafeQueueListener(
+                self.queue,
+                *targets,
+                respect_handler_level=True,
+            )
             self.listener.start()
 
     def stop(self) -> None:
@@ -429,17 +554,23 @@ class LoggingRuntime:
         for h in self._saved_root_handlers:
             root.addHandler(h)
         root.setLevel(self._saved_root_level)
+        for name, level in self._saved_library_levels.items():
+            logging.getLogger(name).setLevel(level)
+        self._saved_library_levels.clear()
         for fh in self.file_handlers:
             try:
                 fh.close()
             except Exception:
                 pass
-        if self._error_fallback is not None:
+        if (
+            self._error_fallback is not None
+            and self._error_fallback not in self.file_handlers
+        ):
             try:
                 self._error_fallback.close()
             except Exception:
                 pass
-            self._error_fallback = None
+        self._error_fallback = None
         self.file_handlers.clear()
         self.queue = None
         self.listener = None
@@ -472,7 +603,7 @@ def initialize_logging() -> None:
     runtime.start()
     with _logging_lock:
         _logging_runtime = runtime
-    log_event(logging.getLogger("today_highlights"), channel="application", event="application_started")
+    log_event(logging.getLogger("today_highlights"), channel="application", event="app.started")
 
 
 def shutdown_logging() -> None:
@@ -481,7 +612,7 @@ def shutdown_logging() -> None:
         runtime = _logging_runtime
         _logging_runtime = None
     if runtime:
-        log_event(logging.getLogger("today_highlights"), channel="application", event="application_stopping")
+        log_event(logging.getLogger("today_highlights"), channel="application", event="app.stopping")
         runtime.stop()
 
 

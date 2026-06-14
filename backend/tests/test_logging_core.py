@@ -6,6 +6,7 @@ from queue import Queue
 from app.core.logging import (
     LoggingConfig,
     SafeQueueHandler,
+    SafeQueueListener,
     StructuredTextFormatter,
     bind_log_context,
     build_event_record,
@@ -43,9 +44,10 @@ def test_structured_formatter_merges_bound_context():
         )
 
     text = formatter.format(record)
-    assert "INFO" in text
-    assert "category=crawler" in text
-    assert "event=crawl_job_finished" in text
+    lines = text.splitlines()
+    assert "INFO" in lines[0]
+    assert "crawler" in lines[0]
+    assert "crawl_job_finished" in lines[0]
     assert "request_id=req-12345678" in text
     assert "crawl_job_id=42" in text
     assert "items_saved=6" in text
@@ -80,7 +82,7 @@ def test_formatter_quotes_values_and_truncates_long_messages():
     )
 
     text = formatter.format(record)
-    assert "\n" not in text
+    assert len(text.splitlines()) == 2
     assert "truncated=true" in text
     assert len(text) < 220
 
@@ -137,6 +139,21 @@ def test_hourly_and_daily_rotation_configuration(tmp_path):
         hourly.stop()
 
 
+def test_runtime_uses_one_rotating_handler_per_log_file(tmp_path):
+    runtime = create_logging_runtime(_config(tmp_path))
+    runtime.start()
+    try:
+        filenames = [
+            str(handler.baseFilename)
+            for handler in runtime.file_handlers
+            if hasattr(handler, "baseFilename")
+        ]
+        assert len(filenames) == len(set(filenames))
+        assert runtime._error_fallback in runtime.file_handlers
+    finally:
+        runtime.stop()
+
+
 def test_console_event_is_emitted_once(tmp_path):
     stream = StringIO()
     runtime = create_logging_runtime(_config(tmp_path, console_enabled=True))
@@ -148,7 +165,20 @@ def test_console_event_is_emitted_once(tmp_path):
     finally:
         runtime.stop()
 
-    assert stream.getvalue().count("event=console_once") == 1
+    assert stream.getvalue().count("console_once") == 1
+
+
+def test_runtime_suppresses_noisy_library_success_logs_and_restores_levels(tmp_path):
+    names = ("httpx", "httpcore", "apscheduler.executors.default")
+    original = {name: logging.getLogger(name).level for name in names}
+    runtime = create_logging_runtime(_config(tmp_path))
+    runtime.start()
+    try:
+        assert all(logging.getLogger(name).level == logging.WARNING for name in names)
+    finally:
+        runtime.stop()
+
+    assert {name: logging.getLogger(name).level for name in names} == original
 
 
 def test_queue_overflow_warning_uses_direct_fallback():
@@ -164,8 +194,52 @@ def test_queue_overflow_warning_uses_direct_fallback():
     )
 
     text = stream.getvalue()
-    assert "event=logging_queue_full" in text
+    assert "logging.queue.full" in text
     assert "dropped_event" not in text
+
+
+def test_queue_overflow_writes_admin_audit_to_direct_fallback():
+    queue = Queue(maxsize=1)
+    queue.put(build_event_record(logging.INFO, channel="application", event="already_full"))
+    stream = StringIO()
+    fallback = logging.StreamHandler(stream)
+    fallback.setFormatter(StructuredTextFormatter())
+    handler = SafeQueueHandler(
+        queue,
+        error_fallback=fallback,
+        critical_fallbacks=[fallback],
+    )
+
+    handler.enqueue(
+        build_event_record(
+            logging.INFO,
+            channel="application",
+            category="admin",
+            event="admin.changed",
+            action="update",
+        )
+    )
+
+    assert "admin.changed" in stream.getvalue()
+
+
+def test_safe_queue_listener_uses_blocking_sentinel_enqueue():
+    class BlockingOnlyQueue:
+        def __init__(self):
+            self.item = None
+
+        def put(self, item):
+            self.item = item
+
+        def put_nowait(self, _item):
+            raise AssertionError("sentinel must not use put_nowait")
+
+    queue = BlockingOnlyQueue()
+    listener = SafeQueueListener(queue, logging.NullHandler())
+
+    listener.enqueue_sentinel()
+
+    assert queue.item is listener._sentinel
 
 
 def test_unwritable_directory_falls_back_to_console(monkeypatch, tmp_path):
@@ -178,6 +252,24 @@ def test_unwritable_directory_falls_back_to_console(monkeypatch, tmp_path):
     try:
         assert runtime.file_logging_enabled is False
         assert runtime.console_handler is not None
+    finally:
+        runtime.stop()
+
+
+def test_unwritable_directory_uses_emergency_consumer_when_console_disabled(
+    monkeypatch,
+    tmp_path,
+):
+    def fail_mkdir(*args, **kwargs):
+        raise PermissionError("read-only")
+
+    monkeypatch.setattr(Path, "mkdir", fail_mkdir)
+    runtime = create_logging_runtime(_config(tmp_path, console_enabled=False))
+    runtime.start()
+    try:
+        assert runtime.file_logging_enabled is False
+        assert runtime.console_handler is not None
+        assert runtime.listener is not None
     finally:
         runtime.stop()
 

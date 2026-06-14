@@ -1,0 +1,202 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+
+@dataclass(frozen=True)
+class EventSpec:
+    description: str
+    field_order: tuple[str, ...]
+    expanded_fields: tuple[str, ...] = ()
+
+
+_COMMON_FIELD_ORDER = (
+    "source_name",
+    "topic_name",
+    "site",
+    "job_name",
+    "dataset_name",
+    "dataset_key",
+    "block_title",
+    "block_name",
+    "name",
+    "provider",
+    "backend",
+    "operation",
+    "model_name",
+    "task_name",
+    "model",
+    "source_type",
+    "entity_type",
+    "asset_type",
+    "trigger",
+    "trigger_type",
+    "page_route",
+    "route",
+    "host",
+    "method",
+    "path",
+    "endpoint",
+    "query_keys",
+    "client_ip",
+    "username",
+    "url_hash",
+    "status",
+    "content_type",
+    "retry_after_seconds",
+    "reason",
+    "stage",
+    "attempt",
+    "fallback",
+    "slow",
+    "page",
+    "tier",
+    "quota_remaining",
+    "items_found",
+    "found",
+    "items_received",
+    "received",
+    "items_saved",
+    "saved",
+    "items_deduplicated",
+    "deduplicated",
+    "dataset_count",
+    "entry_count",
+    "total_entries_count",
+    "snapshot_count",
+    "input_count",
+    "input_items",
+    "input_chars",
+    "fetch_count",
+    "request_count",
+    "success_count",
+    "response_bytes",
+    "request",
+    "body_bytes",
+    "completed_count",
+    "failed_count",
+    "display_count",
+    "summary_points",
+    "output_items",
+    "tokens",
+    "prompt_tokens",
+    "completion_tokens",
+    "total_tokens",
+    "usage_estimated",
+    "output_chars",
+    "output_keys",
+    "bytes",
+    "duration_ms",
+    "duration",
+    "error_type",
+    "exception_type",
+    "error",
+    "message",
+    "source_id",
+    "crawl_job_id",
+    "ai_job_id",
+    "job_id",
+    "dataset_id",
+    "snapshot_id",
+    "active_run_id",
+    "model_config_id",
+    "enrichment_id",
+    "block_id",
+    "topic_id",
+    "raw_item_id",
+    "token_usage_id",
+    "user_id",
+    "request_id",
+)
+
+_EVENT_DESCRIPTIONS = {
+    "aa.dataset.completed": "分析数据集处理完成",
+    "aa.dataset.failed": "分析数据集处理失败",
+    "aa.dataset.started": "分析数据集处理开始",
+    "aa.page.collected": "分析页面采集完成",
+    "aa.request.failed": "分析服务请求失败",
+    "aa.request.started": "分析服务请求开始",
+    "aa.sync.completed": "分析同步完成",
+    "aa.sync.failed": "分析同步失败",
+    "aa.sync.requested": "分析同步已请求",
+    "aa.sync.skipped": "分析同步已跳过",
+    "aa.sync.started": "分析同步开始",
+    "aa.sync.status-persist.failed": "分析同步状态保存失败",
+    "adapter.failed": "数据适配操作失败",
+    "admin.changed": "管理配置已变更",
+    "ai.block.completed": "AI区块分析完成",
+    "ai.block.failed": "AI区块分析失败",
+    "ai.block.started": "AI区块分析开始",
+    "ai.enrichment.completed": "AI增强完成",
+    "ai.enrichment.failed": "AI增强失败",
+    "ai.enrichment.started": "AI增强开始",
+    "ai.request.completed": "AI请求完成",
+    "ai.request.failed": "AI请求失败",
+    "ai.request.started": "AI请求开始",
+    "app.started": "应用启动",
+    "app.stopping": "应用停止中",
+    "block.cookie.unavailable": "区块凭据不可用",
+    "block.media-cache.failed": "媒体缓存初始化失败",
+    "block.resolve.failed": "区块解析失败",
+    "cache.backend.fallback": "缓存后端已降级",
+    "cache.backend.ready": "缓存后端就绪",
+    "cache.backend.recovered": "缓存后端已恢复",
+    "cache.operation.failed": "缓存操作失败",
+    "cache.swr.failed": "后台缓存刷新失败",
+    "crawl.completed": "抓取任务完成",
+    "crawl.enrichment.failed": "抓取增强失败",
+    "crawl.failed": "抓取任务失败",
+    "crawl.fetch.completed": "抓取获取完成",
+    "crawl.persist.completed": "抓取持久化完成",
+    "crawl.started": "抓取任务开始",
+    "http.completed": "HTTP请求完成",
+    "http.unhandled": "HTTP请求未处理异常",
+    "logging.queue.full": "日志队列已满",
+    "media.cache.completed": "媒体缓存完成",
+    "media.cache.failed": "媒体缓存失败",
+    "media.cache.hit": "媒体缓存命中",
+    "media.cache.race-reused": "媒体缓存复用并发结果",
+    "media.cache.skipped": "媒体缓存已跳过",
+    "media.cleanup.failed": "媒体清理失败",
+    "media.download.completed": "媒体下载完成",
+    "scheduler.job.completed": "调度任务完成",
+    "scheduler.job.failed": "调度任务失败",
+    "scheduler.job.missed": "调度任务错过执行",
+    "scheduler.job.skipped": "调度任务已跳过",
+    "scheduler.started": "调度器启动",
+    "log": "日志消息",
+    "upstream.completed": "上游请求完成",
+    "upstream.failed": "上游请求失败",
+}
+
+_EXPANDED_FAILURE_FIELDS = ("url", "response_preview")
+_FAILURE_EVENTS = {
+    event
+    for event in _EVENT_DESCRIPTIONS
+    if event.endswith(("failed", ".failed")) or "unhandled" in event
+}
+
+EVENT_SPECS = {
+    event: EventSpec(
+        description=description,
+        field_order=_COMMON_FIELD_ORDER,
+        expanded_fields=_EXPANDED_FAILURE_FIELDS if event in _FAILURE_EVENTS else (),
+    )
+    for event, description in _EVENT_DESCRIPTIONS.items()
+}
+EVENT_SPECS["upstream.completed"] = EventSpec(
+    description=_EVENT_DESCRIPTIONS["upstream.completed"],
+    field_order=_COMMON_FIELD_ORDER,
+    expanded_fields=("url",),
+)
+EVENT_SPECS["upstream.failed"] = EventSpec(
+    description=_EVENT_DESCRIPTIONS["upstream.failed"],
+    field_order=_COMMON_FIELD_ORDER,
+    expanded_fields=("url", "request_headers", "response_preview"),
+)
+
+_FALLBACK_SPEC = EventSpec(description="业务事件", field_order=())
+
+
+def event_spec(event: str) -> EventSpec:
+    return EVENT_SPECS.get(event, _FALLBACK_SPEC)

@@ -113,7 +113,7 @@ def request_sync_run(
                 logger,
                 channel="application",
                 category="ai",
-                event="aa_sync_requested",
+                event="aa.sync.requested",
                 ai_job_id=run.id,
                 user_id=requested_by_user_id,
                 trigger_type=trigger_type,
@@ -136,7 +136,7 @@ def execute_sync_run(
                 logger,
                 channel="application",
                 category="ai",
-                event="aa_sync_skipped",
+                event="aa.sync.skipped",
                 level=logging.WARNING,
                 ai_job_id=run_id,
                 reason="lock",
@@ -163,7 +163,7 @@ def execute_sync_run(
                     logger,
                     channel="application",
                     category="ai",
-                    event="aa_sync_started",
+                    event="aa.sync.started",
                     trigger_type=run.trigger_type,
                 )
 
@@ -181,7 +181,7 @@ def execute_sync_run(
                         logger,
                         channel="application",
                         category="ai",
-                        event="aa_dataset_started",
+                        event="aa.dataset.started",
                         dataset_key=dataset_key,
                     )
                     try:
@@ -192,7 +192,7 @@ def execute_sync_run(
                                 logger,
                                 channel="application",
                                 category="ai",
-                                event="aa_dataset_failed",
+                                event="aa.dataset.failed",
                                 level=logging.WARNING,
                                 dataset_key=dataset_key,
                                 reason="no_payloads",
@@ -234,11 +234,11 @@ def execute_sync_run(
                                     logger,
                                     channel="application",
                                     category="ai",
-                                    event="aa_dataset_failed",
+                                    event="aa.dataset.failed",
                                     level=logging.WARNING,
                                     dataset_key="language_china",
-                                    exception_type=type(exc).__name__,
-                                    message=str(exc),
+                                    error_type=type(exc).__name__,
+                                    error=str(exc),
                                 )
 
                         completed.append(dataset_key)
@@ -248,7 +248,7 @@ def execute_sync_run(
                             logger,
                             channel="application",
                             category="ai",
-                            event="aa_dataset_finished",
+                            event="aa.dataset.completed",
                             dataset_key=dataset_key,
                             dataset_id=dataset.id,
                             entry_count=len(parsed.entries),
@@ -262,11 +262,11 @@ def execute_sync_run(
                             logger,
                             channel="application",
                             category="ai",
-                            event="aa_dataset_failed",
+                            event="aa.dataset.failed",
                             level=logging.WARNING,
                             dataset_key=dataset_key,
-                            exception_type=type(exc).__name__,
-                            message=str(exc),
+                            error_type=type(exc).__name__,
+                            error=str(exc),
                         )
                         break
                     except Exception as exc:
@@ -275,11 +275,11 @@ def execute_sync_run(
                             logger,
                             channel="application",
                             category="ai",
-                            event="aa_dataset_failed",
+                            event="aa.dataset.failed",
                             level=logging.ERROR,
                             dataset_key=dataset_key,
-                            exception_type=type(exc).__name__,
-                            message=str(exc),
+                            error_type=type(exc).__name__,
+                            error=str(exc),
                             exc_info=True,
                         )
 
@@ -299,7 +299,7 @@ def execute_sync_run(
                 logger,
                 channel="application",
                 category="ai",
-                event="aa_sync_finished",
+                event="aa.sync.completed",
                 ai_job_id=run.id,
                 user_id=run.requested_by_user_id,
                 status=run.status,
@@ -313,11 +313,11 @@ def execute_sync_run(
                 logger,
                 channel="error",
                 category="ai",
-                event="aa_sync_failed",
+                event="aa.sync.failed",
                 level=logging.ERROR,
                 ai_job_id=run_id,
-                exception_type=type(exc).__name__,
-                message=str(exc),
+                error_type=type(exc).__name__,
+                error=str(exc),
                 exc_info=True,
             )
             try:
@@ -332,10 +332,10 @@ def execute_sync_run(
                     logger,
                     channel="error",
                     category="ai",
-                    event="aa_sync_status_persist_failed",
+                    event="aa.sync.status-persist.failed",
                     level=logging.ERROR,
                     ai_job_id=run_id,
-                    exception_type=type(persist_exc).__name__,
+                    error_type=type(persist_exc).__name__,
                 )
         finally:
             session.close()
@@ -348,7 +348,7 @@ def scheduled_sync() -> None:
             logger,
             channel="application",
             category="ai",
-            event="aa_sync_skipped",
+            event="aa.sync.skipped",
             reason="disabled",
             trigger_type="scheduled",
         )
@@ -358,7 +358,7 @@ def scheduled_sync() -> None:
             logger,
             channel="application",
             category="ai",
-            event="aa_sync_skipped",
+            event="aa.sync.skipped",
             level=logging.WARNING,
             reason="missing_api_key",
             trigger_type="scheduled",
@@ -372,7 +372,7 @@ def scheduled_sync() -> None:
             logger,
             channel="application",
             category="ai",
-            event="aa_sync_skipped",
+            event="aa.sync.skipped",
             reason="active_run",
             trigger_type="scheduled",
             active_run_id=exc.active_run_id,

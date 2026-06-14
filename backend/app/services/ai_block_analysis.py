@@ -1,5 +1,6 @@
 import asyncio
 import json
+import time
 from datetime import datetime, timedelta
 from hashlib import sha256
 
@@ -11,10 +12,10 @@ import logging
 
 from app.core.config import settings
 from app.core.crypto import CryptoService
-from app.core.logging import bind_log_context, log_event
+from app.core.logging import bind_log_context, format_duration, log_event
 
 logger = logging.getLogger("today_highlights.ai")
-from app.models.entities import AIGenerationJob, AIBlockAnalysis, AITokenUsage, PageBlock, User
+from app.models.entities import AIGenerationJob, AIBlockAnalysis, AITokenUsage, PageBlock, Topic, User
 from app.schemas.ai_block_analysis import BlockAnalysisValidated
 from app.services.ai_block_prompts import (
     build_block_system_prompt,
@@ -197,19 +198,43 @@ def analyze_block(
     session.add(job)
     session.flush()
 
-    with bind_log_context(ai_job_id=job.id, user_id=user.id):
-        log_event(logger, channel="application", category="ai", event="block_analysis_started",
-                  block_id=block_id, model=model_cfg.model)
+    topic_slug = infer_topic_slug(page_route)
+    topic = session.scalar(select(Topic).where(Topic.slug == topic_slug))
+    model_display_name = f"{model_cfg.name} / {model_cfg.model}"
+    started = time.perf_counter()
+    context = {
+        "ai_job_id": job.id,
+        "user_id": user.id,
+        "username": user.username,
+        "topic_name": topic.name if topic else topic_slug,
+        "block_id": block.id,
+        "block_title": block.title,
+        "model_name": model_display_name,
+    }
+    with bind_log_context(**context):
+        log_event(
+            logger,
+            channel="application",
+            category="ai",
+            event="ai.block.started",
+            input_items=len(data),
+        )
 
     try:
         crypto = CryptoService(settings.app_secret_key)
-        client = AIClient(model_cfg.base_url, crypto.decrypt(model_cfg.api_key_encrypted), model_cfg.model, post_json=post_json)
-        topic_slug = infer_topic_slug(page_route)
+        client = AIClient(
+            model_cfg.base_url,
+            crypto.decrypt(model_cfg.api_key_encrypted),
+            model_cfg.model,
+            post_json=post_json,
+            model_name=model_display_name,
+            task_name="区块分析",
+        )
         content_class = get_content_class(block.source_type)
         template = get_enabled_prompt_template(session, topic_slug, content_class)
         system_prompt = build_block_system_prompt(topic_slug, content_class, template)
         prompt = block_user_prompt(block, data)
-        with bind_log_context(ai_job_id=job.id, user_id=user.id):
+        with bind_log_context(**context):
             result = asyncio.run(client.complete_json_with_usage(system_prompt, prompt))
         validated = validate_block_analysis_payload(result.content)
 
@@ -224,9 +249,22 @@ def analyze_block(
         job.status = "succeeded"
         job.success_count = 1
         job.finished_at = datetime.utcnow()
-        log_event(logger, channel="application", category="ai", event="block_analysis_finished",
-                  ai_job_id=job.id, user_id=user.id, block_id=block_id,
-                  model=model_cfg.model, summary_points=len(validated.summary_points))
+        log_event(
+            logger,
+            channel="application",
+            category="ai",
+            event="ai.block.completed",
+            **context,
+            input_items=len(data),
+            output_items=len(validated.summary_points),
+            tokens={
+                "prompt": result.usage["prompt_tokens"],
+                "completion": result.usage["completion_tokens"],
+                "total": result.usage["total_tokens"],
+                "estimated": result.usage_estimated,
+            },
+            duration=format_duration(time.perf_counter() - started),
+        )
 
         usage = AITokenUsage(
             user_id=user.id,
@@ -253,8 +291,16 @@ def analyze_block(
         job.failed_count = 1
         job.error_message = str(exc)[:500]
         job.finished_at = datetime.utcnow()
-        log_event(logger, channel="application", category="ai", event="block_analysis_failed",
-                  level=logging.ERROR, ai_job_id=job.id, user_id=user.id,
-                  block_id=block_id, exception_type=type(exc).__name__, message=str(exc)[:300])
+        log_event(
+            logger,
+            channel="application",
+            category="ai",
+            event="ai.block.failed",
+            level=logging.ERROR,
+            **context,
+            error_type=type(exc).__name__,
+            error=str(exc)[:300],
+            duration=format_duration(time.perf_counter() - started),
+        )
     session.flush()
     return analysis

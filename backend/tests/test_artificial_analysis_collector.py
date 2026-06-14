@@ -78,7 +78,7 @@ def test_collect_language_follows_has_more_and_persists_each_page_before_decode(
     events = [
         record
         for record in caplog.records
-        if getattr(record, "event", "") == "aa_page_collected"
+        if getattr(record, "event", "") == "aa.page.collected"
     ]
     assert [record.event_fields["page"] for record in events] == [1, 2]
     assert all(record.event_fields["dataset_key"] == "language_global" for record in events)
@@ -136,7 +136,7 @@ def test_collect_handles_429(session, caplog):
     failed = [
         record
         for record in caplog.records
-        if getattr(record, "event", "") == "aa_request_failed"
+        if getattr(record, "event", "") == "aa.request.failed"
     ]
     assert len(failed) == 1
     assert failed[0].event_fields["stage"] == "rate_limit"

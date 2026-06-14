@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime
 
 from app.core.config import settings
@@ -25,7 +26,7 @@ async def _failing_post_json(_payload: dict) -> dict:
     raise RuntimeError("upstream unavailable")
 
 
-def test_process_item_enrichment_creates_highlight_and_job(client) -> None:
+def test_process_item_enrichment_creates_highlight_and_job(client, caplog) -> None:
     session = next(client.app.dependency_overrides[get_session]())
 
     # Set up stock topic + source
@@ -40,7 +41,7 @@ def test_process_item_enrichment_creates_highlight_and_job(client) -> None:
     # Set up default AI model config with properly encrypted API key
     crypto = CryptoService(settings.app_secret_key)
     model_cfg = AIModelConfig(
-        name="Test Model",
+        name="DeepSeek 默认",
         base_url="https://api.test.com/v1",
         model="test-model",
         api_key_encrypted=crypto.encrypt("test-api-key"),
@@ -73,6 +74,7 @@ def test_process_item_enrichment_creates_highlight_and_job(client) -> None:
     enrichment_id = enrichments[0].id
 
     # Process the enrichment with mocked AI
+    caplog.set_level(logging.INFO)
     enrichment = process_item_enrichment(session, enrichment_id, post_json=_fake_post_json, trigger_type="crawl")
     session.commit()
 
@@ -97,6 +99,15 @@ def test_process_item_enrichment_creates_highlight_and_job(client) -> None:
     assert job.status == "succeeded"
     assert job.job_type == "item_enrichment"
     assert job.trigger_type == "crawl"
+    record = next(
+        record
+        for record in caplog.records
+        if getattr(record, "event", "") == "ai.enrichment.completed"
+    )
+    assert record.event_fields["topic_name"] == "股票"
+    assert record.event_fields["item_title"] == "新能源公告密集发布"
+    assert record.event_fields["model_name"] == "DeepSeek 默认 / test-model"
+    assert record.event_fields["ai_job_id"] == job.id
 
 
 def test_process_item_enrichment_failure_updates_existing_job(client) -> None:

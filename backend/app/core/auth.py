@@ -3,6 +3,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
 from app.core.database import get_session
+from app.core.logging import update_log_context
 from app.models.entities import User
 from app.services.auth_service import resolve_token_user
 
@@ -18,6 +19,8 @@ def get_current_user(
         raise HTTPException(status_code=401, detail="Missing token")
     user = resolve_token_user(session, credentials.credentials)
     request.state.user_id = user.id
+    request.state.username = user.username
+    update_log_context(user_id=user.id, username=user.username)
     return user
 
 

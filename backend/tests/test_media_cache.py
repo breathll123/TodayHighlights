@@ -109,8 +109,8 @@ def test_media_cache_downloads_once_and_reuses_asset(client, tmp_path: Path, cap
     asset_hash = url_hash("https://file.qiumiwu.com/team/a.png")
     assert (tmp_path / "football" / f"{asset_hash}.png").exists()
     events = [getattr(record, "event", "") for record in caplog.records]
-    assert "media_download_finished" in events
-    assert "media_cache_hit" in events
+    assert "media.download.completed" in events
+    assert "media.cache.hit" in events
     rendered = " ".join(str(getattr(record, "event_fields", {})) for record in caplog.records)
     assert "https://file.qiumiwu.com/team/a.png" not in rendered
 
@@ -170,9 +170,9 @@ def test_media_cache_removes_file_when_commit_fails(client, tmp_path: Path, monk
     record = next(
         record
         for record in caplog.records
-        if getattr(record, "event", "") == "media_cache_failed"
+        if getattr(record, "event", "") == "media.cache.failed"
     )
-    assert record.event_fields["exception_type"] == "RuntimeError"
+    assert record.event_fields["error_type"] == "RuntimeError"
     assert "cleanup.png" not in str(record.event_fields)
 
 
@@ -256,7 +256,7 @@ def test_media_cleanup_failure_is_logged(tmp_path: Path, monkeypatch, caplog) ->
     record = next(
         record
         for record in caplog.records
-        if getattr(record, "event", "") == "media_cleanup_failed"
+        if getattr(record, "event", "") == "media.cleanup.failed"
     )
-    assert record.event_fields["exception_type"] == "OSError"
+    assert record.event_fields["error_type"] == "OSError"
     assert str(path) not in str(record.event_fields)
