@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 
 from concurrent.futures import ThreadPoolExecutor
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
 
 _sync_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="aa-sync")
@@ -21,6 +21,7 @@ from app.schemas.artificial_analysis import (
 from app.services.artificial_analysis.repository import get_creator_coverage, get_published_ranking
 from app.services.artificial_analysis.sync import (ActiveSyncRunError, execute_sync_run,
                                                       request_reparse_run, request_sync_run)
+from app.services.audit_logging import log_admin_change
 
 logger = logging.getLogger(__name__)
 
@@ -155,7 +156,13 @@ def list_creators(session: Session = Depends(get_session)) -> list[AACreatorRegi
 
 
 @router.put("/creators/{creator_id}", response_model=AACreatorRegionRead)
-def update_creator(creator_id: int, body: AACreatorRegionUpdate, session: Session = Depends(get_session)) -> AACreatorRegionRead:
+def update_creator(
+    creator_id: int,
+    body: AACreatorRegionUpdate,
+    request: Request,
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+) -> AACreatorRegionRead:
     creator = session.get(AACreatorRegion, creator_id)
     if creator is None:
         raise HTTPException(status_code=404, detail="Creator not found")
@@ -163,6 +170,15 @@ def update_creator(creator_id: int, body: AACreatorRegionUpdate, session: Sessio
     creator.source = "manual"
     creator.notes = body.notes
     session.commit()
+    log_admin_change(
+        request=request,
+        user=user,
+        action="update",
+        object_type="aa_creator",
+        object_name=creator.canonical_name,
+        object_id=creator.id,
+        changed_fields=body.model_fields_set,
+    )
     return AACreatorRegionRead(
         id=creator.id,
         creator_external_id=creator.creator_external_id,
@@ -177,6 +193,7 @@ def update_creator(creator_id: int, body: AACreatorRegionUpdate, session: Sessio
 @router.post("/sync")
 def trigger_sync(
     background_tasks: BackgroundTasks,
+    request: Request,
     body: AAManualSyncRequest | None = None,
     user: User = Depends(get_current_user),
     session: Session = Depends(get_session),
@@ -195,4 +212,14 @@ def trigger_sync(
 
     run = session.get(AASyncRun, run_id)
     _sync_executor.submit(execute_sync_run, run_id)
+    dataset_names = body.dataset_keys if body and body.dataset_keys else ["全部数据集"]
+    log_admin_change(
+        request=request,
+        user=user,
+        action="trigger",
+        object_type="aa_sync",
+        object_name=",".join(dataset_names),
+        object_id=run_id,
+        changed_fields=["triggered"],
+    )
     return JSONResponse(status_code=202, content={"status": "accepted", "run": _serialize_run(run).model_dump()})
