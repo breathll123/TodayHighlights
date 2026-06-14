@@ -61,6 +61,37 @@ class _IndexResponse:
         }
 
 
+class _LonghuResponse:
+    def raise_for_status(self) -> None:
+        return None
+
+    def json(self) -> dict:
+        return {
+            "data": {
+                "diff": [
+                    {
+                        "f3": 6.25,
+                        "f8": 18.4,
+                        "f12": "000001",
+                        "f14": "测试股份",
+                        "f152": 2,
+                        "f174": 350000000,
+                        "f176": -120000000,
+                    },
+                    {
+                        "f3": 1.1,
+                        "f8": 2.0,
+                        "f12": "000002",
+                        "f14": "普通股份",
+                        "f152": 0,
+                        "f174": 10000000,
+                        "f176": -5000000,
+                    },
+                ]
+            }
+        }
+
+
 def test_fetch_one_trend_uses_intraday_high_low_fields(monkeypatch) -> None:
     def fake_get(*args, **kwargs):
         return _TrendResponse()
@@ -156,3 +187,18 @@ def test_source_indices_use_eastmoney_snapshot_api(monkeypatch) -> None:
         "subtype": "indices",
         "symbol": "000001",
     }
+
+
+def test_source_longhu_uses_push2_api_without_browser(monkeypatch) -> None:
+    def fake_push2_get(path: str, params: dict):
+        assert path == "/api/qt/clist/get"
+        assert params["fid"] == "f178"
+        return _LonghuResponse()
+
+    monkeypatch.setattr(source_eastmoney, "_push2_get", fake_push2_get)
+
+    drafts = source_eastmoney.EastmoneyAdapter().fetch("eastmoney://longhu", "")
+
+    assert len(drafts) == 1
+    assert drafts[0].title == "测试股份"
+    assert drafts[0].metrics["net_amount"] == 230000000

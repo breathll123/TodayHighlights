@@ -45,7 +45,7 @@ class EastmoneyAdapter:
             "industry": self._fetch_board,
             "capital_flow": self._fetch_capital_flow,
             "indices": self._fetch_indices,
-            "longhu": self._fetch_longhu_datacenter,
+            "longhu": self._fetch_longhu,
         }.get(subtype)
         if handler is None:
             return []
@@ -200,79 +200,4 @@ class EastmoneyAdapter:
                 },
                 content_hash=sha256(content_str.encode()).hexdigest(),
             ))
-        return drafts
-
-    # ── longhu (via datacenter-web API) ──
-
-    _lhb_cookie: str | None = None
-    _lhb_cookie_ts: float = 0
-
-    @classmethod
-    def _get_lhb_cookie(cls) -> str:
-        """Get datacenter-web cookie via Playwright (auto-refreshed every 30min)."""
-        import time as _time
-        now = _time.time()
-        if cls._lhb_cookie and (now - cls._lhb_cookie_ts) < 1800:
-            return cls._lhb_cookie
-        from playwright.sync_api import sync_playwright
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            ctx = browser.new_context()
-            page = ctx.new_page()
-            page.goto("https://data.eastmoney.com/stock/lhb.html", wait_until="domcontentloaded", timeout=30000)
-            page.wait_for_timeout(3000)
-            cookies = {c["name"]: c["value"] for c in ctx.cookies()}
-            browser.close()
-        cls._lhb_cookie = "; ".join(f"{k}={v}" for k, v in cookies.items())
-        cls._lhb_cookie_ts = now
-        return cls._lhb_cookie
-
-    def _fetch_longhu_datacenter(self, subtype: str) -> list[RawItemDraft]:
-        cookie = self._get_lhb_cookie()
-        resp = observed_http_get(
-            httpx.get,
-            "https://datacenter-web.eastmoney.com/api/data/v1/get",
-            provider="eastmoney",
-            operation="longhu_datacenter",
-            host="datacenter-web.eastmoney.com",
-            path="/api/data/v1/get",
-            params={"reportName": "RPT_ORGANIZATION_TRADE_DETAILSNEW", "columns": "ALL",
-                    "pageNumber": 1, "pageSize": 100, "sortTypes": "-1", "sortColumns": "TRADE_DATE",
-                    "source": "WEB", "client": "WEB"},
-            headers={"Cookie": cookie, "User-Agent": "Mozilla/5.0", "Referer": "https://data.eastmoney.com/stock/lhb.html"},
-            timeout=15,
-        )
-        resp.raise_for_status()
-        items = resp.json().get("result", {}).get("data", []) or []
-        # Filter latest trading day, sort by NET_BUY_AMT desc
-        if items:
-            latest_date = str(items[0].get("TRADE_DATE", ""))[:10]
-            today_items = [i for i in items if str(i.get("TRADE_DATE", ""))[:10] == latest_date]
-            today_items.sort(key=lambda x: abs(x.get("NET_BUY_AMT", 0) or 0), reverse=True)
-        else:
-            today_items = []
-        drafts = []
-        for item in today_items:
-            code = item.get("SECURITY_CODE", "")
-            name = item.get("SECURITY_NAME_ABBR", "")
-            pct_val = item.get("CHANGE_RATE", 0) or 0
-            net_buy = (item.get("NET_BUY_AMT", 0) or 0)
-            buy_amt = (item.get("BUY_AMT", 0) or 0)
-            sell_amt = (item.get("SELL_AMT", 0) or 0)
-            reason = item.get("EXPLANATION", "")
-            body = f"净买{net_buy/1e8:+.1f}亿 买{buy_amt/1e8:.1f}亿 卖{abs(sell_amt)/1e8:.1f}亿  {reason}"
-            content_str = f"{subtype}|{code}|{net_buy}|{buy_amt}"
-            drafts.append(RawItemDraft(
-                external_id=f"lhb_{code}_{item.get('TRADE_DATE','')}",
-                url=f"https://quote.eastmoney.com/{code}.html",
-                author="",
-                title=name,
-                body=body,
-                published_at=datetime.now(SH_TZ).replace(tzinfo=None),
-                metrics={"percent": float(pct_val), "subtype": subtype, "symbol": code,
-                         "net_buy": net_buy, "buy_amt": buy_amt, "sell_amt": sell_amt, "reason": reason},
-                content_hash=sha256(content_str.encode()).hexdigest(),
-            ))
-            if len(drafts) >= 20:
-                break
         return drafts
