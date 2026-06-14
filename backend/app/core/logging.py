@@ -47,6 +47,12 @@ def current_log_context() -> dict[str, Any]:
     return dict(_LOG_CONTEXT.get())
 
 
+def update_log_context(**fields: Any) -> None:
+    current = dict(_LOG_CONTEXT.get())
+    current.update({key: value for key, value in fields.items() if value is not None})
+    _LOG_CONTEXT.set(current)
+
+
 def build_event_record(
     level: int,
     *,
