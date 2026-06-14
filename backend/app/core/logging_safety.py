@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import re
 from collections.abc import Mapping
 from typing import Any
@@ -23,6 +24,11 @@ _SENSITIVE_URL_KEY_PARTS = (
     "sign",
     "credential",
 )
+_SENSITIVE_URL_KEYS = {
+    "auth",
+    "auth_code",
+    "oauth_code",
+}
 _SAFE_REQUEST_HEADER_NAMES = {
     "user-agent",
     "referer",
@@ -31,7 +37,8 @@ _SAFE_REQUEST_HEADER_NAMES = {
 }
 _JSON_SENSITIVE_KEY_PATTERN = (
     r"api[_-]?key|x-api-key|access_token|refresh_token|authorization|cookie|"
-    r"password|passwd|secret|token|session|signature|sign|credential"
+    r"password|passwd|secret|token|session|signature|sign|credential|"
+    r"(?:[a-z0-9]+[_-])+(?:secret|token|password|passwd|signature|credential)"
 )
 _JSON_PRIMITIVE_PATTERN = r"-?(?:\d+(?:\.\d+)?(?:[eE][+-]?\d+)?|true|false|null)"
 _JSON_SENSITIVE_FIELD_RE = re.compile(
@@ -96,7 +103,7 @@ def redact_text(value: str) -> str:
         text,
     )
     text = re.sub(
-        r"(?i)\b(api[_-]?key|x-api-key|authorization|cookie|password|secret|token)"
+        rf"(?i)\b({_JSON_SENSITIVE_KEY_PATTERN})"
         r"\s*[:=]\s*(?:Bearer\s+)?[^\s,;&]+",
         lambda match: f"{match.group(1)}=[REDACTED]",
         text,
@@ -137,31 +144,70 @@ def sanitize_url(url: str, mode: str = "safe") -> str:
     query_items = parse_qsl(parts.query, keep_blank_values=True)
     sanitized_items: list[tuple[str, str]] = []
     for key, value in query_items:
+        lowered_key = key.lower()
         if mode == "keys":
             safe_value = "[PRESENT]"
-        elif any(part in key.lower() for part in _SENSITIVE_URL_KEY_PARTS):
+        elif (
+            lowered_key in _SENSITIVE_URL_KEYS
+            or any(part in lowered_key for part in _SENSITIVE_URL_KEY_PARTS)
+        ):
             safe_value = "[REDACTED]"
         else:
             safe_value = value
         sanitized_items.append((key, safe_value))
 
     query = urlencode(sanitized_items, doseq=True, safe="[]")
-    return urlunsplit((parts.scheme, parts.netloc, parts.path, query, ""))
+    netloc = parts.netloc.rsplit("@", 1)[-1]
+    return urlunsplit((parts.scheme, netloc, parts.path, query, ""))
 
 
 def safe_request_headers(headers: Mapping[str, Any] | None) -> dict[str, str]:
     if not headers:
         return {}
-    return {
-        key.lower(): redact_text(str(value))
-        for key, value in headers.items()
-        if key.lower() in _SAFE_REQUEST_HEADER_NAMES
-    }
+    sanitized: dict[str, str] = {}
+    for key, value in headers.items():
+        lowered_key = key.lower()
+        if lowered_key not in _SAFE_REQUEST_HEADER_NAMES:
+            continue
+        text = str(value)
+        sanitized[lowered_key] = (
+            redact_text(sanitize_url(text))
+            if lowered_key == "referer"
+            else redact_text(text)
+        )
+    return sanitized
 
 
 def response_preview(value: Any, max_chars: int = 500) -> str:
     if max_chars <= 0 or value is None:
         return ""
-    sanitized = redact_text(str(value))
+    raw = str(value).strip()
+    try:
+        parsed = json.loads(raw)
+    except (TypeError, ValueError):
+        sanitized = redact_text(raw)
+    else:
+        sanitized = json.dumps(
+            _redact_json_value(parsed),
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
     collapsed = re.sub(r"\s+", " ", sanitized).strip()
     return collapsed[:max_chars]
+
+
+def _redact_json_value(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {
+            str(key): (
+                "[REDACTED]"
+                if re.fullmatch(_JSON_SENSITIVE_KEY_PATTERN, str(key), re.IGNORECASE)
+                else _redact_json_value(item)
+            )
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [_redact_json_value(item) for item in value]
+    if isinstance(value, str):
+        return redact_text(value)
+    return value

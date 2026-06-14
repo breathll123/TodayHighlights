@@ -1,3 +1,5 @@
+import logging
+
 from app.services.adapters import eastmoney
 from app.sources import eastmoney as source_eastmoney
 
@@ -76,8 +78,9 @@ def test_fetch_one_trend_uses_intraday_high_low_fields(monkeypatch) -> None:
     ]
 
 
-def test_fetch_indices_uses_eastmoney_snapshot_api(monkeypatch) -> None:
+def test_fetch_indices_uses_eastmoney_snapshot_api(monkeypatch, caplog) -> None:
     """Index snapshots use Sina API (stable, no IP blocking)."""
+    caplog.set_level(logging.INFO)
 
     def fake_get(url, *, headers=None, timeout=None, **kwargs):
         assert "hq.sinajs.cn" in url
@@ -96,6 +99,34 @@ def test_fetch_indices_uses_eastmoney_snapshot_api(monkeypatch) -> None:
     assert first["symbols"] == ["000001"]
     assert first["source"] == "eastmoney_indices"
     assert first["em_secid"] == "1.000001"
+    event = next(
+        record
+        for record in caplog.records
+        if getattr(record, "event", "") == "upstream.completed"
+    )
+    assert event.event_fields["provider"] == "sina"
+    assert event.event_fields["operation"] == "indices"
+
+
+def test_fetch_indices_labels_transport_failure_as_request_stage(monkeypatch, caplog) -> None:
+    caplog.set_level(logging.INFO)
+
+    def fail_get(*args, **kwargs):
+        raise TimeoutError("offline")
+
+    eastmoney.fetch_indices.cache_clear()
+    monkeypatch.setattr(eastmoney.httpx, "get", fail_get)
+
+    assert eastmoney.fetch_indices({}, 6) == []
+
+    adapter_event = next(
+        record
+        for record in caplog.records
+        if getattr(record, "event", "") == "adapter.failed"
+    )
+    assert adapter_event.event_fields["provider"] == "sina"
+    assert adapter_event.event_fields["operation"] == "indices"
+    assert adapter_event.event_fields["stage"] == "request"
 
 
 def test_source_indices_use_eastmoney_snapshot_api(monkeypatch) -> None:

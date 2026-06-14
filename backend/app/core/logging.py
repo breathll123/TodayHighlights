@@ -396,10 +396,10 @@ class ChannelFilter(logging.Filter):
 
 
 class SafeQueueHandler(logging.handlers.QueueHandler):
-    def __init__(self, queue, *, error_fallback=None):
+    def __init__(self, queue, *, error_fallback=None, critical_fallbacks=None):
         super().__init__(queue)
         self._error_fallback = error_fallback
-        self._fallback_used = False
+        self._critical_fallbacks = list(critical_fallbacks or ())
 
     def prepare(self, record: logging.LogRecord) -> logging.LogRecord:
         rec = copy.copy(record)
@@ -419,7 +419,12 @@ class SafeQueueHandler(logging.handlers.QueueHandler):
         try:
             self.queue.put_nowait(record)
         except Full:
-            if record.levelno >= logging.ERROR and self._error_fallback:
+            event = str(getattr(record, "event", ""))
+            critical = record.levelno >= logging.ERROR or event == "admin.changed"
+            if critical and self._critical_fallbacks:
+                for handler in self._critical_fallbacks:
+                    handler.handle(record)
+            elif record.levelno >= logging.ERROR and self._error_fallback:
                 self._error_fallback.handle(record)
             elif self._error_fallback and _rate_limit_allows("queue-full", 30):
                 self._error_fallback.handle(
@@ -429,6 +434,11 @@ class SafeQueueHandler(logging.handlers.QueueHandler):
                         event="logging.queue.full",
                     )
                 )
+
+
+class SafeQueueListener(logging.handlers.QueueListener):
+    def enqueue_sentinel(self) -> None:
+        self.queue.put(self._sentinel)
 
 
 class LoggingRuntime:
@@ -487,36 +497,53 @@ class LoggingRuntime:
                 fh.setFormatter(StructuredTextFormatter(max_message_length=self.config.max_message_length))
                 fh.setLevel(self.config.level)
                 self.file_handlers.append(fh)
-            # Error fallback for queue saturation
-            self._error_fallback = logging.handlers.TimedRotatingFileHandler(
-                filename=str(self.config.log_dir / "error.log"),
-                when=rotation_when,
-                encoding="utf-8",
-                utc=False,
-                backupCount=backup_count,
-            )
-            self._error_fallback.setFormatter(
-                StructuredTextFormatter(max_message_length=self.config.max_message_length)
-            )
-            self._error_fallback.setLevel(logging.ERROR)
+                if ch == "error":
+                    self._error_fallback = fh
             self.file_logging_enabled = True
         except Exception:
             self.file_logging_enabled = False
+            for handler in self.file_handlers:
+                try:
+                    handler.close()
+                except Exception:
+                    pass
+            self.file_handlers.clear()
+            if self._error_fallback is not None:
+                try:
+                    self._error_fallback.close()
+                except Exception:
+                    pass
+                self._error_fallback = None
+
+        if not self.file_logging_enabled and self.console_handler is None:
+            self.console_handler = logging.StreamHandler(sys.stderr)
+            self.console_handler.setLevel(self.config.level)
+            self.console_handler.setFormatter(
+                StructuredTextFormatter(max_message_length=self.config.max_message_length)
+            )
 
         # Queue + listener
         self.queue = Queue(maxsize=self.config.queue_size)
         overflow_fallback = self._error_fallback or self.console_handler
-        queue_handler = SafeQueueHandler(self.queue, error_fallback=overflow_fallback)
-        queue_handler.setLevel(self.config.level)
-        root.addHandler(queue_handler)
-
         targets: list[logging.Handler] = []
         if self.file_logging_enabled:
             targets.extend(self.file_handlers)
-        if self.config.console_enabled and self.console_handler:
+        if self.console_handler:
             targets.append(self.console_handler)
+        queue_handler = SafeQueueHandler(
+            self.queue,
+            error_fallback=overflow_fallback,
+            critical_fallbacks=targets,
+        )
+        queue_handler.setLevel(self.config.level)
+        root.addHandler(queue_handler)
+
         if targets:
-            self.listener = logging.handlers.QueueListener(self.queue, *targets, respect_handler_level=True)
+            self.listener = SafeQueueListener(
+                self.queue,
+                *targets,
+                respect_handler_level=True,
+            )
             self.listener.start()
 
     def stop(self) -> None:
@@ -535,12 +562,15 @@ class LoggingRuntime:
                 fh.close()
             except Exception:
                 pass
-        if self._error_fallback is not None:
+        if (
+            self._error_fallback is not None
+            and self._error_fallback not in self.file_handlers
+        ):
             try:
                 self._error_fallback.close()
             except Exception:
                 pass
-            self._error_fallback = None
+        self._error_fallback = None
         self.file_handlers.clear()
         self.queue = None
         self.listener = None

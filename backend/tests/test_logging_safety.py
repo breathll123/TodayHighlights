@@ -56,6 +56,17 @@ def test_sanitize_url_safe_keeps_regular_query_and_hides_sensitive_values():
     assert "private" not in sanitized
 
 
+def test_sanitize_url_removes_userinfo_credentials():
+    sanitized = sanitize_url(
+        "https://collector-user:collector-password@provider.example/api?page=2",
+    )
+
+    parts = urlsplit(sanitized)
+    assert parts.netloc == "provider.example"
+    assert "collector-user" not in sanitized
+    assert "collector-password" not in sanitized
+
+
 def test_sanitize_url_handles_repeated_and_empty_query_parameters():
     sanitized = sanitize_url(
         "https://provider.example/search?tag=one&tag=two&empty=&flag#fragment",
@@ -116,6 +127,36 @@ def test_safe_request_headers_keeps_allowlist_and_redacts_values():
     assert "debug-secret" not in str(headers)
 
 
+def test_safe_request_headers_sanitizes_referer_as_url():
+    headers = safe_request_headers(
+        {
+            "Referer": (
+                "https://client-user:client-password@client.example/callback"
+                "?auth_code=oauth-secret&view=full#debug"
+            ),
+        }
+    )
+
+    referer = headers["referer"]
+    parts = urlsplit(referer)
+    assert parts.netloc == "client.example"
+    assert parts.fragment == ""
+    assert parse_qsl(parts.query) == [
+        ("auth_code", "[REDACTED]"),
+        ("view", "full"),
+    ]
+    assert "client-user" not in referer
+    assert "client-password" not in referer
+    assert "oauth-secret" not in referer
+
+
+def test_safe_request_headers_redacts_non_absolute_referer_text():
+    headers = safe_request_headers({"Referer": "token=plain-secret; source=widget"})
+
+    assert headers["referer"] == "token=[REDACTED]; source=widget"
+    assert "plain-secret" not in headers["referer"]
+
+
 def test_response_preview_redacts_collapses_whitespace_and_truncates():
     preview = response_preview(
         "  authorization=Bearer private-value \n bad\t gateway response body  ",
@@ -170,10 +211,53 @@ def test_response_preview_redacts_json_body_and_keeps_readable_fields():
     )
 
     assert preview == (
-        '{ "access_token": "[REDACTED]", "status": 403, '
-        '"password": "[REDACTED]", "allowed": true }'
+        '{"access_token":"[REDACTED]","status":403,'
+        '"password":"[REDACTED]","allowed":true}'
     )
     assert "preview-secret" not in preview
+
+
+def test_response_preview_redacts_nested_json_credentials():
+    preview = response_preview(
+        '{"token":{"value":"nested-secret"},"items":[{"password":"item-secret"}],'
+        '"status":"denied"}',
+        max_chars=500,
+    )
+
+    assert preview == (
+        '{"token":"[REDACTED]","items":[{"password":"[REDACTED]"}],'
+        '"status":"denied"}'
+    )
+    assert "nested-secret" not in preview
+    assert "item-secret" not in preview
+
+
+def test_response_preview_redacts_common_oauth_credentials():
+    preview = response_preview(
+        '{"client_secret":"client-secret","id_token":"identity-secret",'
+        '"prompt_tokens":12}',
+        max_chars=500,
+    )
+
+    assert preview == (
+        '{"client_secret":"[REDACTED]","id_token":"[REDACTED]",'
+        '"prompt_tokens":12}'
+    )
+    assert "client-secret" not in preview
+    assert "identity-secret" not in preview
+
+
+def test_response_preview_redacts_oauth_credentials_in_plain_text():
+    preview = response_preview(
+        "OAuth failed: client_secret=client-secret&id_token=identity-secret",
+        max_chars=500,
+    )
+
+    assert preview == (
+        "OAuth failed: client_secret=[REDACTED]&id_token=[REDACTED]"
+    )
+    assert "client-secret" not in preview
+    assert "identity-secret" not in preview
 
 
 def test_response_preview_returns_empty_when_disabled():
