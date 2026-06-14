@@ -152,6 +152,19 @@ def test_console_event_is_emitted_once(tmp_path):
     assert stream.getvalue().count("console_once") == 1
 
 
+def test_runtime_suppresses_noisy_library_success_logs_and_restores_levels(tmp_path):
+    names = ("httpx", "httpcore", "apscheduler.executors.default")
+    original = {name: logging.getLogger(name).level for name in names}
+    runtime = create_logging_runtime(_config(tmp_path))
+    runtime.start()
+    try:
+        assert all(logging.getLogger(name).level == logging.WARNING for name in names)
+    finally:
+        runtime.stop()
+
+    assert {name: logging.getLogger(name).level for name in names} == original
+
+
 def test_queue_overflow_warning_uses_direct_fallback():
     queue = Queue(maxsize=1)
     queue.put(build_event_record(logging.INFO, channel="application", event="already_full"))

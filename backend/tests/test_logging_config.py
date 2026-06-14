@@ -12,6 +12,10 @@ REQUIRED_LOG_KEYS = {
     "LOG_ACCESS_EXCLUDE_PATHS",
     "LOG_TRUST_PROXY_HEADERS",
     "LOG_QUEUE_SIZE",
+    "LOG_DETAIL_CRAWLER",
+    "LOG_DETAIL_AI",
+    "LOG_RESPONSE_PREVIEW_CHARS",
+    "LOG_URL_QUERY_MODE",
 }
 
 
@@ -36,3 +40,13 @@ def test_generated_log_directory_is_ignored():
     root_dir = backend_dir.parent
 
     assert "backend/logs/" in (root_dir / ".gitignore").read_text()
+
+
+def test_logging_detail_settings_have_safe_defaults():
+    from app.core.config import Settings
+
+    fields = Settings.model_fields
+    assert fields["log_detail_crawler"].default is True
+    assert fields["log_detail_ai"].default is True
+    assert fields["log_response_preview_chars"].default == 500
+    assert fields["log_url_query_mode"].default == "safe"

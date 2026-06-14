@@ -199,7 +199,12 @@ def observed_http_get(
     started = time.perf_counter()
     logger = logging.getLogger("today_highlights.external")
     query_mode = getattr(settings, "log_url_query_mode", "safe")
-    preview_chars = getattr(settings, "log_response_preview_chars", 500)
+    if query_mode not in {"safe", "keys"}:
+        query_mode = "safe"
+    preview_chars = max(
+        0,
+        min(2000, int(getattr(settings, "log_response_preview_chars", 500))),
+    )
     detail_crawler = getattr(settings, "log_detail_crawler", True)
     safe_url = sanitize_url(url, mode=query_mode)
     request_headers = safe_request_headers(kwargs.get("headers"))
@@ -437,6 +442,7 @@ class LoggingRuntime:
         self._saved_root_handlers: list[logging.Handler] = []
         self._saved_root_level: int = logging.WARNING
         self._error_fallback: logging.Handler | None = None
+        self._saved_library_levels: dict[str, int] = {}
 
     def start(self) -> None:
         root = logging.getLogger()
@@ -444,6 +450,12 @@ class LoggingRuntime:
         self._saved_root_level = root.level
         root.handlers.clear()
         root.setLevel(self.config.level)
+        noisy_loggers = ("httpx", "httpcore", "apscheduler.executors.default")
+        self._saved_library_levels = {
+            name: logging.getLogger(name).level for name in noisy_loggers
+        }
+        for name in noisy_loggers:
+            logging.getLogger(name).setLevel(logging.WARNING)
 
         # Console handler
         if self.config.console_enabled:
@@ -515,6 +527,9 @@ class LoggingRuntime:
         for h in self._saved_root_handlers:
             root.addHandler(h)
         root.setLevel(self._saved_root_level)
+        for name, level in self._saved_library_levels.items():
+            logging.getLogger(name).setLevel(level)
+        self._saved_library_levels.clear()
         for fh in self.file_handlers:
             try:
                 fh.close()

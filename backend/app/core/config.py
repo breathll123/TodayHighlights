@@ -36,6 +36,10 @@ class Settings(BaseSettings):
     log_access_exclude_paths: str = ""
     log_trust_proxy_headers: bool = False
     log_queue_size: int = 10_000
+    log_detail_crawler: bool = True
+    log_detail_ai: bool = True
+    log_response_preview_chars: int = 500
+    log_url_query_mode: str = "safe"
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
