@@ -78,20 +78,21 @@ def test_fetch_one_trend_uses_intraday_high_low_fields(monkeypatch) -> None:
     ]
 
 
-def test_fetch_indices_uses_eastmoney_snapshot_api(monkeypatch, caplog) -> None:
-    """Index snapshots use Sina API (stable, no IP blocking)."""
+def test_fetch_indices_uses_eastmoney_delay_snapshot_api(monkeypatch, caplog) -> None:
     caplog.set_level(logging.INFO)
 
-    def fake_get(url, *, headers=None, timeout=None, **kwargs):
-        assert "hq.sinajs.cn" in url
-        return _SinaResponse()
+    def fake_get(url, *, params=None, **kwargs):
+        assert url == "https://push2delay.eastmoney.com/api/qt/ulist.np/get"
+        assert params["secids"].startswith("1.000001,0.399001")
+        assert params["fields"] == "f2,f3,f4,f5,f6,f12,f13,f14"
+        return _IndexResponse()
 
     eastmoney.fetch_indices.cache_clear()
-    monkeypatch.setattr(eastmoney.httpx, "get", fake_get)
+    monkeypatch.setattr(eastmoney._http, "get", fake_get)
 
     result = eastmoney.fetch_indices({}, 6)
 
-    assert len(result) == 6
+    assert len(result) == 1
     first = result[0]
     assert first["title"] == "上证指数"
     assert first["current"] == 4031.51
@@ -104,7 +105,7 @@ def test_fetch_indices_uses_eastmoney_snapshot_api(monkeypatch, caplog) -> None:
         for record in caplog.records
         if getattr(record, "event", "") == "upstream.completed"
     )
-    assert event.event_fields["provider"] == "sina"
+    assert event.event_fields["provider"] == "eastmoney"
     assert event.event_fields["operation"] == "indices"
 
 
@@ -115,7 +116,7 @@ def test_fetch_indices_labels_transport_failure_as_request_stage(monkeypatch, ca
         raise TimeoutError("offline")
 
     eastmoney.fetch_indices.cache_clear()
-    monkeypatch.setattr(eastmoney.httpx, "get", fail_get)
+    monkeypatch.setattr(eastmoney._http, "get", fail_get)
 
     assert eastmoney.fetch_indices({}, 6) == []
 
@@ -124,7 +125,7 @@ def test_fetch_indices_labels_transport_failure_as_request_stage(monkeypatch, ca
         for record in caplog.records
         if getattr(record, "event", "") == "adapter.failed"
     )
-    assert adapter_event.event_fields["provider"] == "sina"
+    assert adapter_event.event_fields["provider"] == "eastmoney"
     assert adapter_event.event_fields["operation"] == "indices"
     assert adapter_event.event_fields["stage"] == "request"
 

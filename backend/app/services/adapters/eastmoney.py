@@ -157,63 +157,51 @@ def fetch_industry(config: dict, limit: int) -> list[dict]:
 
 @ttl_cache(30, swr=300)
 def fetch_indices(_config: dict, limit: int) -> list[dict]:
-    """
-    指数行情快照 — 新浪财经 (hq.sinajs.cn)
-
-    使用新浪而非东方财富 push2 接口，因为新浪财经 API 没有频率限制和 IP 封禁。
-    返回的 source 字段仍标记为 "eastmoney_indices"，但前端显示为"新浪财经"。
-
-    对比：
-    - 新浪 hq.sinajs.cn：实时指数快照，无频率限制，GBK 编码
-    - 东方财富 push2delay：行业/板块/资金流/公告/分时趋势，有频率限制
-    """
-    try:
-        import re
-        index_map = [
-            ("s_sh000001", "000001", "1.000001"),   # 上证指数
-            ("s_sz399001", "399001", "0.399001"),   # 深证成指
-            ("s_sz399006", "399006", "0.399006"),   # 创业板指
-            ("s_sh000688", "000688", "1.000688"),   # 科创50
-            ("s_sz399673", "399673", "0.399673"),   # 创业板50
-            ("s_sh000300", "000300", "1.000300"),   # 沪深300
-        ]
-        codes = ",".join(c for c, _, _ in index_map[:limit])
-    except Exception as exc:
-        log_adapter_failure(provider="sina", operation="indices", stage="prepare", exc=exc)
-        return []
+    """指数行情快照 — 东方财富 push2delay 接口。"""
+    index_map = [
+        ("000001", "1.000001"),   # 上证指数
+        ("399001", "0.399001"),   # 深证成指
+        ("399006", "0.399006"),   # 创业板指
+        ("000688", "1.000688"),   # 科创50
+        ("399673", "0.399673"),   # 创业板50
+        ("000300", "1.000300"),   # 沪深300
+    ][:limit]
 
     try:
         resp = observed_http_get(
-            httpx.get,
-            f"https://hq.sinajs.cn/list={codes}",
-            provider="sina",
+            _http.get,
+            "https://push2delay.eastmoney.com/api/qt/ulist.np/get",
+            provider="eastmoney",
             operation="indices",
-            host="hq.sinajs.cn",
-            path="/",
-            headers={"User-Agent": "Mozilla/5.0 TodayHighlights/0.1", "Referer": "https://finance.sina.com.cn/"},
-            timeout=10,
+            host="push2delay.eastmoney.com",
+            path="/api/qt/ulist.np/get",
+            params={
+                "fltt": 2,
+                "invt": 2,
+                "fields": "f2,f3,f4,f5,f6,f12,f13,f14",
+                "secids": ",".join(secid for _, secid in index_map),
+            },
         )
         resp.raise_for_status()
     except Exception as exc:
-        log_adapter_failure(provider="sina", operation="indices", stage="request", exc=exc)
+        log_adapter_failure(provider="eastmoney", operation="indices", stage="request", exc=exc)
         return []
 
     try:
-        text = resp.content.decode("gbk")
+        items = resp.json().get("data", {}).get("diff", [])
+        secid_by_code = {code: secid for code, secid in index_map}
         result = []
-        for symbol, code, em_secid in index_map[:limit]:
-            m = re.search(rf'hq_str_{symbol}="([^"]*)"', text)
-            if not m:
+        for item in items:
+            code = str(item.get("f12") or "")
+            em_secid = secid_by_code.get(code)
+            if em_secid is None:
                 continue
-            fields = m.group(1).split(",")
-            if len(fields) < 4:
-                continue
-            name = fields[0]
-            current = float(fields[1])
-            change_amount = float(fields[2])
-            percent = float(fields[3])
-            volume = int(fields[4]) if len(fields) > 4 and fields[4] else 0
-            turnover = float(fields[5]) if len(fields) > 5 and fields[5] else 0
+            name = str(item.get("f14") or "")
+            current = float(item.get("f2") or 0)
+            percent = float(item.get("f3") or 0)
+            change_amount = float(item.get("f4") or 0)
+            volume = int(item.get("f5") or 0)
+            turnover = float(item.get("f6") or 0)
             result.append({
                 "title": name,
                 "summary": f"{current:.2f} {percent:+.2f}%",
@@ -230,7 +218,7 @@ def fetch_indices(_config: dict, limit: int) -> list[dict]:
             })
         return result
     except Exception as exc:
-        log_adapter_failure(provider="sina", operation="indices", stage="parse", exc=exc)
+        log_adapter_failure(provider="eastmoney", operation="indices", stage="parse", exc=exc)
         return []
 
 
