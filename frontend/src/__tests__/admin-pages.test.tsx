@@ -6,6 +6,11 @@ import { MemoryRouter } from "react-router-dom";
 vi.mock("../api/client", () => ({
   fetchHighlights: vi.fn().mockResolvedValue([]),
   fetchTopics: vi.fn().mockResolvedValue([]),
+  fetchAdminTopics: vi.fn().mockResolvedValue([
+    { id: 10, name: "股票", slug: "stocks", sort_order: 10 },
+    { id: 20, name: "AI", slug: "ai", sort_order: 20 },
+    { id: 30, name: "足球", slug: "football", sort_order: 30 },
+  ]),
   fetchSources: vi.fn().mockResolvedValue([]),
   createSource: vi.fn(),
   triggerCrawl: vi.fn(),
@@ -61,6 +66,8 @@ describe("AdminSourcesPage", () => {
   it("renders source management page", async () => {
     render(<AdminSourcesPage />, { wrapper: Wrapper });
     expect(await screen.findByText("数据源管理")).toBeInTheDocument();
+    expect(screen.getByText("所属主题")).toBeInTheDocument();
+    expect(screen.getByText("适配器")).toBeInTheDocument();
   });
 });
 

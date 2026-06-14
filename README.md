@@ -69,7 +69,7 @@ python scripts/init_db.py
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-`init_db.py` 会执行数据库迁移，但不会创建默认管理员或默认密码。
+`init_db.py` 会执行数据库迁移，并按主题 `slug` 幂等补齐内置主题和数据源。它不会覆盖后台修改过的采集间隔、启用状态或 Cookie，也不会创建默认管理员或默认密码。
 
 ### 2. 启动前端
 

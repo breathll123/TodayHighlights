@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -10,12 +11,14 @@ const {
   createBlock,
   deleteBlock,
   fetchBlocks,
+  fetchAdminTopics,
   publishPage,
   updateBlock,
 } = vi.hoisted(() => ({
   createBlock: vi.fn(),
   deleteBlock: vi.fn(),
   fetchBlocks: vi.fn(),
+  fetchAdminTopics: vi.fn(),
   publishPage: vi.fn(),
   updateBlock: vi.fn(),
 }));
@@ -24,6 +27,7 @@ vi.mock("../api/client", () => ({
   createBlock,
   deleteBlock,
   fetchBlocks,
+  fetchAdminTopics,
   publishPage,
   updateBlock,
 }));
@@ -107,6 +111,11 @@ describe("AdminLayoutPage persistence", () => {
     vi.clearAllMocks();
     createBlock.mockResolvedValue({});
     deleteBlock.mockResolvedValue({});
+    fetchAdminTopics.mockResolvedValue([
+      { id: 10, name: "股票", slug: "stocks", sort_order: 10 },
+      { id: 20, name: "AI", slug: "ai", sort_order: 20 },
+      { id: 30, name: "足球", slug: "football", sort_order: 30 },
+    ]);
     publishPage.mockResolvedValue({ published: true, blocks: 0 });
     updateBlock.mockImplementation((id: number, data: Partial<Block>) => (
       Promise.resolve({ id, ...data })
@@ -156,6 +165,26 @@ describe("AdminLayoutPage persistence", () => {
       grid_y: 0,
       col_span: 2,
       row_span: 1,
+      source_config: { topic_id: 10 },
     }));
+  });
+
+  it("uses the page topic id when adding a football block", async () => {
+    const user = userEvent.setup();
+    fetchBlocks.mockResolvedValue([]);
+
+    render(<AdminLayoutPage />, { wrapper: Wrapper });
+    const footballTab = await screen.findByRole("tab", { name: "足球页" });
+    await user.click(footballTab);
+    await waitFor(() => expect(footballTab).toHaveAttribute("aria-selected", "true"));
+    await user.click(screen.getByRole("button", { name: "添加方块" }));
+    await user.click(screen.getByRole("button", { name: "choose size" }));
+
+    await waitFor(() => {
+      expect(createBlock).toHaveBeenCalledWith(expect.objectContaining({
+        page_route: "/topics/football",
+        source_config: { topic_id: 30 },
+      }));
+    });
   });
 });

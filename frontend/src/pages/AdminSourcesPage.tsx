@@ -1,16 +1,35 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
-import { fetchSources, createSource, updateSource, triggerCrawl } from "../api/client";
+import { useEffect, useState } from "react";
+import { fetchAdminTopics, fetchSources, createSource, updateSource, triggerCrawl } from "../api/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import { Pencil } from "lucide-react";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 
-const defaultForm = { topic_id: 1, site: "xueqiu", name: "", entry_url: "", cookie: "", enabled: true, crawl_interval_minutes: 60 };
+const ADAPTER_OPTIONS = [
+  { value: "xueqiu", label: "雪球" },
+  { value: "eastmoney", label: "东方财富" },
+  { value: "tonghuashun", label: "同花顺" },
+  { value: "dongqiudi", label: "懂球帝" },
+  { value: "qiumiwu", label: "球迷屋" },
+  { value: "aihot", label: "AI HOT" },
+  { value: "datalearner", label: "DataLearner" },
+];
+
+const emptyForm = (topicId = 0) => ({
+  topic_id: topicId,
+  site: "xueqiu",
+  name: "",
+  entry_url: "",
+  cookie: "",
+  enabled: true,
+  crawl_interval_minutes: 60,
+});
 
 interface EditState {
   id: number;
@@ -23,14 +42,29 @@ interface EditState {
 export function AdminSourcesPage() {
   const queryClient = useQueryClient();
   const { data: sources, isLoading } = useQuery({ queryKey: ["sources"], queryFn: fetchSources });
+  const { data: topics = [], isLoading: topicsLoading } = useQuery({
+    queryKey: ["admin-topics"],
+    queryFn: fetchAdminTopics,
+  });
 
-  const [form, setForm] = useState(defaultForm);
+  const [form, setForm] = useState(emptyForm());
   const [editSource, setEditSource] = useState<EditState | null>(null);
   const [editCookie, setEditCookie] = useState("");
 
+  useEffect(() => {
+    if (form.topic_id !== 0 || topics.length === 0) return;
+    const defaultTopic = topics.find((topic) => topic.slug === "stocks") ?? topics[0];
+    setForm((current) => ({ ...current, topic_id: defaultTopic.id }));
+  }, [form.topic_id, topics]);
+
   const createMut = useMutation({
     mutationFn: createSource,
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["sources"] }); setForm(defaultForm); toast.success("数据源已添加"); },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["sources"] });
+      const defaultTopic = topics.find((topic) => topic.slug === "stocks") ?? topics[0];
+      setForm(emptyForm(defaultTopic?.id ?? 0));
+      toast.success("数据源已添加");
+    },
     onError: (err: Error) => toast.error(`添加失败: ${err.message}`),
   });
 
@@ -46,7 +80,7 @@ export function AdminSourcesPage() {
     onError: (err: Error) => toast.error(`爬取失败: ${err.message}`),
   });
 
-  if (isLoading) return <div className="text-center py-12 text-muted-foreground">加载中...</div>;
+  if (isLoading || topicsLoading) return <div className="text-center py-12 text-muted-foreground">加载中...</div>;
 
   const openEdit = (s: EditState) => {
     setEditSource(s);
@@ -68,6 +102,41 @@ export function AdminSourcesPage() {
           createMut.mutate({ ...form });
         }}
       >
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="flex flex-col gap-1.5 text-sm font-medium">
+            <Label>所属主题</Label>
+            <Select
+              value={form.topic_id ? String(form.topic_id) : ""}
+              onValueChange={(value) => setForm({ ...form, topic_id: Number(value) })}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="选择主题" />
+              </SelectTrigger>
+              <SelectContent>
+                {topics.map((topic) => (
+                  <SelectItem key={topic.id} value={String(topic.id)}>
+                    {topic.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex flex-col gap-1.5 text-sm font-medium">
+            <Label>适配器</Label>
+            <Select value={form.site} onValueChange={(value) => setForm({ ...form, site: value })}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {ADAPTER_OPTIONS.map((adapter) => (
+                  <SelectItem key={adapter.value} value={adapter.value}>
+                    {adapter.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <label className="flex flex-col gap-1.5 text-sm font-medium">
             名称

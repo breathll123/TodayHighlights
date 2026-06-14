@@ -8,7 +8,7 @@ import { SizePresetPicker } from "@/components/admin/SizePresetPicker";
 import { BlockConfigPanel } from "@/components/admin/BlockConfigPanel";
 import { changedLayoutBlocks, insertBlockAtTop } from "@/lib/grid-utils";
 import { safeUUID } from "@/lib/utils";
-import { fetchBlocks, createBlock, updateBlock, deleteBlock, publishPage } from "@/api/client";
+import { fetchAdminTopics, fetchBlocks, createBlock, updateBlock, deleteBlock, publishPage } from "@/api/client";
 import type { Block } from "@/api/types";
 import { toast } from "sonner";
 
@@ -28,6 +28,7 @@ export function AdminLayoutPage() {
   const [configForm, setConfigForm] = useState<Omit<Block, "id" | "created_at" | "updated_at"> | null>(null);
 
   const { data: allBlocks = [], isLoading } = useQuery({ queryKey: ["blocks"], queryFn: fetchBlocks });
+  const { data: topics = [] } = useQuery({ queryKey: ["admin-topics"], queryFn: fetchAdminTopics });
 
   const draftBlocks = allBlocks
     .filter((b: Block) => b.page_route === activePage && b.status === "draft")
@@ -69,13 +70,21 @@ export function AdminLayoutPage() {
   );
 
   const handleAddBlock = async (col: number, row: number) => {
+    const routeParts = activePage.split("/").filter(Boolean);
+    const topicSlug = activePage === "/" ? "stocks" : routeParts[routeParts.length - 1];
+    const topic = topics.find((item) => item.slug === topicSlug);
+    if (!topic) {
+      toast.error("当前页面没有对应主题，请先在主题管理中创建");
+      return;
+    }
+
     const inserted = insertBlockAtTop(draftBlocks, col, row);
     applyDraftLayout(inserted.blocks);
     try {
       await persistLayoutChanges(draftBlocks, inserted.blocks);
       await createBlock({
         page_route: activePage, title: "新方块", source_type: "topic",
-        source_config: { topic_id: 1 }, block_key: safeUUID(),
+        source_config: { topic_id: topic.id }, block_key: safeUUID(),
         col_span: col, row_span: row,
         grid_x: inserted.position.x, grid_y: inserted.position.y,
         display_style: "card", display_count: 5, sort_by: "created_at",
