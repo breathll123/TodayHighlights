@@ -1,44 +1,59 @@
+import ast
 import logging
+from pathlib import Path
 from queue import Queue
 
 from app.core.logging import SafeQueueHandler, StructuredTextFormatter, build_event_record
 from app.core.logging_catalog import EVENT_SPECS, EventSpec, event_spec
 
 
-def test_event_catalog_contains_canonical_and_legacy_events():
+def test_event_catalog_contains_canonical_events():
     canonical = {
+        "aa.sync.completed",
+        "adapter.failed",
+        "admin.changed",
+        "ai.block.completed",
+        "ai.enrichment.completed",
+        "ai.request.completed",
         "app.started",
         "app.stopping",
-        "http.completed",
-        "http.unhandled",
-        "crawl.started",
-        "crawl.fetch.completed",
-        "crawl.persist.completed",
+        "block.resolve.failed",
+        "cache.backend.ready",
         "crawl.completed",
         "crawl.failed",
-        "upstream.completed",
-        "upstream.failed",
-        "ai.request.completed",
-        "ai.request.failed",
-        "ai.enrichment.completed",
-        "ai.block.completed",
+        "crawl.fetch.completed",
+        "crawl.persist.completed",
+        "crawl.started",
+        "http.completed",
+        "http.unhandled",
+        "media.cache.failed",
         "scheduler.job.completed",
         "scheduler.job.failed",
-        "admin.changed",
-    }
-    legacy = {
-        "application_started",
-        "http_request_completed",
-        "crawl_job_finished",
-        "external_request_failed",
-        "ai_request_finished",
-        "scheduled_job_failed",
-        "media_cache_failed",
-        "aa_sync_finished",
+        "upstream.completed",
+        "upstream.failed",
     }
 
-    assert canonical | legacy <= EVENT_SPECS.keys()
+    assert canonical <= EVENT_SPECS.keys()
     assert event_spec("app.started").description != "业务事件"
+
+
+def test_all_literal_application_events_are_registered():
+    app_root = Path(__file__).parents[1] / "app"
+    emitted: set[str] = set()
+    for path in app_root.rglob("*.py"):
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            for keyword in node.keywords:
+                if (
+                    keyword.arg == "event"
+                    and isinstance(keyword.value, ast.Constant)
+                    and isinstance(keyword.value.value, str)
+                ):
+                    emitted.add(keyword.value.value)
+
+    assert emitted <= EVENT_SPECS.keys()
 
 
 def test_unknown_event_uses_business_event_fallback():
@@ -50,7 +65,7 @@ def test_unknown_event_uses_business_event_fallback():
 
 
 def test_legacy_context_and_result_fields_precede_ids_in_catalog():
-    field_order = event_spec("aa_page_collected").field_order
+    field_order = event_spec("aa.page.collected").field_order
     readable_fields = {
         "endpoint",
         "backend",
@@ -110,7 +125,7 @@ def test_aa_result_counts_are_rendered_before_ids():
         logging.INFO,
         channel="application",
         category="ai",
-        event="aa_dataset_finished",
+        event="aa.dataset.completed",
         dataset_id=17,
         entry_count=8,
         snapshot_count=3,
@@ -128,7 +143,7 @@ def test_aa_requested_dataset_count_is_rendered_before_ids():
         logging.INFO,
         channel="application",
         category="ai",
-        event="aa_sync_requested",
+        event="aa.sync.requested",
         ai_job_id=23,
         user_id=5,
         dataset_count=4,

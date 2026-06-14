@@ -34,7 +34,7 @@ def test_live_block_failure_keeps_request_context(client, monkeypatch, caplog):
     record = next(
         record
         for record in caplog.records
-        if getattr(record, "event", "") == "block_resolve_failed"
+        if getattr(record, "event", "") == "block.resolve.failed"
     )
     assert record.event_fields["request_id"] == "request-block-1234"
     assert record.event_fields["block_id"] == block.id

@@ -98,7 +98,7 @@ def create_scheduler() -> BackgroundScheduler:
     scheduler.add_job(crawl_enabled_sources, "interval", minutes=1, id="crawl_enabled_sources", replace_existing=True)
     scheduler.add_job(scheduled_cleanup, "interval", hours=6, id="scheduled_cleanup", replace_existing=True)
 
-    log_event(logger, channel="application", category="scheduler", event="scheduler_started",
+    log_event(logger, channel="application", category="scheduler", event="scheduler.started",
               job_ids=[job.id for job in scheduler.get_jobs()])
 
     if settings.artificial_analysis_sync_enabled and settings.artificial_analysis_api_key:

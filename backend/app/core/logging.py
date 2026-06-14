@@ -355,12 +355,12 @@ def log_adapter_failure(
         interval_seconds=30,
         channel="application",
         category="crawler",
-        event="adapter_operation_failed",
+        event="adapter.failed",
         level=logging.WARNING,
         provider=provider,
         operation=operation,
         stage=stage,
-        exception_type=type(exc).__name__,
+        error_type=type(exc).__name__,
     )
 
 
@@ -426,7 +426,7 @@ class SafeQueueHandler(logging.handlers.QueueHandler):
                     build_event_record(
                         logging.WARNING,
                         channel="error",
-                        event="logging_queue_full",
+                        event="logging.queue.full",
                     )
                 )
 
@@ -573,7 +573,7 @@ def initialize_logging() -> None:
     runtime.start()
     with _logging_lock:
         _logging_runtime = runtime
-    log_event(logging.getLogger("today_highlights"), channel="application", event="application_started")
+    log_event(logging.getLogger("today_highlights"), channel="application", event="app.started")
 
 
 def shutdown_logging() -> None:
@@ -582,7 +582,7 @@ def shutdown_logging() -> None:
         runtime = _logging_runtime
         _logging_runtime = None
     if runtime:
-        log_event(logging.getLogger("today_highlights"), channel="application", event="application_stopping")
+        log_event(logging.getLogger("today_highlights"), channel="application", event="app.stopping")
         runtime.stop()
 
 

@@ -244,7 +244,7 @@ def test_adapter_failure_logs_only_safe_metadata(caplog):
         exc=ValueError("response contained token=secret"),
     )
 
-    record = _event_record(caplog, "adapter_operation_failed")
-    assert record.event_fields["exception_type"] == "ValueError"
+    record = _event_record(caplog, "adapter.failed")
+    assert record.event_fields["error_type"] == "ValueError"
     assert record.event_fields["stage"] == "parse"
     assert "secret" not in str(record.event_fields)

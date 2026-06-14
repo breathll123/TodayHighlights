@@ -283,10 +283,10 @@ def get_page_blocks(session: Session, route: str) -> list[dict]:
             logger,
             channel="application",
             category="block",
-            event="media_cache_init_failed",
+            event="block.media-cache.failed",
             level=logging.WARNING,
             route=route,
-            exception_type=type(exc).__name__,
+            error_type=type(exc).__name__,
         )
 
     # Separate DB-dependent blocks (topic, raw) from live-API blocks
@@ -316,10 +316,10 @@ def get_page_blocks(session: Session, route: str) -> list[dict]:
             logger,
             channel="application",
             category="block",
-            event="block_cookie_unavailable",
+            event="block.cookie.unavailable",
             level=logging.WARNING,
             route=route,
-            exception_type=type(exc).__name__,
+            error_type=type(exc).__name__,
         )
 
     # Resolve live-API blocks in parallel using shared executor
@@ -343,7 +343,7 @@ def get_page_blocks(session: Session, route: str) -> list[dict]:
                 logger,
                 channel="application",
                 category="block",
-                event="block_resolve_failed",
+                event="block.resolve.failed",
                 level=logging.WARNING,
                 block_id=b.id,
                 block_title=b.title,
@@ -371,7 +371,7 @@ def get_page_blocks(session: Session, route: str) -> list[dict]:
                     logger,
                     channel="application",
                     category="block",
-                    event="block_resolve_failed",
+                    event="block.resolve.failed",
                     level=logging.WARNING,
                     block_id=b.id,
                     block_title=b.title,
@@ -379,7 +379,7 @@ def get_page_blocks(session: Session, route: str) -> list[dict]:
                     source_type=b.source_type,
                     route=route,
                     reason="exception",
-                    exception_type=type(exc).__name__,
+                    error_type=type(exc).__name__,
                     duration_ms=round((time.perf_counter() - started_at[b.id]) * 1000, 2),
                 )
                 data = []

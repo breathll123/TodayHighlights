@@ -63,7 +63,7 @@ def test_scheduled_aa_sync_logs_missing_api_key_skip(monkeypatch, caplog):
     record = next(
         record
         for record in caplog.records
-        if getattr(record, "event", "") == "aa_sync_skipped"
+        if getattr(record, "event", "") == "aa.sync.skipped"
     )
     assert record.event_fields["reason"] == "missing_api_key"
     assert record.event_fields["trigger_type"] == "scheduled"
@@ -108,7 +108,7 @@ def test_aa_sync_logs_failure_status_persistence_error(monkeypatch, caplog):
     record = next(
         record
         for record in caplog.records
-        if getattr(record, "event", "") == "aa_sync_status_persist_failed"
+        if getattr(record, "event", "") == "aa.sync.status-persist.failed"
     )
     assert record.event_fields["ai_job_id"] == 42
-    assert record.event_fields["exception_type"] == "RuntimeError"
+    assert record.event_fields["error_type"] == "RuntimeError"

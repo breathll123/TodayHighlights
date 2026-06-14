@@ -95,9 +95,9 @@ def test_resilient_backend_uses_memory_when_redis_fails(caplog):
     record = next(
         record
         for record in caplog.records
-        if getattr(record, "event", "") == "cache_backend_fallback"
+        if getattr(record, "event", "") == "cache.backend.fallback"
     )
-    assert record.event_fields["exception_type"] == "ConnectionError"
+    assert record.event_fields["error_type"] == "ConnectionError"
     assert record.event_fields["backend"] == "redis"
 
 
@@ -114,10 +114,10 @@ def test_redis_operation_failure_is_structured_and_omits_key(caplog):
     record = next(
         record
         for record in caplog.records
-        if getattr(record, "event", "") == "cache_operation_failed"
+        if getattr(record, "event", "") == "cache.operation.failed"
     )
     assert record.event_fields["operation"] == "get"
-    assert record.event_fields["exception_type"] == "ConnectionError"
+    assert record.event_fields["error_type"] == "ConnectionError"
     assert "sensitive-cache-key" not in str(record.event_fields)
     assert "secret-prefix" not in str(record.event_fields)
 

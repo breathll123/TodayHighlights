@@ -23,11 +23,11 @@ def _log_cache_failure(operation: str, exc: Exception, *, level: int = logging.W
         interval_seconds=30,
         channel="application",
         category="cache",
-        event="cache_operation_failed",
+        event="cache.operation.failed",
         level=level,
         operation=operation,
         backend="redis",
-        exception_type=type(exc).__name__,
+        error_type=type(exc).__name__,
         status="fallback",
     )
 
@@ -349,7 +349,7 @@ class ResilientCacheBackend:
                 logger,
                 channel="application",
                 category="cache",
-                event="cache_backend_ready",
+                event="cache.backend.ready",
                 backend="redis",
             )
         except Exception as exc:
@@ -359,11 +359,11 @@ class ResilientCacheBackend:
                 logger,
                 channel="application",
                 category="cache",
-                event="cache_backend_fallback",
+                event="cache.backend.fallback",
                 level=logging.WARNING,
                 backend="redis",
                 fallback="memory",
-                exception_type=type(exc).__name__,
+                error_type=type(exc).__name__,
             )
 
     def status(self) -> str:
@@ -391,7 +391,7 @@ class ResilientCacheBackend:
                 logger,
                 channel="application",
                 category="cache",
-                event="cache_backend_recovered",
+                event="cache.backend.recovered",
                 backend="redis",
             )
             return self._redis
@@ -499,7 +499,7 @@ def initialize_cache() -> None:
             logger,
             channel="application",
             category="cache",
-            event="cache_backend_ready",
+            event="cache.backend.ready",
             backend="memory",
             reason="redis_disabled",
         )
@@ -529,11 +529,11 @@ def initialize_cache() -> None:
             logger,
             channel="application",
             category="cache",
-            event="cache_backend_fallback",
+            event="cache.backend.fallback",
             level=logging.WARNING,
             backend="redis",
             fallback="memory",
-            exception_type=type(exc).__name__,
+            error_type=type(exc).__name__,
             exc_info=True,
         )
 
@@ -681,10 +681,10 @@ def ttl_cache(ttl_seconds: int = 30, swr: int = 0, shared: bool = True, maxsize:
                                 interval_seconds=30,
                                 channel="application",
                                 category="cache",
-                                event="swr_refresh_failed",
+                                event="cache.swr.failed",
                                 level=logging.WARNING,
                                 function_id=function_id,
-                                exception_type=type(exc).__name__,
+                                error_type=type(exc).__name__,
                             )
                         finally:
                             with _local_refreshing_lock:

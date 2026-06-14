@@ -145,9 +145,9 @@ def run_crawl_job(session: Session, source_id: int, trigger_type: str) -> CrawlJ
                         except Exception as exc:
                             log_event(
                                 logger, channel="application", category="crawler",
-                                event="crawl_enrichment_failed", level=logging.WARNING,
+                                event="crawl.enrichment.failed", level=logging.WARNING,
                                 stage="enrichment", enrichment_id=enrichment.id,
-                                exception_type=type(exc).__name__, message=str(exc),
+                                error_type=type(exc).__name__, error=str(exc),
                             )
 
             job.status = "success"

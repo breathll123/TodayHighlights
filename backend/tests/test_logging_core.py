@@ -178,7 +178,7 @@ def test_queue_overflow_warning_uses_direct_fallback():
     )
 
     text = stream.getvalue()
-    assert "logging_queue_full" in text
+    assert "logging.queue.full" in text
     assert "dropped_event" not in text
 
 
