@@ -253,7 +253,7 @@ def fetch_index_trends(_config: dict, limit: int) -> list[dict]:
         for future in as_completed(futures):
             secid = futures[future]
             try:
-                trend_by_secid[secid] = future.result(timeout=10)
+                trend_by_secid[secid] = future.result(timeout=3)
             except Exception as exc:
                 log_adapter_failure(provider="eastmoney", operation="index_trend", stage="parse", exc=exc)
                 trend_by_secid[secid] = None
