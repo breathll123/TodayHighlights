@@ -38,5 +38,7 @@ def test_live_block_failure_keeps_request_context(client, monkeypatch, caplog):
     )
     assert record.event_fields["request_id"] == "request-block-1234"
     assert record.event_fields["block_id"] == block.id
+    assert record.event_fields["block_title"] == "测试区块"
+    assert record.event_fields["page_route"] == "/topics/test"
     assert record.event_fields["source_type"] == "test_live"
     assert record.event_fields["reason"] == "exception"

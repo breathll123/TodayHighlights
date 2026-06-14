@@ -7,7 +7,7 @@ from contextvars import copy_context
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
-from app.core.logging import log_event
+from app.core.logging import bind_log_context, log_event
 from app.models.entities import Highlight, PageBlock, RawItem, Source
 from app.services.adapters.xueqiu import (
     fetch_hot_events, fetch_hot_stocks, fetch_hot_stocks_cn,
@@ -252,6 +252,16 @@ def resolve_block_data(
     return []
 
 
+def _resolve_live_block(block: PageBlock, cookie: str | None, media_cache) -> list[dict]:
+    with bind_log_context(
+        block_id=block.id,
+        block_title=block.title,
+        page_route=block.page_route,
+        source_type=block.source_type,
+    ):
+        return resolve_block_data(None, block, cookie, media_cache)
+
+
 def get_page_blocks(session: Session, route: str) -> list[dict]:
     stmt = (
         select(PageBlock)
@@ -318,8 +328,7 @@ def get_page_blocks(session: Session, route: str) -> list[dict]:
         futures = {
             _get_executor().submit(
                 copy_context().run,
-                resolve_block_data,
-                None,
+                _resolve_live_block,
                 b,
                 cookie,
                 media_cache,
@@ -337,6 +346,8 @@ def get_page_blocks(session: Session, route: str) -> list[dict]:
                 event="block_resolve_failed",
                 level=logging.WARNING,
                 block_id=b.id,
+                block_title=b.title,
+                page_route=b.page_route,
                 source_type=b.source_type,
                 route=route,
                 reason="timeout",
@@ -363,6 +374,8 @@ def get_page_blocks(session: Session, route: str) -> list[dict]:
                     event="block_resolve_failed",
                     level=logging.WARNING,
                     block_id=b.id,
+                    block_title=b.title,
+                    page_route=b.page_route,
                     source_type=b.source_type,
                     route=route,
                     reason="exception",

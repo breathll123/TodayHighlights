@@ -132,6 +132,12 @@ def _headline_token(value: Any) -> str:
     return re.sub(r"\s+", " ", str(value)).strip()
 
 
+def format_duration(seconds: float) -> str:
+    if seconds < 1:
+        return f"{round(seconds * 1000):d}ms"
+    return f"{seconds:.2f}s"
+
+
 def _ordered_field_names(
     fields: dict[str, Any],
     field_order: tuple[str, ...],

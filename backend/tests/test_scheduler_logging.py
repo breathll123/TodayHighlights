@@ -24,10 +24,27 @@ def test_scheduler_listener_emits_structured_events(caplog):
     _handle_scheduler_event(SimpleNamespace(code=EVENT_JOB_MAX_INSTANCES, job_id="busy"))
 
     events = {getattr(record, "event", ""): record for record in caplog.records}
-    assert events["scheduled_job_finished"].event_fields["job_id"] == "success"
-    assert events["scheduled_job_failed"].event_fields["exception_type"] == "RuntimeError"
-    assert events["scheduled_job_missed"].event_fields["job_id"] == "missed"
-    assert events["scheduled_job_skipped"].event_fields["reason"] == "max_instances"
+    assert events["scheduler.job.completed"].event_fields["job_id"] == "success"
+    assert events["scheduler.job.completed"].event_fields["job_name"] == "success"
+    assert events["scheduler.job.failed"].event_fields["error_type"] == "RuntimeError"
+    assert events["scheduler.job.failed"].event_fields["job_name"] == "failure"
+    assert events["scheduler.job.missed"].event_fields["job_id"] == "missed"
+    assert events["scheduler.job.skipped"].event_fields["reason"] == "max_instances"
+
+
+def test_scheduler_listener_uses_readable_configured_job_name(caplog):
+    caplog.set_level(logging.INFO)
+
+    _handle_scheduler_event(
+        SimpleNamespace(code=EVENT_JOB_EXECUTED, job_id="crawl_enabled_sources")
+    )
+
+    record = next(
+        record
+        for record in caplog.records
+        if getattr(record, "event", "") == "scheduler.job.completed"
+    )
+    assert record.event_fields["job_name"] == "采集已启用数据源"
 
 
 def test_scheduled_aa_sync_logs_missing_api_key_skip(monkeypatch, caplog):
