@@ -1,10 +1,11 @@
 import logging
+import time
 from datetime import datetime, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.logging import bind_log_context, log_event
+from app.core.logging import bind_log_context, format_duration, log_event
 
 logger = logging.getLogger("today_highlights.ai")
 
@@ -174,10 +175,13 @@ def process_item_enrichment(
     if model_cfg is None:
         raise ValueError("No default AI model configured")
 
-    # Get raw item for content
+    raw = session.get(RawItem, enrichment.raw_item_id)
+    topic = session.get(Topic, enrichment.topic_id)
     raw_item = enrichment.raw_item_id
+    model_display_name = f"{model_cfg.name} / {model_cfg.model}"
 
     started_at = datetime.utcnow()
+    started = time.perf_counter()
     job = _build_job(
         job_type="item_enrichment",
         trigger_type=trigger_type,
@@ -193,14 +197,18 @@ def process_item_enrichment(
     session.add(job)
     session.flush()
 
-    with bind_log_context(ai_job_id=job.id):
+    with bind_log_context(
+        ai_job_id=job.id,
+        topic_name=topic.name if topic else "-",
+        item_title=raw.title[:120] if raw else "-",
+        model_name=model_display_name,
+    ):
         log_event(
             logger,
             channel="application",
             category="ai",
-            event="ai_enrichment_started",
+            event="ai.enrichment.started",
             enrichment_id=enrichment.id,
-            model=model_cfg.model,
         )
 
         try:
@@ -211,11 +219,12 @@ def process_item_enrichment(
                 api_key=api_key,
                 model=model_cfg.model,
                 post_json=post_json,
+                model_name=model_display_name,
+                task_name="单条内容加工",
             )
             # Call AI - need to run async in sync context
             import asyncio
 
-            raw = session.get(RawItem, raw_item)
             if raw is None:
                 raise ValueError("Raw item not found")
 
@@ -254,9 +263,9 @@ def process_item_enrichment(
                 logger,
                 channel="application",
                 category="ai",
-                event="ai_enrichment_finished",
+                event="ai.enrichment.completed",
                 enrichment_id=enrichment.id,
-                model=model_cfg.model,
+                duration=format_duration(time.perf_counter() - started),
             )
 
         except Exception as exc:
@@ -273,11 +282,12 @@ def process_item_enrichment(
                 logger,
                 channel="application",
                 category="ai",
-                event="ai_enrichment_failed",
+                event="ai.enrichment.failed",
                 level=logging.ERROR,
                 enrichment_id=enrichment.id,
-                exception_type=type(exc).__name__,
-                message=error_message,
+                error_type=type(exc).__name__,
+                error=error_message,
+                duration=format_duration(time.perf_counter() - started),
             )
 
     return enrichment

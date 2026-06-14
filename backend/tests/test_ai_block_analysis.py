@@ -103,7 +103,7 @@ def _seed_user_model_block(session):
         status="published",
     )
     key = CryptoService(settings.app_secret_key).encrypt("api-key")
-    model = AIModelConfig(name="Default", base_url="https://example.com", model="free-model", api_key_encrypted=key, is_default=True, enabled=True)
+    model = AIModelConfig(name="默认模型", base_url="https://example.com", model="free-model", api_key_encrypted=key, is_default=True, enabled=True)
     session.add_all([block, model])
     session.commit()
     return user, block
@@ -162,10 +162,18 @@ def test_analyze_block_generates_and_records_token_usage(client, caplog):
     correlated_events = {
         record.event: record.event_fields
         for record in caplog.records
-        if getattr(record, "event", "") in {"ai_request_finished", "block_analysis_finished"}
+        if getattr(record, "event", "") in {"ai.request.completed", "ai.block.completed"}
     }
-    assert correlated_events["ai_request_finished"]["ai_job_id"] == job.id
-    assert correlated_events["block_analysis_finished"]["ai_job_id"] == job.id
+    assert correlated_events["ai.request.completed"]["ai_job_id"] == job.id
+    block_fields = correlated_events["ai.block.completed"]
+    assert block_fields["ai_job_id"] == job.id
+    assert block_fields["topic_name"] == "股票"
+    assert block_fields["block_title"] == "热门资讯"
+    assert block_fields["username"] == "alice"
+    assert block_fields["model_name"] == "默认模型 / free-model"
+    assert block_fields["input_items"] == 1
+    assert block_fields["output_items"] == 1
+    assert block_fields["tokens"]["total"] == 30
 
 
 def test_analyze_block_uses_valid_cache(client):

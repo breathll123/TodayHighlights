@@ -19,6 +19,22 @@ def test_logging_reexports_safety_helpers():
     assert exported_sanitize_fields is sanitize_fields
 
 
+def test_token_usage_metrics_are_not_mistaken_for_credentials():
+    sanitized = sanitize_fields(
+        {
+            "tokens": {"prompt": 11, "completion": 7, "total": 18},
+            "prompt_tokens": 11,
+            "token_usage_id": 42,
+            "access_token": "secret",
+        }
+    )
+
+    assert sanitized["tokens"]["total"] == 18
+    assert sanitized["prompt_tokens"] == 11
+    assert sanitized["token_usage_id"] == 42
+    assert sanitized["access_token"] == "[REDACTED]"
+
+
 def test_sanitize_url_safe_keeps_regular_query_and_hides_sensitive_values():
     sanitized = sanitize_url(
         "https://provider.example/api/items?page=2&sort=hot&access_token=secret"

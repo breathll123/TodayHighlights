@@ -109,8 +109,11 @@ def sanitize_fields(fields: dict[str, Any]) -> dict[str, Any]:
     sanitized: dict[str, Any] = {}
     for key, value in fields.items():
         lowered = key.lower()
-        if lowered in SENSITIVE_KEYS or any(
-            part in lowered for part in ("password", "secret", "token", "api_key")
+        credential_token = lowered.endswith(("_token", "-token"))
+        if (
+            lowered in SENSITIVE_KEYS
+            or credential_token
+            or any(part in lowered for part in ("password", "secret", "api_key"))
         ):
             sanitized[key] = "[REDACTED]"
         elif isinstance(value, str):
