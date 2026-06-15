@@ -50,6 +50,7 @@ def fetch_sectors(config: dict, limit: int) -> list[dict]:
 
 @ttl_cache(30, swr=300)
 def fetch_longhu(config: dict, limit: int) -> list[dict]:
+    """龙虎榜 — 仅返回最新交易日数据 (f190=0)，匹配东方财富官网"""
     try:
         resp = observed_http_get(
             _http.get,
@@ -65,6 +66,9 @@ def fetch_longhu(config: dict, limit: int) -> list[dict]:
         result = []
         for item in items:
             if item.get("f152") != 2:
+                continue
+            # 仅保留最新交易日 (f190=0)，与东方财富网站一致
+            if item.get("f190") != 0:
                 continue
             trade_amt = abs(item.get("f6", 0) or 0) / 1e8   # 成交额 (f6)
             buy_amt = abs(item.get("f174", 0) or 0) / 1e8    # 买方金额
