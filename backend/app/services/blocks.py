@@ -4,7 +4,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor, wait
 from contextvars import copy_context
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.logging import bind_log_context, log_event
@@ -128,13 +128,33 @@ def resolve_block_data(
         longhu_source_id = session.scalar(select(Source.id).where(Source.entry_url == "eastmoney://longhu").limit(1))
         if longhu_source_id is None:
             return []
+        datacenter_item = RawItem.external_id.like(
+            r"lhb\_" + "____-__-__" + r"\_%",
+            escape="\\",
+        )
+        trade_date = func.substr(RawItem.external_id, 5, 10)
+        latest_trade_date = session.scalar(
+            select(func.max(trade_date)).where(
+                RawItem.source_id == longhu_source_id,
+                datacenter_item,
+            )
+        )
+        if latest_trade_date is None:
+            return []
         stmt = (
             select(RawItem)
-            .where(RawItem.source_id == longhu_source_id)
-            .order_by(RawItem.published_at.desc(), RawItem.created_at.desc())
-            .limit(limit)
+            .where(
+                RawItem.source_id == longhu_source_id,
+                datacenter_item,
+                trade_date == latest_trade_date,
+            )
         )
         longhu_items = session.scalars(stmt).all()
+        longhu_items.sort(
+            key=lambda item: abs(float((item.metrics_json or {}).get("net_buy", 0) or 0)),
+            reverse=True,
+        )
+        longhu_items = longhu_items[:limit]
         return [
             {
                 "id": ri.id,
@@ -143,6 +163,8 @@ def resolve_block_data(
                 "url": ri.url,
                 "symbols": [ri.metrics_json.get("symbol", "")] if ri.metrics_json else [],
                 "score": int(abs(ri.metrics_json.get("net_buy", 0) or 0)) if ri.metrics_json else 0,
+                "net_amount": ri.metrics_json.get("net_buy", 0) if ri.metrics_json else 0,
+                "reason": ri.metrics_json.get("reason", "") if ri.metrics_json else "",
                 "source_type": "eastmoney_longhu",
                 "percent": ri.metrics_json.get("percent", 0) if ri.metrics_json else 0,
             }

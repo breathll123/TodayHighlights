@@ -120,6 +120,62 @@ describe("TopicPage", () => {
     expect(await screen.findByText("今日看点")).toBeInTheDocument();
     expect(screen.getByText("资金关注新能源")).toBeInTheDocument();
   });
+
+  it("renders Longhu net amount and listing reason columns", async () => {
+    vi.mocked(fetchPageBlocks).mockResolvedValueOnce({
+      blocks: [
+        {
+          id: 3,
+          page_route: "/topics/stocks",
+          title: "东方财富-龙虎榜",
+          sort_order: 0,
+          source_type: "eastmoney_longhu",
+          source_config: { display_fields: ["title", "percent", "score"] },
+          display_style: "list",
+          display_count: 30,
+          sort_by: "default",
+          enabled: true,
+          created_at: "2026-06-15T10:00:00",
+          updated_at: "2026-06-15T10:00:00",
+          block_key: "stocks-longhu",
+          col_span: 2,
+          row_span: 1,
+          grid_x: 0,
+          grid_y: 0,
+          status: "published",
+          data: [
+            {
+              id: 101,
+              title: "光库科技",
+              symbols: ["300620"],
+              percent: 19.999,
+              net_amount: 1537055379,
+              reason: "日涨幅达到15%的前5只证券",
+              url: "https://quote.eastmoney.com/300620.html",
+            },
+            {
+              id: 102,
+              title: "测试净卖出",
+              symbols: ["000001"],
+              percent: -6.25,
+              net_amount: -820000000,
+              reason: "日跌幅偏离值达到7%的前5只证券",
+              url: "https://quote.eastmoney.com/000001.html",
+            },
+          ],
+        },
+      ],
+    });
+
+    render(<TopicPage />, { wrapper: Wrapper });
+
+    expect(await screen.findByText("东方财富-龙虎榜")).toBeInTheDocument();
+    expect(screen.getAllByText("净买额")).not.toHaveLength(0);
+    expect(screen.getAllByText("上榜原因")).not.toHaveLength(0);
+    expect(screen.getAllByText("+15.4亿")).not.toHaveLength(0);
+    expect(screen.getAllByText("-8.2亿")).not.toHaveLength(0);
+    expect(screen.getAllByText("日涨幅达到15%的前5只证券")).not.toHaveLength(0);
+  });
 });
 
 describe("FootballTopicPage", () => {

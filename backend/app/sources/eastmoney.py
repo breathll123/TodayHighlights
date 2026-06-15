@@ -1,3 +1,4 @@
+import json
 from datetime import datetime
 from hashlib import sha256
 
@@ -34,6 +35,37 @@ def _push2_get(path: str, params: dict) -> httpx.Response:
         except Exception as e:
             last_err = e
     raise last_err  # type: ignore[possibly-unbound]
+
+
+def _datacenter_longhu_get() -> httpx.Response:
+    response = observed_http_get(
+        httpx.get,
+        "https://datacenter-web.eastmoney.com/api/data/v1/get",
+        provider="eastmoney",
+        operation="longhu_detail",
+        host="datacenter-web.eastmoney.com",
+        path="/api/data/v1/get",
+        params={
+            "reportName": "RPT_DAILYBILLBOARD_DETAILSNEW",
+            "columns": "ALL",
+            "pageNumber": 1,
+            "pageSize": 500,
+            "sortTypes": "-1",
+            "sortColumns": "TRADE_DATE",
+            "source": "WEB",
+            "client": "WEB",
+        },
+        headers={
+            "User-Agent": "Mozilla/5.0 TodayHighlights/0.1",
+            "Referer": "https://data.eastmoney.com/stock/tradedetail.html",
+            "Accept": "application/json,text/plain,*/*",
+        },
+        timeout=20,
+        follow_redirects=True,
+        proxy=_proxy,
+    )
+    response.raise_for_status()
+    return response
 
 
 class EastmoneyAdapter:
@@ -84,40 +116,86 @@ class EastmoneyAdapter:
     # ── 龙虎榜 ──
 
     def _fetch_longhu(self, subtype: str) -> list[RawItemDraft]:
-        resp = _push2_get(
-            "/api/qt/clist/get",
-            params={"pn": 1, "pz": 50, "po": 1, "np": 1, "fltt": 2, "invt": 2, "fid": "f178",
-                    "fs": "m:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23",
-                    "fields": "f2,f3,f8,f12,f14,f152,f174,f175,f176,f177,f178,f179"},
+        return self._fetch_longhu_datacenter(subtype)
+
+    def _fetch_longhu_datacenter(self, subtype: str) -> list[RawItemDraft]:
+        response = _datacenter_longhu_get()
+        payload = response.json()
+        if not payload.get("success"):
+            raise RuntimeError(payload.get("message") or "Eastmoney longhu response was unsuccessful")
+
+        items = payload.get("result", {}).get("data", []) or []
+        if not items:
+            return []
+
+        latest_date = max(str(item.get("TRADE_DATE") or "")[:10] for item in items)
+        latest_items = [
+            item for item in items
+            if str(item.get("TRADE_DATE") or "")[:10] == latest_date
+        ]
+        latest_items.sort(
+            key=lambda item: abs(float(item.get("BILLBOARD_NET_AMT") or 0)),
+            reverse=True,
         )
-        drafts = []
-        for item in resp.json()["data"]["diff"]:
-            if item.get("f152") != 2:
+
+        drafts: list[RawItemDraft] = []
+        for item in latest_items[:100]:
+            code = str(item.get("SECURITY_CODE") or "")
+            name = str(item.get("SECURITY_NAME_ABBR") or "")
+            trade_id = str(item.get("TRADE_ID") or "")
+            reason = str(item.get("EXPLANATION") or "")
+            if not code or not name:
                 continue
-            code = item["f12"]
-            name = item["f14"]
-            pct = item["f3"]
-            buy_amt = (item.get("f174", 0) or 0)
-            sell_amt = (item.get("f176", 0) or 0)
-            net_amt = buy_amt + sell_amt  # f176 is already negative
-            body = f"净买{net_amt/1e8:+.1f}亿 买入{buy_amt/1e8:+.1f}亿 卖出{abs(sell_amt)/1e8:.1f}亿 换手{item.get('f8',0)}%"
-            content_str = f"{subtype}|{code}|{buy_amt}|{sell_amt}"
-            drafts.append(RawItemDraft(
-                external_id=f"em_{subtype}_{code}",
-                url=f"https://quote.eastmoney.com/{code}.html",
-                author="",
-                title=name,
-                body=body,
-                published_at=datetime.now(SH_TZ).replace(tzinfo=None),
-                metrics={
-                    "percent": pct, "subtype": subtype, "symbol": code,
-                    "buy_amount": buy_amt, "sell_amount": sell_amt,
-                    "net_amount": net_amt, "turnover_rate": item.get("f8", 0),
-                },
-                content_hash=sha256(content_str.encode()).hexdigest(),
-            ))
-            if len(drafts) >= 20:
-                break
+
+            buy_amount = float(item.get("BILLBOARD_BUY_AMT") or 0)
+            sell_amount = float(item.get("BILLBOARD_SELL_AMT") or 0)
+            net_amount = float(item.get("BILLBOARD_NET_AMT") or 0)
+            turnover_rate = float(item.get("TURNOVERRATE") or 0)
+            raw_snapshot = json.dumps(item, ensure_ascii=False, sort_keys=True, default=str)
+            identity = trade_id or sha256(f"{code}|{reason}".encode()).hexdigest()[:16]
+            content_hash = sha256(raw_snapshot.encode()).hexdigest()
+
+            drafts.append(
+                RawItemDraft(
+                    external_id=f"lhb_{latest_date}_{identity}",
+                    url=f"https://quote.eastmoney.com/{code}.html",
+                    author="",
+                    title=name,
+                    body=(
+                        f"净买{net_amount / 1e8:+.1f}亿 "
+                        f"买入{buy_amount / 1e8:.1f}亿 "
+                        f"卖出{sell_amount / 1e8:.1f}亿 "
+                        f"换手{turnover_rate:.2f}% {reason}"
+                    ),
+                    published_at=datetime.fromisoformat(f"{latest_date}T00:00:00"),
+                    metrics={
+                        "percent": float(item.get("CHANGE_RATE") or 0),
+                        "current": float(item.get("CLOSE_PRICE") or 0),
+                        "subtype": subtype,
+                        "symbol": code,
+                        "secucode": str(item.get("SECUCODE") or ""),
+                        "trade_date": latest_date,
+                        "trade_id": item.get("TRADE_ID"),
+                        "buy_amount": buy_amount,
+                        "sell_amount": sell_amount,
+                        "net_amount": net_amount,
+                        "net_buy": net_amount,
+                        "billboard_deal_amount": float(item.get("BILLBOARD_DEAL_AMT") or 0),
+                        "deal_amount_ratio": float(item.get("DEAL_AMOUNT_RATIO") or 0),
+                        "deal_net_ratio": float(item.get("DEAL_NET_RATIO") or 0),
+                        "turnover_rate": turnover_rate,
+                        "free_market_cap": float(item.get("FREE_MARKET_CAP") or 0),
+                        "reason": reason,
+                        "institution_summary": str(item.get("EXPLAIN") or ""),
+                        "post_change_1d": item.get("D1_CLOSE_ADJCHRATE"),
+                        "post_change_2d": item.get("D2_CLOSE_ADJCHRATE"),
+                        "post_change_5d": item.get("D5_CLOSE_ADJCHRATE"),
+                        "post_change_10d": item.get("D10_CLOSE_ADJCHRATE"),
+                    },
+                    content_hash=content_hash,
+                    raw_snapshot=raw_snapshot,
+                )
+            )
         return drafts
 
     # ── capital flow ──

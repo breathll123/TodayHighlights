@@ -48,6 +48,24 @@ function cell(key: string, item: Row) {
       );
     case "score":
       return <span className="text-xs text-muted-foreground tabular-nums">{fmtNum(item.score)}</span>;
+    case "net_amount": {
+      const value = Number(item.net_amount ?? 0);
+      const tone = value > 0 ? "text-red-500" : value < 0 ? "text-green-500" : "text-muted-foreground";
+      const sign = value > 0 ? "+" : value < 0 ? "-" : "";
+      return (
+        <span className={`text-xs font-semibold tabular-nums ${tone}`}>
+          {sign}{fmtNum(Math.abs(value))}
+        </span>
+      );
+    }
+    case "reason": {
+      const reason = typeof item.reason === "string" ? item.reason : "";
+      return (
+        <span className="block truncate text-xs text-muted-foreground" title={reason}>
+          {reason || "—"}
+        </span>
+      );
+    }
     case "subtitle":
       return <span className="text-xs text-muted-foreground truncate">{item.subtitle || "—"}</span>;
     case "release":

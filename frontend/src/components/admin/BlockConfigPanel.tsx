@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectSepa
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { SIZE_PRESETS } from "@/lib/grid-utils";
-import { FIELD_DEFS, DEFAULT_FIELDS } from "@/lib/field-defs";
+import { FIELD_DEFS, resolveDisplayFieldKeys } from "@/lib/field-defs";
 import type { Block } from "@/api/types";
 import { fetchRawSources, type RawSourceOption } from "@/api/client";
 import { cn } from "@/lib/utils";
@@ -92,9 +92,7 @@ export function BlockConfigPanel({ form, onChange, onSave, onCancel }: Props) {
 
   const allFields = FIELD_DEFS[form.source_type] || [];
   const configuredFields = form.source_config?.display_fields;
-  const selectedFields: string[] = (
-    Array.isArray(configuredFields) ? configuredFields : DEFAULT_FIELDS[form.source_type]
-  ) || allFields.map((f) => f.key);
+  const selectedFields = resolveDisplayFieldKeys(form.source_type, configuredFields);
   const numericFields = allFields.filter((f) => f.type === "number");
 
   const toggleField = (key: string) => {

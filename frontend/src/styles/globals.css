@@ -92,6 +92,73 @@
 }
 
 @layer components {
+  .longhu-header {
+    @apply border-b bg-muted/30 px-4 py-2.5 text-xs font-medium text-muted-foreground;
+  }
+
+  .longhu-row {
+    @apply min-h-14 items-center border-b px-4 py-2.5 text-sm transition-colors last:border-0 hover:bg-muted/25;
+  }
+
+  .longhu-list-grid {
+    display: grid;
+    grid-template-columns: minmax(140px, 1fr) minmax(72px, 96px) minmax(86px, 112px) 32px;
+    gap: 12px;
+  }
+
+  .longhu-reason-trigger {
+    @apply relative flex items-center justify-end;
+  }
+
+  .longhu-info-button {
+    @apply inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background;
+  }
+
+  .longhu-tooltip {
+    width: max-content;
+    max-width: min(320px, calc(100vw - 32px));
+    @apply pointer-events-none absolute right-0 top-[calc(100%+8px)] z-50 flex -translate-y-1 flex-col gap-1 rounded-md border bg-popover px-3 py-2 text-left text-xs leading-5 text-popover-foreground opacity-0 shadow-lg transition duration-150;
+  }
+
+  .longhu-tooltip::after {
+    content: "";
+    @apply absolute bottom-full right-3 border-4 border-transparent border-b-border;
+  }
+
+  .longhu-row:nth-last-child(-n+2) .longhu-tooltip {
+    bottom: calc(100% + 8px);
+    top: auto;
+    transform: translateY(4px);
+  }
+
+  .longhu-row:nth-last-child(-n+2) .longhu-tooltip::after {
+    bottom: auto;
+    top: 100%;
+    border-bottom-color: transparent;
+    border-top-color: hsl(var(--border));
+  }
+
+  .longhu-tooltip-label {
+    @apply text-[11px] font-medium text-muted-foreground;
+  }
+
+  .longhu-reason-trigger:hover .longhu-tooltip,
+  .longhu-reason-trigger:focus-within .longhu-tooltip {
+    @apply translate-y-0 opacity-100;
+  }
+
+  @media (max-width: 520px) {
+    .longhu-header,
+    .longhu-row {
+      @apply px-3;
+    }
+
+    .longhu-list-grid {
+      grid-template-columns: minmax(100px, 1fr) 68px 80px 32px;
+      gap: 8px;
+    }
+  }
+
   .rank-row-gold {
     background: linear-gradient(90deg, hsl(38 92% 54% / 0.09), transparent 68%);
     box-shadow: inset 2px 0 0 hsl(38 92% 54% / 0.72);

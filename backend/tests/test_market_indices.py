@@ -1,5 +1,7 @@
 import logging
 
+import pytest
+
 from app.services.adapters import eastmoney
 from app.sources import eastmoney as source_eastmoney
 
@@ -61,34 +63,45 @@ class _IndexResponse:
         }
 
 
-class _LonghuResponse:
+class _LonghuDatacenterResponse:
     def raise_for_status(self) -> None:
         return None
 
     def json(self) -> dict:
         return {
-            "data": {
-                "diff": [
+            "success": True,
+            "result": {
+                "data": [
                     {
-                        "f3": 6.25,
-                        "f8": 18.4,
-                        "f12": "000001",
-                        "f14": "测试股份",
-                        "f152": 2,
-                        "f174": 350000000,
-                        "f176": -120000000,
+                        "TRADE_DATE": "2026-06-15 00:00:00",
+                        "TRADE_ID": 100348255,
+                        "SECURITY_CODE": "301526",
+                        "SECURITY_NAME_ABBR": "国际复材",
+                        "CLOSE_PRICE": 34.13,
+                        "CHANGE_RATE": 20.007,
+                        "TURNOVERRATE": 13.5605,
+                        "BILLBOARD_DEAL_AMT": 2327447269.88,
+                        "BILLBOARD_BUY_AMT": 1298112313.51,
+                        "BILLBOARD_SELL_AMT": 1029334956.37,
+                        "BILLBOARD_NET_AMT": 268777357.14,
+                        "DEAL_AMOUNT_RATIO": 37.8615,
+                        "FREE_MARKET_CAP": 47931930461.99,
+                        "EXPLANATION": "日涨幅达到15%的前5只证券",
+                        "EXPLAIN": "4家机构买入，成功率35.09%",
+                        "D1_CLOSE_ADJCHRATE": None,
+                        "D2_CLOSE_ADJCHRATE": None,
+                        "D5_CLOSE_ADJCHRATE": None,
+                        "D10_CLOSE_ADJCHRATE": None,
                     },
                     {
-                        "f3": 1.1,
-                        "f8": 2.0,
-                        "f12": "000002",
-                        "f14": "普通股份",
-                        "f152": 0,
-                        "f174": 10000000,
-                        "f176": -5000000,
+                        "TRADE_DATE": "2026-06-14 00:00:00",
+                        "TRADE_ID": 100348100,
+                        "SECURITY_CODE": "000001",
+                        "SECURITY_NAME_ABBR": "旧交易日",
+                        "BILLBOARD_NET_AMT": 999999999,
                     },
                 ]
-            }
+            },
         }
 
 
@@ -189,16 +202,38 @@ def test_source_indices_use_eastmoney_snapshot_api(monkeypatch) -> None:
     }
 
 
-def test_source_longhu_uses_push2_api_without_browser(monkeypatch) -> None:
-    def fake_push2_get(path: str, params: dict):
-        assert path == "/api/qt/clist/get"
-        assert params["fid"] == "f178"
-        return _LonghuResponse()
+def test_source_longhu_uses_datacenter_detail_api(monkeypatch) -> None:
+    def fake_datacenter_get():
+        return _LonghuDatacenterResponse()
 
-    monkeypatch.setattr(source_eastmoney, "_push2_get", fake_push2_get)
+    def fail_push2_get(*args, **kwargs):
+        raise AssertionError("datacenter success must not use push2 fallback")
+
+    monkeypatch.setattr(source_eastmoney, "_datacenter_longhu_get", fake_datacenter_get)
+    monkeypatch.setattr(source_eastmoney, "_push2_get", fail_push2_get)
 
     drafts = source_eastmoney.EastmoneyAdapter().fetch("eastmoney://longhu", "")
 
     assert len(drafts) == 1
-    assert drafts[0].title == "测试股份"
-    assert drafts[0].metrics["net_amount"] == 230000000
+    assert drafts[0].external_id == "lhb_2026-06-15_100348255"
+    assert drafts[0].title == "国际复材"
+    assert drafts[0].published_at.isoformat() == "2026-06-15T00:00:00"
+    assert drafts[0].metrics["net_amount"] == 268777357.14
+    assert drafts[0].metrics["net_buy"] == 268777357.14
+    assert drafts[0].metrics["reason"] == "日涨幅达到15%的前5只证券"
+    assert drafts[0].metrics["billboard_deal_amount"] == 2327447269.88
+    assert drafts[0].metrics["free_market_cap"] == 47931930461.99
+
+
+def test_source_longhu_does_not_fall_back_to_incorrect_push2_data(monkeypatch) -> None:
+    def fail_datacenter_get():
+        raise TimeoutError("datacenter unavailable")
+
+    def fail_push2_get(*args, **kwargs):
+        raise AssertionError("longhu must not fall back to push2")
+
+    monkeypatch.setattr(source_eastmoney, "_datacenter_longhu_get", fail_datacenter_get)
+    monkeypatch.setattr(source_eastmoney, "_push2_get", fail_push2_get)
+
+    with pytest.raises(TimeoutError, match="datacenter unavailable"):
+        source_eastmoney.EastmoneyAdapter().fetch("eastmoney://longhu", "")

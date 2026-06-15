@@ -42,8 +42,8 @@ export const FIELD_DEFS: Record<string, FieldDef[]> = {
   eastmoney_longhu: [
     { key: "title", label: "名称", type: "text" },
     { key: "percent", label: "涨跌", type: "number" },
-    { key: "score", label: "成交额", type: "number" },
-    { key: "subtitle", label: "买卖", type: "text" },
+    { key: "net_amount", label: "净买额", type: "number" },
+    { key: "reason", label: "上榜原因", type: "text" },
   ],
   eastmoney_capital_flow: [
     { key: "title", label: "名称", type: "text" },
@@ -113,7 +113,7 @@ export const DEFAULT_FIELDS: Record<string, string[]> = {
   eastmoney_sectors: DEFAULT_BOARD,
   eastmoney_industry: DEFAULT_BOARD,
   eastmoney_indices: ["title", "percent"],
-  eastmoney_longhu: ["title", "percent", "score", "subtitle"],
+  eastmoney_longhu: ["title", "percent", "net_amount", "reason"],
   eastmoney_capital_flow: ["title", "percent", "score"],
   eastmoney_announcements: ["title", "subtitle"],
   tonghuashun_news: ["title", "subtitle"],
@@ -126,3 +126,22 @@ export const DEFAULT_FIELDS: Record<string, string[]> = {
   market_index_trends: ["title", "current", "percent"],
   aihot_news: ["title", "subtitle"],
 };
+
+export function resolveDisplayFieldKeys(sourceType: string, configuredFields?: unknown): string[] {
+  const configured = Array.isArray(configuredFields)
+    ? configuredFields.filter((field): field is string => typeof field === "string")
+    : [];
+
+  if (
+    sourceType === "eastmoney_longhu"
+    && configured.some((field) => field === "score" || field === "subtitle")
+  ) {
+    return DEFAULT_FIELDS.eastmoney_longhu;
+  }
+
+  if (configured.length > 0) {
+    return configured;
+  }
+
+  return DEFAULT_FIELDS[sourceType] || (FIELD_DEFS[sourceType] || []).map((field) => field.key);
+}

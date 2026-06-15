@@ -10,12 +10,13 @@ import { MatchList } from "./MatchList";
 import { NewsTimeline } from "./NewsTimeline";
 import { StandingsTable } from "./StandingsTable";
 import { LeaderboardTable } from "./LeaderboardTable";
+import { LonghuList } from "./LonghuList";
 import { ArtificialAnalysisRanking } from "./ArtificialAnalysisRanking";
 import { MarketIndexBar } from "./MarketIndexBar";
 import { SectionHeading } from "./SectionHeading";
 import { BlockAIAnalysisDrawer } from "./BlockAIAnalysisDrawer";
 import { CollapsibleSection } from "./CollapsibleSection";
-import { FIELD_DEFS, DEFAULT_FIELDS } from "@/lib/field-defs";
+import { FIELD_DEFS, resolveDisplayFieldKeys } from "@/lib/field-defs";
 import { generateBlockAIAnalysis } from "@/api/client";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/use-auth";
@@ -131,6 +132,8 @@ function mapItem(item: any, sourceType: string) {
     subtitle,
     percent: item.percent,
     score: item.score ?? item.value,
+    net_amount: item.net_amount,
+    reason: item.reason,
     url: item.url,
   };
 }
@@ -226,7 +229,7 @@ export function GridRenderer({ blocks, isLoading, dataUpdatedAt }: { blocks: any
         const st = block.source_type as string;
         const allFields = FIELD_DEFS[st] || [];
         const cfgFields: string[] | undefined = block.source_config?.display_fields;
-        const selectedKeys: string[] = (cfgFields && cfgFields.length > 0 ? cfgFields : DEFAULT_FIELDS[st]) || allFields.map((f) => f.key);
+        const selectedKeys = resolveDisplayFieldKeys(st, cfgFields);
         const displayFields = allFields.filter((f) => selectedKeys.includes(f.key));
 
         return (
@@ -296,6 +299,8 @@ export function GridRenderer({ blocks, isLoading, dataUpdatedAt }: { blocks: any
               <MarketIndexBar data={block.data} />
             ) : block.source_type === "artificial_analysis_ranking" ? (
               <ArtificialAnalysisRanking data={block.data} meta={block.meta} />
+            ) : block.source_type === "eastmoney_longhu" ? (
+              <LonghuList data={block.data} fields={displayFields} />
             ) : block.source_type === "aihot_news" ? (
               <NewsTimeline data={block.data.map((item: any) => ({
                 id: item.id,
