@@ -58,7 +58,7 @@ def fetch_longhu(config: dict, limit: int) -> list[dict]:
             host="push2delay.eastmoney.com", path="/api/qt/clist/get",
             params={"pn": 1, "pz": limit, "po": 1, "np": 1, "fltt": 2, "invt": 2, "fid": "f178",
                     "fs": "m:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23",
-                    "fields": "f2,f3,f8,f12,f14,f152,f174,f175,f176,f177,f178,f179"},
+                    "fields": "f2,f3,f6,f8,f12,f14,f152,f174,f175,f176,f177,f178,f179,f190"},
         )
         resp.raise_for_status()
         items = resp.json().get("data", {}).get("diff", [])
@@ -66,14 +66,15 @@ def fetch_longhu(config: dict, limit: int) -> list[dict]:
         for item in items:
             if item.get("f152") != 2:
                 continue
-            total_amt = abs(item.get("f178", 0) or 0) / 1e8
-            buy_amt = abs(item.get("f174", 0) or 0) / 1e8
-            sell_amt = abs(item.get("f176", 0) or 0) / 1e8
+            trade_amt = abs(item.get("f6", 0) or 0) / 1e8   # 成交额 (f6)
+            buy_amt = abs(item.get("f174", 0) or 0) / 1e8    # 买方金额
+            sell_amt = abs(item.get("f176", 0) or 0) / 1e8   # 卖方金额
+            net_buy = (item.get("f178", 0) or 0) / 1e8       # 净买额 (正=净买, 负=净卖)
             result.append({
                 "title": item.get("f14", ""),
-                "summary": f"成交{total_amt:.1f}亿 买入{buy_amt:.1f}亿 卖出{sell_amt:.1f}亿",
+                "summary": f"成交{trade_amt:.1f}亿 净买{net_buy:+.1f}亿 买入{buy_amt:.1f}亿 卖出{sell_amt:.1f}亿",
                 "symbols": [item.get("f12", "")],
-                "score": int(total_amt),
+                "score": int(abs(item.get("f178", 0) or 0) / 1e8),
                 "source": "eastmoney_longhu",
                 "percent": item.get("f3", 0),
                 "current": item.get("f2", 0),
