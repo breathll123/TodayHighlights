@@ -3,12 +3,13 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, wait
 from contextvars import copy_context
+from datetime import datetime, timezone
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.logging import bind_log_context, log_event
-from app.models.entities import Highlight, PageBlock, RawItem, Source
+from app.models.entities import AARankingDataset, Highlight, PageBlock, RawItem, Source
 from app.services.adapters.xueqiu import (
     fetch_hot_events, fetch_hot_stocks, fetch_hot_stocks_cn,
     fetch_hot_stocks_hk, fetch_hot_stocks_us, fetch_screener, get_cookie,
@@ -41,6 +42,158 @@ def shutdown_executor():
     if _BLOCK_EXECUTOR is not None:
         _BLOCK_EXECUTOR.shutdown(wait=False)
         _BLOCK_EXECUTOR = None
+
+
+_DATA_UPDATED_FIELDS = ("data_updated_at", "updated_at", "generated_at", "created_at")
+
+_SOURCE_ENTRY_URLS_BY_BLOCK_TYPE = {
+    "eastmoney_sectors": "eastmoney://sectors",
+    "eastmoney_industry": "eastmoney://industry",
+    "eastmoney_capital_flow": "eastmoney://capital_flow",
+    "eastmoney_indices": "eastmoney://indices",
+    "eastmoney_longhu": "eastmoney://longhu",
+    "tonghuashun_news": "tonghuashun://news",
+    "aihot_news": "aihot://news",
+    "qiumiwu_matches": "qiumiwu://matches",
+    "qiumiwu_fixtures": "qiumiwu://matches",
+    "qiumiwu_standings": "qiumiwu://matches",
+    "qiumiwu_schedule": "qiumiwu://matches",
+    "dongqiudi_matches": "dongqiudi://matches",
+}
+
+_SOURCE_SITES_BY_BLOCK_TYPE = {
+    "hot_events": "xueqiu",
+    "hot_stocks": "xueqiu",
+    "xueqiu_hot_cn": "xueqiu",
+    "xueqiu_hot_hk": "xueqiu",
+    "xueqiu_hot_us": "xueqiu",
+    "screener": "xueqiu",
+}
+
+
+def _parse_data_datetime(value: object) -> datetime | None:
+    if isinstance(value, datetime):
+        return value
+    if not isinstance(value, str):
+        return None
+    text = value.strip()
+    if not text:
+        return None
+    if text.endswith("Z"):
+        text = f"{text[:-1]}+00:00"
+    try:
+        return datetime.fromisoformat(text)
+    except ValueError:
+        return None
+
+
+def _datetime_sort_key(value: datetime) -> float:
+    if value.tzinfo is not None:
+        return value.timestamp()
+    return value.replace(tzinfo=timezone.utc).timestamp()
+
+
+def _format_data_updated_at(value: datetime) -> str:
+    if value.tzinfo is not None:
+        value = value.replace(tzinfo=None)
+    return value.replace(microsecond=0).isoformat(timespec="seconds")
+
+
+def _infer_data_updated_at(data: list[dict], fallback: datetime | None = None) -> str | None:
+    latest: datetime | None = None
+    latest_key: float | None = None
+    for item in data:
+        if not isinstance(item, dict):
+            continue
+        for field in _DATA_UPDATED_FIELDS:
+            parsed = _parse_data_datetime(item.get(field))
+            if parsed is None:
+                continue
+            sort_key = _datetime_sort_key(parsed)
+            if latest_key is None or sort_key > latest_key:
+                latest = parsed
+                latest_key = sort_key
+
+    if latest is None:
+        latest = fallback
+    return _format_data_updated_at(latest) if latest is not None else None
+
+
+def _published_aa_dataset_updated_at(session: Session, block: PageBlock) -> datetime | None:
+    config = block.source_config or {}
+    keys = config.get("dataset_keys")
+    if not keys:
+        single = config.get("dataset_key")
+        keys = [single] if single else ["language_global"]
+    keys = [str(key) for key in keys if key]
+    if not keys:
+        return None
+    return session.scalar(
+        select(func.max(AARankingDataset.published_at)).where(
+            AARankingDataset.dataset_key.in_(keys),
+            AARankingDataset.status == "published",
+        )
+    )
+
+
+def _source_last_crawled_at(session: Session, block: PageBlock) -> datetime | None:
+    config = block.source_config or {}
+    if block.source_type == "raw":
+        source_id = config.get("source_id")
+        if source_id is None:
+            return None
+        return session.scalar(select(Source.last_crawled_at).where(Source.id == source_id).limit(1))
+
+    if block.source_type == "topic":
+        topic_id = config.get("topic_id")
+        if topic_id is None:
+            return None
+        return session.scalar(
+            select(func.max(Source.last_crawled_at)).where(Source.topic_id == topic_id)
+        )
+
+    if block.source_type == "artificial_analysis_ranking":
+        return _published_aa_dataset_updated_at(session, block)
+
+    entry_url = _SOURCE_ENTRY_URLS_BY_BLOCK_TYPE.get(block.source_type)
+    if entry_url:
+        return session.scalar(
+            select(Source.last_crawled_at).where(Source.entry_url == entry_url).limit(1)
+        )
+
+    site = _SOURCE_SITES_BY_BLOCK_TYPE.get(block.source_type)
+    if site:
+        return session.scalar(
+            select(func.max(Source.last_crawled_at)).where(Source.site == site)
+        )
+
+    return None
+
+
+def _block_data_updated_at(session: Session, block: PageBlock, data: list[dict]) -> str | None:
+    source_updated_at = _source_last_crawled_at(session, block)
+    if source_updated_at is not None:
+        return _format_data_updated_at(source_updated_at)
+    return _infer_data_updated_at(data)
+
+
+def _block_payload(block: PageBlock, data: list[dict], data_updated_at: str | None) -> dict:
+    return {
+        "id": block.id,
+        "title": block.title,
+        "sort_order": block.sort_order,
+        "page_route": block.page_route,
+        "display_style": block.display_style,
+        "display_count": block.display_count,
+        "source_type": block.source_type,
+        "source_config": block.source_config or {},
+        "col_span": block.col_span,
+        "row_span": block.row_span,
+        "grid_x": block.grid_x,
+        "grid_y": block.grid_y,
+        "data_updated_at": data_updated_at,
+        "data": data,
+    }
 
 
 def resolve_block_data(
@@ -101,6 +254,7 @@ def resolve_block_data(
                 "url": ri.url,
                 "metrics": ri.metrics_json,
                 "published_at": ri.published_at.isoformat() if ri.published_at else None,
+                "created_at": ri.created_at.isoformat() if ri.created_at else None,
                 "source_type": "raw",
             }
             for ri in raw_items
@@ -167,6 +321,8 @@ def resolve_block_data(
                 "reason": ri.metrics_json.get("reason", "") if ri.metrics_json else "",
                 "source_type": "eastmoney_longhu",
                 "percent": ri.metrics_json.get("percent", 0) if ri.metrics_json else 0,
+                "published_at": ri.published_at.isoformat() if ri.published_at else None,
+                "created_at": ri.created_at.isoformat() if ri.created_at else None,
             }
             for ri in longhu_items
         ]
@@ -199,6 +355,7 @@ def resolve_block_data(
                 "summary": ri.body,
                 "url": ri.url,
                 "published_at": ri.published_at.isoformat() if ri.published_at else None,
+                "created_at": ri.created_at.isoformat() if ri.created_at else None,
                 "source_type": "tonghuashun_news",
             }
             for ri in news_items
@@ -319,15 +476,8 @@ def get_page_blocks(session: Session, route: str) -> list[dict]:
     # Resolve DB blocks sequentially (need session)
     items = []
     for b in db_blocks:
-        items.append({
-            "id": b.id, "title": b.title, "sort_order": b.sort_order,
-            "page_route": b.page_route,
-            "display_style": b.display_style, "display_count": b.display_count,
-            "source_type": b.source_type, "source_config": b.source_config or {},
-            "col_span": b.col_span, "row_span": b.row_span,
-            "grid_x": b.grid_x, "grid_y": b.grid_y,
-            "data": resolve_block_data(session, b),
-        })
+        data = resolve_block_data(session, b)
+        items.append(_block_payload(b, data, _block_data_updated_at(session, b, data)))
 
     # Pre-fetch cookie for live blocks (may fail if key changed)
     try:
@@ -375,19 +525,13 @@ def get_page_blocks(session: Session, route: str) -> list[dict]:
                 reason="timeout",
                 duration_ms=round((time.perf_counter() - started_at[b.id]) * 1000, 2),
             )
-            items.append({
-                "id": b.id, "title": b.title, "sort_order": b.sort_order,
-                "page_route": b.page_route,
-                "display_style": b.display_style, "display_count": b.display_count,
-                "source_type": b.source_type, "source_config": b.source_config or {},
-                "col_span": b.col_span, "row_span": b.row_span,
-                "grid_x": b.grid_x, "grid_y": b.grid_y,
-                "data": [],
-            })
+            items.append(_block_payload(b, [], None))
         for future in done:
             b = futures[future]
+            data_updated_at = None
             try:
                 data = future.result()
+                data_updated_at = _block_data_updated_at(session, b, data)
             except Exception as exc:
                 log_event(
                     logger,
@@ -405,15 +549,7 @@ def get_page_blocks(session: Session, route: str) -> list[dict]:
                     duration_ms=round((time.perf_counter() - started_at[b.id]) * 1000, 2),
                 )
                 data = []
-            items.append({
-                "id": b.id, "title": b.title, "sort_order": b.sort_order,
-                "page_route": b.page_route,
-                "display_style": b.display_style, "display_count": b.display_count,
-                "source_type": b.source_type, "source_config": b.source_config or {},
-                "col_span": b.col_span, "row_span": b.row_span,
-                "grid_x": b.grid_x, "grid_y": b.grid_y,
-                "data": data,
-            })
+            items.append(_block_payload(b, data, data_updated_at))
 
     # Preserve original order
     block_order = {b.id: i for i, b in enumerate(blocks)}

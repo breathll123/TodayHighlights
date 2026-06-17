@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactElement } from "react";
+import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it } from "vitest";
 
 import { CompactTable } from "../components/layout/CompactTable";
@@ -20,7 +21,11 @@ function renderWithQueryClient(ui: ReactElement) {
       mutations: { retry: false },
     },
   });
-  return render(<QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>);
+  return render(
+    <MemoryRouter>
+      <QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>
+    </MemoryRouter>,
+  );
 }
 
 describe("CompactTable rankings", () => {
@@ -76,6 +81,23 @@ it("renders medals in football standings but keeps fourth place plain", () => {
   expect(screen.getByTestId("rank-medal-1")).toBeInTheDocument();
   expect(screen.getByLabelText("第 4 名")).toBeInTheDocument();
   expect(screen.queryByTestId("rank-medal-4")).not.toBeInTheDocument();
+});
+
+it("orders football standings leagues by the fixed visual order", () => {
+  render(
+    <StandingsTable
+      data={[
+        { id: 1, title: "", summary: "", league: "西甲", rank: 1, team: "皇马" },
+        { id: 2, title: "", summary: "", league: "英超", rank: 1, team: "阿森纳" },
+        { id: 3, title: "", summary: "", league: "中超", rank: 1, team: "上海申花" },
+      ]}
+    />,
+  );
+
+  const tabs = screen.getAllByRole("button", { name: /英超|西甲|中超/ });
+
+  expect(tabs.map((tab) => tab.textContent)).toEqual(["英超", "西甲", "中超"]);
+  expect(screen.getByText("英超 积分榜")).toBeInTheDocument();
 });
 
 it("falls back to team initial when a standings logo fails", () => {

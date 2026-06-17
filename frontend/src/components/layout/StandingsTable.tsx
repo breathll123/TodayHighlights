@@ -26,7 +26,36 @@ interface StandingItem {
 
 interface Props {
   data: StandingItem[];
+  onAnalysisDataChange?: (data: StandingItem[], scopeLabel: string) => void;
 }
+
+const STANDINGS_LEAGUE_ORDER = [
+  "英超",
+  "西甲",
+  "意甲",
+  "德甲",
+  "法甲",
+  "荷甲",
+  "葡超",
+  "瑞典超",
+  "中超",
+  "英冠",
+  "英甲",
+  "巴甲",
+  "澳超",
+  "欧冠",
+  "欧联杯",
+  "亚冠精英",
+  "亚冠二级",
+  "世界杯",
+  "欧洲杯",
+  "美洲杯",
+  "非洲杯",
+];
+
+const STANDINGS_LEAGUE_INDEX = new Map(
+  STANDINGS_LEAGUE_ORDER.map((name, index) => [name, index]),
+);
 
 function logoSrc(localUrl?: string, remoteUrl?: string): string {
   if (localUrl) return localUrl;
@@ -71,10 +100,21 @@ function groupByLeague(items: StandingItem[]): Record<string, StandingItem[]> {
   return groups;
 }
 
-export function StandingsTable({ data }: Props) {
-  const groups = useMemo(() => groupByLeague(data), [data]);
-  const leagueNames = Object.keys(groups);
-  const [activeLeague, setActiveLeague] = useState(leagueNames[0] || "");
+function orderLeagueNames(names: string[]): string[] {
+  return [...names].sort((a, b) => {
+    const ai = STANDINGS_LEAGUE_INDEX.get(a) ?? Number.MAX_SAFE_INTEGER;
+    const bi = STANDINGS_LEAGUE_INDEX.get(b) ?? Number.MAX_SAFE_INTEGER;
+    if (ai !== bi) return ai - bi;
+    return a.localeCompare(b, "zh-CN");
+  });
+}
+
+export function StandingsTable({ data, onAnalysisDataChange }: Props) {
+  const { groups, leagueNames } = useMemo(() => {
+    const grouped = groupByLeague(data);
+    return { groups: grouped, leagueNames: orderLeagueNames(Object.keys(grouped)) };
+  }, [data]);
+  const [activeLeague, setActiveLeague] = useState("");
   const tabScrollRef = useRef<HTMLDivElement>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(true);
@@ -94,6 +134,17 @@ export function StandingsTable({ data }: Props) {
   useEffect(() => {
     updateScrollState();
   }, [leagueNames]);
+
+  useEffect(() => {
+    if (!leagueNames.includes(activeLeague)) {
+      setActiveLeague(leagueNames[0] || "");
+    }
+  }, [activeLeague, leagueNames]);
+
+  useEffect(() => {
+    if (!activeLeague) return;
+    onAnalysisDataChange?.(items, activeLeague);
+  }, [activeLeague, items, onAnalysisDataChange]);
 
   const scrollTabs = (dir: "left" | "right") => {
     const el = tabScrollRef.current;

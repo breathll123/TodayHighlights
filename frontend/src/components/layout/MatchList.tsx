@@ -28,6 +28,7 @@ interface Props {
   data: MatchItem[];
   dataUpdatedAt?: number;
   defaultFilter?: StatusFilter;
+  onAnalysisDataChange?: (data: MatchItem[], scopeLabel: string) => void;
 }
 
 type StatusFilter = "all" | "live" | "fixture" | "played";
@@ -243,7 +244,7 @@ function groupMatches(items: MatchItem[]): DateGroup[] {
 
 // ── main ──
 
-export function MatchList({ data, dataUpdatedAt, defaultFilter = "all" }: Props) {
+export function MatchList({ data, dataUpdatedAt, defaultFilter = "all", onAnalysisDataChange }: Props) {
   const [fallbackUpdatedAt, setFallbackUpdatedAt] = useState(() => Date.now());
   const [statusFilter, setStatusFilter] = useState<StatusFilter>(defaultFilter);
 
@@ -254,6 +255,11 @@ export function MatchList({ data, dataUpdatedAt, defaultFilter = "all" }: Props)
   const filtered = useMemo(() => filterMatches(data, statusFilter), [data, statusFilter]);
   const dateGroups = useMemo(() => groupMatches(filtered), [filtered]);
   const updatedAt = formatClock(new Date(dataUpdatedAt ?? fallbackUpdatedAt));
+  const activeFilterLabel = FILTER_OPTIONS.find((option) => option.value === statusFilter)?.label ?? "全部";
+
+  useEffect(() => {
+    onAnalysisDataChange?.(filtered, activeFilterLabel);
+  }, [activeFilterLabel, filtered, onAnalysisDataChange]);
 
   return (
     <div className="min-w-0 overflow-hidden rounded-lg border border-border/70 bg-card/75 shadow-sm">

@@ -181,17 +181,25 @@ fetch_matches.cache_clear = _fetch_matches_raw.cache_clear
 
 
 # League slug mapping for standings
+_STANDINGS_LEAGUE_ORDER = (
+    "英超", "西甲", "意甲", "德甲", "法甲", "荷甲", "葡超", "瑞典超",
+    "中超", "英冠", "英甲", "巴甲", "澳超",
+    "欧冠", "欧联杯", "亚冠精英", "亚冠二级",
+    "世界杯", "欧洲杯", "美洲杯", "非洲杯",
+)
+
 _STANDINGS_LEAGUES = {
     "英超": "yingchao", "西甲": "xijia", "意甲": "yijia", "德甲": "dejia",
     "法甲": "fajia", "荷甲": "hejia", "葡超": "puchao", "瑞典超": "ruidianchao",
-    "世界杯": "nanzushijiebei",
-    "欧冠": "ouguanbei", "欧联杯": "oulianbei",
     "中超": "zhongchao",
-    "亚冠精英": "yaguanjingying", "亚冠二级": "yaguanerji",
     "英冠": "yingguan", "英甲": "yingjia",
     "巴甲": "bajia", "澳超": "aochao",
+    "欧冠": "ouguanbei", "欧联杯": "oulianbei",
+    "亚冠精英": "yaguanjingying", "亚冠二级": "yaguanerji",
+    "世界杯": "nanzushijiebei",
     "欧洲杯": "ouzhoubei", "美洲杯": "meizhoubei", "非洲杯": "feizhoubei",
 }
+_STANDINGS_LEAGUE_INDEX = {name: index for index, name in enumerate(_STANDINGS_LEAGUE_ORDER)}
 
 _STANDINGS_HEADERS = {
     "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15",
@@ -202,6 +210,25 @@ _standings_client = httpx.Client(
     timeout=20,
     headers=_STANDINGS_HEADERS,
 )
+
+
+def _standings_sort_key(item: dict) -> tuple[int, str, int, str]:
+    rank = item.get("rank")
+    try:
+        rank_value = int(rank)
+    except (TypeError, ValueError):
+        rank_value = 9999
+    league = str(item.get("league") or "")
+    return (
+        _STANDINGS_LEAGUE_INDEX.get(league, 9999),
+        str(item.get("group") or ""),
+        rank_value,
+        str(item.get("team") or ""),
+    )
+
+
+def _sort_standings(items: list[dict]) -> list[dict]:
+    return sorted(items, key=_standings_sort_key)
 
 
 def _fetch_league(league_name: str, slug: str) -> list[dict]:
@@ -374,7 +401,7 @@ def _fetch_standings_raw() -> list[dict]:
         for future in as_completed(futures):
             all_results.extend(future.result())
 
-    return all_results
+    return _sort_standings(all_results)
 
 
 def fetch_standings(config: dict, limit: int) -> list[dict]:

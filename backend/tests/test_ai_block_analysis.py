@@ -16,7 +16,8 @@ from app.models.entities import (
     Topic,
     User,
 )
-from app.services.ai_block_analysis import analyze_block, build_block_data_hash, validate_block_analysis_payload
+from app.api.ai import _visible_data_from_payload
+from app.services.ai_block_analysis import analyze_block, block_user_prompt, build_block_data_hash, validate_block_analysis_payload
 from app.services.ai_client import AIClient
 from app.services.token_usage import estimate_tokens, extract_token_usage
 
@@ -126,6 +127,46 @@ def test_validate_block_analysis_payload_bounds():
 def test_build_block_data_hash_is_stable():
     data = [{"title": "A", "summary": "B"}, {"summary": "D", "title": "C"}]
     assert build_block_data_hash(data) == build_block_data_hash(list(data))
+
+
+def test_visible_data_payload_is_trimmed_to_allowed_fields():
+    visible = _visible_data_from_payload(
+        [
+            {
+                "title": "皇马",
+                "league": "西甲",
+                "pts": "74",
+                "raw_snapshot": "should not pass",
+                "summary": "x" * 800,
+            }
+        ]
+    )
+
+    assert visible == [
+        {
+            "title": "皇马",
+            "summary": "x" * 500,
+            "league": "西甲",
+            "pts": "74",
+        }
+    ]
+
+
+def test_block_user_prompt_includes_scope_and_standings_fields(client):
+    session = next(client.app.dependency_overrides[get_session]())
+    _user, block = _seed_user_model_block(session)
+    block.title = "联赛积分榜"
+    block.source_type = "qiumiwu_standings"
+
+    prompt = block_user_prompt(
+        block,
+        [{"title": "皇马", "league": "西甲", "team": "皇马", "rank": 1, "pts": "74", "wdl": "22/8/2"}],
+        "西甲",
+    )
+
+    assert '"scope": "西甲"' in prompt
+    assert '"league": "西甲"' in prompt
+    assert '"pts": "74"' in prompt
 
 
 def test_analyze_block_generates_and_records_token_usage(client, caplog):

@@ -1,4 +1,12 @@
+from datetime import datetime
+
 from fastapi.testclient import TestClient
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+
+from app.core.database import Base
+from app.models.entities import PageBlock, RawItem, Source, Topic
+from app.services.blocks import get_page_blocks
 
 
 def test_list_blocks_empty(client: TestClient) -> None:
@@ -67,3 +75,48 @@ def test_public_page_blocks(client: TestClient) -> None:
     data = resp.json()
     assert len(data["blocks"]) == 1
     assert data["blocks"][0]["title"] == "热股"
+
+
+def test_page_blocks_include_block_data_updated_at() -> None:
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    SessionLocal = sessionmaker(bind=engine)
+
+    with SessionLocal() as session:
+        topic = Topic(name="股票", slug="stocks")
+        source = Source(
+            topic=topic,
+            site="example",
+            name="示例来源",
+            entry_url="example://news",
+            last_crawled_at=datetime(2026, 6, 17, 14, 5, 30),
+        )
+        session.add(source)
+        session.flush()
+
+        session.add(
+            RawItem(
+                source_id=source.id,
+                external_id="item-1",
+                url="https://example.com/item-1",
+                title="测试内容",
+                body="测试正文",
+                published_at=datetime(2026, 6, 17, 13, 52, 18),
+                content_hash="item-1",
+            )
+        )
+        session.add(
+            PageBlock(
+                page_route="/topics/stocks",
+                title="财经快讯",
+                source_type="raw",
+                source_config={"source_id": source.id},
+                display_count=5,
+                status="published",
+            )
+        )
+        session.commit()
+
+        blocks = get_page_blocks(session, "/topics/stocks")
+
+    assert blocks[0]["data_updated_at"] == "2026-06-17T14:05:30"

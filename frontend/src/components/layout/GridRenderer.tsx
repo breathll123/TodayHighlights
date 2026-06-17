@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { BrainCircuit, CalendarClock, ChartNoAxesCombined, Newspaper, Trophy } from "lucide-react";
 import { useMutation } from "@tanstack/react-query";
+import { useLocation } from "react-router-dom";
 import { BlockCard } from "./BlockCard";
 import { BlockSkeleton } from "./BlockSkeleton";
 import { CompactTable } from "./CompactTable";
@@ -23,6 +24,34 @@ import { useAuth } from "@/hooks/use-auth";
 import type { AIItemEnhancement } from "@/api/types";
 
 const easeOutQuint: [number, number, number, number] = [0.22, 1, 0.36, 1];
+const MAX_VISIBLE_ANALYSIS_ITEMS = 200;
+
+interface AnalysisScope {
+  data: any[];
+  label?: string;
+}
+
+const VISIBLE_ANALYSIS_FIELDS = [
+  "id", "title", "name", "summary", "content", "source", "source_type", "published_at", "created_at",
+  "url", "rank", "score", "percent", "value", "tags", "tags_json", "related_symbols_json", "symbols",
+  "team", "league", "group", "season", "updated", "gp", "pts", "wdl", "gf", "ga", "gd",
+  "status", "minute", "start_time", "team_a", "team_b", "score_a", "score_b",
+  "model", "creator", "subtitle", "region", "net_amount", "reason",
+] as const;
+
+function compactVisibleAnalysisData(data: any[]): any[] {
+  if (!Array.isArray(data)) return [];
+  return data.slice(0, MAX_VISIBLE_ANALYSIS_ITEMS).map((item) => {
+    if (!item || typeof item !== "object") return {};
+    const compact: Record<string, unknown> = {};
+    for (const key of VISIBLE_ANALYSIS_FIELDS) {
+      const value = item[key];
+      if (value === undefined || value === null || value === "") continue;
+      compact[key] = value;
+    }
+    return compact;
+  }).filter((item) => Object.keys(item).length > 0);
+}
 
 function buildAIEnrichment(item: any): AIItemEnhancement | undefined {
   if (!item.generated_by_model) return undefined;
@@ -138,11 +167,27 @@ function mapItem(item: any, sourceType: string) {
   };
 }
 
-function AAIndexBlock({ block, displayFields }: { block: any; displayFields: any[] }) {
+function AAIndexBlock({
+  block,
+  displayFields,
+  onAnalysisDataChange,
+}: {
+  block: any;
+  displayFields: any[];
+  onAnalysisDataChange?: (data: any[], scopeLabel: string) => void;
+}) {
   const [region, setRegion] = useState<"global" | "china">("global");
   const allData = block.data || [];
-  const filtered = allData.filter((item: any) => item.region === region || (!item.region && region === "global"));
+  const filtered = useMemo(
+    () => allData.filter((item: any) => item.region === region || (!item.region && region === "global")),
+    [allData, region],
+  );
   const first = filtered[0];
+  const regionLabel = region === "china" ? "国产排名" : "全球排名";
+
+  useEffect(() => {
+    onAnalysisDataChange?.(filtered, regionLabel);
+  }, [filtered, onAnalysisDataChange, regionLabel]);
 
   return (
     <div className="border rounded-lg bg-card overflow-hidden">
@@ -198,11 +243,42 @@ function AAIndexBlock({ block, displayFields }: { block: any; displayFields: any
 
 export function GridRenderer({ blocks, isLoading, dataUpdatedAt }: { blocks: any[]; isLoading: boolean; dataUpdatedAt?: number }) {
   const { isAuthenticated } = useAuth();
+  const location = useLocation();
   const [selectedBlock, setSelectedBlock] = useState<any | null>(null);
   const [requiresLogin, setRequiresLogin] = useState(false);
+  const [analysisScopes, setAnalysisScopes] = useState<Record<number, AnalysisScope>>({});
   const analysisMutation = useMutation({
     mutationFn: generateBlockAIAnalysis,
   });
+
+  const closeAnalysisDrawer = () => {
+    setSelectedBlock(null);
+    setRequiresLogin(false);
+    analysisMutation.reset();
+  };
+
+  useEffect(() => {
+    closeAnalysisDrawer();
+  }, [location.pathname]);
+
+  const setBlockAnalysisScope = useCallback((blockId: number, data: any[], label?: string) => {
+    setAnalysisScopes((current) => {
+      const previous = current[blockId];
+      if (previous?.data === data && previous?.label === label) return current;
+      return { ...current, [blockId]: { data, label } };
+    });
+  }, []);
+
+  const buildAnalysisPayload = (block: any) => {
+    const scope = analysisScopes[block.id];
+    const visibleData = compactVisibleAnalysisData(scope?.data ?? block.data ?? []);
+    return {
+      page_route: block.page_route,
+      block_id: block.id,
+      visible_data: visibleData,
+      scope_label: scope?.label,
+    };
+  };
 
   if (isLoading) {
     return (
@@ -253,7 +329,7 @@ export function GridRenderer({ blocks, isLoading, dataUpdatedAt }: { blocks: any
               <SectionHeading
                 icon={sectionIcon(st)}
                 title={block.title}
-                dataUpdatedAt={dataUpdatedAt}
+                dataUpdatedAt={block.data_updated_at}
                 sourceName={st === "topic" || st === "raw" ? undefined : SOURCE_NAMES[st] ?? undefined}
                 sourceUrl={st === "artificial_analysis_ranking" ? undefined : sourceUrlFor(st)}
                 action={
@@ -269,7 +345,7 @@ export function GridRenderer({ blocks, isLoading, dataUpdatedAt }: { blocks: any
                         return;
                       }
                       setRequiresLogin(false);
-                      analysisMutation.mutate({ page_route: block.page_route, block_id: block.id });
+                      analysisMutation.mutate(buildAnalysisPayload(block));
                     }}
                   >
                     <BrainCircuit className="h-3.5 w-3.5" aria-hidden="true" />
@@ -284,15 +360,15 @@ export function GridRenderer({ blocks, isLoading, dataUpdatedAt }: { blocks: any
             ) : block.source_type === "qiumiwu_matches" && block.display_style === "schedule" ? (
               <MatchCards data={block.data} />
             ) : block.source_type === "qiumiwu_matches" ? (
-              <MatchList data={block.data} dataUpdatedAt={dataUpdatedAt} />
+              <MatchList data={block.data} dataUpdatedAt={dataUpdatedAt} onAnalysisDataChange={(visible, label) => setBlockAnalysisScope(block.id, visible, label)} />
             ) : block.source_type === "qiumiwu_fixtures" ? (
-              <MatchList data={block.data} dataUpdatedAt={dataUpdatedAt} defaultFilter="fixture" />
+              <MatchList data={block.data} dataUpdatedAt={dataUpdatedAt} defaultFilter="fixture" onAnalysisDataChange={(visible, label) => setBlockAnalysisScope(block.id, visible, label)} />
             ) : block.source_type === "qiumiwu_schedule" ? (
-              <MatchList data={block.data} dataUpdatedAt={dataUpdatedAt} defaultFilter="fixture" />
+              <MatchList data={block.data} dataUpdatedAt={dataUpdatedAt} defaultFilter="fixture" onAnalysisDataChange={(visible, label) => setBlockAnalysisScope(block.id, visible, label)} />
             ) : block.source_type === "qiumiwu_standings" ? (
-              <StandingsTable data={block.data} />
+              <StandingsTable data={block.data} onAnalysisDataChange={(visible, label) => setBlockAnalysisScope(block.id, visible, label)} />
             ) : block.source_type === "datalearner_aa_index" ? (
-              <AAIndexBlock block={block} displayFields={displayFields} />
+              <AAIndexBlock block={block} displayFields={displayFields} onAnalysisDataChange={(visible, label) => setBlockAnalysisScope(block.id, visible, label)} />
             ) : block.source_type === "datalearner_leaderboard" ? (
               <LeaderboardTable data={block.data} />
             ) : block.source_type === "market_index_trends" ? (
@@ -355,11 +431,7 @@ export function GridRenderer({ blocks, isLoading, dataUpdatedAt }: { blocks: any
         isLoading={analysisMutation.isPending}
         error={analysisMutation.error ? analysisMutation.error.message : null}
         requiresLogin={requiresLogin}
-        onClose={() => {
-          setSelectedBlock(null);
-          setRequiresLogin(false);
-          analysisMutation.reset();
-        }}
+        onClose={closeAnalysisDrawer}
       />
     </div>
   );

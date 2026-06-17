@@ -147,6 +147,30 @@
     @apply translate-y-0 opacity-100;
   }
 
+  .section-updated-trigger {
+    @apply relative inline-flex items-center;
+  }
+
+  .section-updated-tooltip {
+    width: max-content;
+    max-width: min(280px, calc(100vw - 32px));
+    @apply pointer-events-none absolute right-0 top-[calc(100%+8px)] z-50 flex -translate-y-1 flex-col gap-1 rounded-md border bg-popover px-3 py-2 text-left text-xs leading-5 text-popover-foreground opacity-0 shadow-lg transition duration-150;
+  }
+
+  .section-updated-tooltip::after {
+    content: "";
+    @apply absolute bottom-full right-3 border-4 border-transparent border-b-border;
+  }
+
+  .section-updated-tooltip-label {
+    @apply text-[11px] font-medium text-muted-foreground;
+  }
+
+  .section-updated-trigger:hover .section-updated-tooltip,
+  .section-updated-trigger:focus-within .section-updated-tooltip {
+    @apply translate-y-0 opacity-100;
+  }
+
   @media (max-width: 520px) {
     .longhu-header,
     .longhu-row {

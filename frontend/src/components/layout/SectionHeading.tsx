@@ -1,16 +1,49 @@
 import type { LucideIcon } from "lucide-react";
 import { Clock, ExternalLink } from "lucide-react";
-import type { ReactNode } from "react";
+import { useId, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
-function timeAgo(ts: number): string {
-  const seconds = Math.floor((Date.now() - ts) / 1000);
-  if (seconds < 5) return "刚刚";
-  if (seconds < 60) return `${seconds}秒前`;
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}分前`;
-  const hours = Math.floor(minutes / 60);
-  return `${hours}时前`;
+function pad2(value: number): string {
+  return String(value).padStart(2, "0");
+}
+
+function parseUpdatedAt(value: string | number | null | undefined): Date | null {
+  if (value == null) return null;
+  const date = typeof value === "number" ? new Date(value) : new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function formatClockTime(date: Date): string {
+  return `${pad2(date.getHours())}:${pad2(date.getMinutes())}`;
+}
+
+function formatFullTime(date: Date): string {
+  return [
+    `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`,
+    `${pad2(date.getHours())}:${pad2(date.getMinutes())}:${pad2(date.getSeconds())}`,
+  ].join(" ");
+}
+
+function UpdatedAtBadge({ date }: { date: Date }) {
+  const tooltipId = useId();
+  const fullTime = formatFullTime(date);
+
+  return (
+    <span className="section-updated-trigger" onClick={(event) => event.stopPropagation()}>
+      <span
+        className="inline-flex items-center gap-1 text-[11px] text-muted-foreground/60 tabular-nums outline-none transition-colors hover:text-muted-foreground focus-visible:text-muted-foreground"
+        aria-describedby={tooltipId}
+        tabIndex={0}
+      >
+        <Clock className="h-3 w-3" aria-hidden="true" />
+        更新 {formatClockTime(date)}
+      </span>
+      <span id={tooltipId} role="tooltip" className="section-updated-tooltip">
+        <span className="section-updated-tooltip-label">数据更新时间</span>
+        <span>{fullTime}</span>
+      </span>
+    </span>
+  );
 }
 
 export function SectionHeading({
@@ -27,11 +60,13 @@ export function SectionHeading({
   title: string;
   meta?: ReactNode;
   action?: ReactNode;
-  dataUpdatedAt?: number;
+  dataUpdatedAt?: string | number | null;
   sourceName?: string;
   sourceUrl?: string;
   className?: string;
 }) {
+  const updatedAt = parseUpdatedAt(dataUpdatedAt);
+
   return (
     <div className={cn("space-y-1", className)}>
       <div className="flex min-w-0 items-center justify-between gap-3">
@@ -43,11 +78,8 @@ export function SectionHeading({
         </h2>
         <div className="flex shrink-0 items-center gap-2">
           {meta ? <span className="text-[11px] text-muted-foreground tabular-nums">{meta}</span> : null}
-          {dataUpdatedAt ? (
-            <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground/60 tabular-nums">
-              <Clock className="h-3 w-3" />
-              {timeAgo(dataUpdatedAt)}
-            </span>
+          {updatedAt ? (
+            <UpdatedAtBadge date={updatedAt} />
           ) : null}
           {action}
         </div>

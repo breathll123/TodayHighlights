@@ -69,8 +69,9 @@ def validate_block_analysis_payload(payload: dict) -> BlockAnalysisValidated:
     )
 
 
-def build_block_data_hash(data: list[dict]) -> str:
-    normalized = json.dumps(data, ensure_ascii=False, sort_keys=True, default=str)
+def build_block_data_hash(data: list[dict], scope_label: str | None = None) -> str:
+    payload: object = data if not scope_label else {"scope_label": scope_label, "data": data}
+    normalized = json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str)
     return sha256(normalized.encode()).hexdigest()
 
 
@@ -109,24 +110,58 @@ def _item_priority(item: dict) -> float:
     return score
 
 
-def block_user_prompt(block: PageBlock, data: list[dict]) -> str:
+def _compact_item_for_prompt(item: dict) -> dict:
+    title = item.get("title") or item.get("name") or item.get("team") or item.get("model") or ""
+    summary = item.get("summary") or item.get("content") or ""
+    compact = {
+        "title": str(title)[:120],
+        "summary": str(summary)[:MAX_ITEM_SUMMARY_CHARS],
+        "tags": (item.get("tags") or item.get("tags_json") or [])[:5],
+        "score": item.get("score"),
+        "percent": item.get("percent"),
+        "rank": item.get("rank"),
+    }
+    for key in (
+        "league",
+        "group",
+        "team",
+        "pts",
+        "wdl",
+        "gp",
+        "gf",
+        "ga",
+        "gd",
+        "status",
+        "minute",
+        "start_time",
+        "team_a",
+        "team_b",
+        "score_a",
+        "score_b",
+        "region",
+        "creator",
+        "net_amount",
+        "reason",
+    ):
+        value = item.get(key)
+        if value not in (None, "", []):
+            compact[key] = value
+    return compact
+
+
+def block_user_prompt(block: PageBlock, data: list[dict], scope_label: str | None = None) -> str:
     # Prioritize and limit items to keep prompts focused and fast
     prioritized = sorted(data, key=_item_priority, reverse=True)
     top = prioritized[:MAX_ANALYSIS_ITEMS]
 
-    compact = [
-        {
-            "title": str(item.get("title") or item.get("name") or "")[:120],
-            "summary": str(item.get("summary") or item.get("content") or "")[:MAX_ITEM_SUMMARY_CHARS],
-            "tags": (item.get("tags") or item.get("tags_json") or [])[:5],
-            "score": item.get("score"),
-            "percent": item.get("percent"),
-            "rank": item.get("rank"),
-        }
-        for item in top
-    ]
+    compact = [_compact_item_for_prompt(item) for item in top]
     return json.dumps(
-        {"block_title": block.title, "source_type": block.source_type, "items": compact},
+        {
+            "block_title": block.title,
+            "source_type": block.source_type,
+            "scope": scope_label or "",
+            "items": compact,
+        },
         ensure_ascii=False,
     )
 
@@ -156,12 +191,13 @@ def analyze_block(
     post_json: PostJson | None = None,
     force: bool = False,
     resolved_data: list[dict] | None = None,
+    data_scope_label: str | None = None,
 ) -> AIBlockAnalysis:
     block = session.get(PageBlock, block_id)
     if block is None or block.page_route != page_route or not block.enabled or block.status != "published":
         raise HTTPException(status_code=404, detail="Block not found")
     data = resolved_data if resolved_data is not None else resolve_block_data(session, block)
-    data_hash = build_block_data_hash(data)
+    data_hash = build_block_data_hash(data, data_scope_label)
     if not force:
         cached = find_cached_analysis(session, page_route, block_id, data_hash)
         if cached is not None:
@@ -233,7 +269,7 @@ def analyze_block(
         content_class = get_content_class(block.source_type)
         template = get_enabled_prompt_template(session, topic_slug, content_class)
         system_prompt = build_block_system_prompt(topic_slug, content_class, template)
-        prompt = block_user_prompt(block, data)
+        prompt = block_user_prompt(block, data, data_scope_label)
         with bind_log_context(**context):
             result = asyncio.run(client.complete_json_with_usage(system_prompt, prompt))
         validated = validate_block_analysis_payload(result.content)

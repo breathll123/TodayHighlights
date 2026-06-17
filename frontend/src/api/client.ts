@@ -1,5 +1,5 @@
 import axios from "axios";
-import type { AdminUser, AIJobsStats, AIModelConfig, AIModelConfigWrite, AIOpsStats, AIGenerationJob, AIJobListResponse, AIPromptTemplate, AIPromptTemplateWrite, AITokenUsageDetail, AITokenUsageListResponse, AITopicSummaryResponse, AIUsageStats, AuthResponse, AuthUser, Block, BlockAIAnalysis, CrawlJob, Highlight, JobListResponse, MarketIndex, PageBlocksResponse, SetupStatus, Source, Topic } from "./types";
+import type { AdminUser, AIJobsStats, AIModelConfig, AIModelConfigWrite, AIOpsStats, AIGenerationJob, AIJobListResponse, AIPromptTemplate, AIPromptTemplateWrite, AITokenUsageDetail, AITokenUsageListResponse, AITopicSummaryResponse, AIUsageStats, AuthResponse, AuthUser, Block, BlockAIAnalysis, BlockAIAnalysisRequest, CrawlJob, Highlight, JobListResponse, MarketIndex, PageBlocksResponse, SetupStatus, Source, Topic } from "./types";
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE ?? "http://localhost:8000",
@@ -177,7 +177,7 @@ export function fetchMarketIndices(): Promise<MarketIndex[]> {
 
 // --- Block AI Analysis ---
 
-export function generateBlockAIAnalysis(data: { page_route: string; block_id: number }): Promise<BlockAIAnalysis> {
+export function generateBlockAIAnalysis(data: BlockAIAnalysisRequest): Promise<BlockAIAnalysis> {
   return api.post<BlockAIAnalysis>("/api/ai/block-analyses", data, { timeout: 120_000 }).then((r) => r.data);
 }
 

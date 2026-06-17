@@ -96,7 +96,7 @@ export interface ArtificialAnalysisRankingItem {
 }
 
 export interface PageBlocksResponse {
-  blocks: (Block & { data: unknown[]; meta?: BlockMeta | null })[];
+  blocks: (Block & { data: unknown[]; data_updated_at?: string | null; meta?: BlockMeta | null })[];
 }
 
 export interface AIModelConfig {
@@ -199,6 +199,13 @@ export interface BlockAIAnalysis {
   token_estimated: boolean;
   generated_at: string | null;
   expires_at: string | null;
+}
+
+export interface BlockAIAnalysisRequest {
+  page_route: string;
+  block_id: number;
+  visible_data?: unknown[];
+  scope_label?: string;
 }
 
 export interface AdminUser {
