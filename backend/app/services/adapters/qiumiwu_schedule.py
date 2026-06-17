@@ -1,4 +1,6 @@
 import re
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
 import httpx
 from app.core.logging import log_adapter_failure, observed_http_get
 
@@ -96,23 +98,38 @@ def _fetch_logos_from_detail(match_id: str) -> tuple[str, str]:
 
 
 def _fill_logo_map(logo_map: dict[str, str], matches_info: list[dict]) -> dict[str, str]:
-    """For teams without logos, fetch from their match detail pages."""
-    fetched = 0
+    """For teams without logos, fetch from their match detail pages IN PARALLEL (max 4 workers)."""
+    # Collect unique missing match_ids
+    to_fetch: dict[str, dict] = {}  # match_id -> {"team_a": ..., "team_b": ...}
     for m in matches_info:
         team_a, team_b = m.get("team_a", ""), m.get("team_b", "")
         match_id = m.get("match_id", "")
+        if not match_id:
+            continue
         need_a = team_a and not logo_map.get(team_a)
         need_b = team_b and not logo_map.get(team_b)
+        if (need_a or need_b) and match_id not in to_fetch:
+            to_fetch[match_id] = {"team_a": team_a, "team_b": team_b}
 
-        if (need_a or need_b) and match_id:
-            hlogo, alogo = _fetch_logos_from_detail(match_id)
-            if hlogo and team_a not in logo_map:
-                logo_map[team_a] = hlogo
-            if alogo and team_b not in logo_map:
-                logo_map[team_b] = alogo
-            fetched += 1
-            if fetched >= 20:
-                break
+    # Fetch logos in parallel (max 20 match_ids)
+    fetch_ids = list(to_fetch.keys())[:20]
+    if not fetch_ids:
+        return logo_map
+
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        futures = {pool.submit(_fetch_logos_from_detail, mid): mid for mid in fetch_ids}
+        for future in as_completed(futures):
+            mid = futures[future]
+            info = to_fetch[mid]
+            try:
+                hlogo, alogo = future.result(timeout=10)
+            except Exception:
+                continue
+            if hlogo and info["team_a"] not in logo_map:
+                logo_map[info["team_a"]] = hlogo
+            if alogo and info["team_b"] not in logo_map:
+                logo_map[info["team_b"]] = alogo
+
     return logo_map
 
 
