@@ -204,7 +204,8 @@ def resolve_block_data(
 ) -> list[dict]:
     source_type = block.source_type
     config = block.source_config or {}
-    if media_cache is not None and source_type.startswith("qiumiwu_"):
+    # Public football blocks should return text/data first; logo downloads are opt-in.
+    if media_cache is not None and source_type.startswith("qiumiwu_") and config.get("eager_media_cache") is True:
         config = {**config, "_media_cache": media_cache}
     limit = block.display_count
 

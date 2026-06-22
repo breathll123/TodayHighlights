@@ -88,6 +88,94 @@ cd backend
 python scripts/init_db.py
 ```
 
+## 线上部署与更新
+
+以下示例按当前常见部署方式编写：后端 FastAPI 监听本机 `8770`，前端由 Nginx 在 `8780` 提供静态页面，并把 `/api/` 反代到后端。
+
+### 后端启动
+
+宝塔 Python 项目建议填写：
+
+| 项 | 值 |
+|----|----|
+| 项目路径 | `/www/wwwroot/TodayHighlights/backend` |
+| 启动方式 | 命令行启动 |
+| 启动用户 | `www` 或当前项目目录拥有者 |
+| 环境变量 | 从文件加载：`/www/wwwroot/TodayHighlights/backend/.env` |
+| 启动命令 | `python -m uvicorn app.main:app --host 127.0.0.1 --port 8770 --workers 1 --no-access-log` |
+
+如果在服务器命令行手动启动或排查：
+
+```bash
+cd /www/wwwroot/TodayHighlights/backend
+conda activate daily_highlights
+python -m pip install -e .
+python scripts/init_db.py
+python -m uvicorn app.main:app --host 127.0.0.1 --port 8770 --workers 1 --no-access-log
+```
+
+更新后端代码后通常执行：
+
+```bash
+cd /www/wwwroot/TodayHighlights
+git pull
+cd backend
+conda activate daily_highlights
+python -m pip install -e .
+python scripts/init_db.py
+# 然后在宝塔中重启 Python 项目
+```
+
+确认后端是否正常：
+
+```bash
+curl http://127.0.0.1:8770/health
+```
+
+### 前端编译与发布
+
+前端源码目录和线上静态目录建议分开：
+
+| 用途 | 路径 |
+|------|------|
+| 前端源码 | `/www/wwwroot/TodayHighlights/frontend` |
+| Nginx 静态站点根目录 | `/www/wwwroot/today-highlights` |
+
+编译并发布到 Nginx 静态目录：
+
+```bash
+cd /www/wwwroot/TodayHighlights/frontend
+npm ci
+VITE_API_BASE=http://8.130.152.32:8780 npm run build
+mkdir -p /www/wwwroot/today-highlights
+cp -a dist/. /www/wwwroot/today-highlights/
+```
+
+如果没有 `package-lock.json` 或 `npm ci` 失败，可以改用：
+
+```bash
+npm install
+VITE_API_BASE=http://8.130.152.32:8780 npm run build
+cp -a dist/. /www/wwwroot/today-highlights/
+```
+
+如果后续换成域名或 HTTPS，把 `VITE_API_BASE` 改成实际访问地址，例如：
+
+```bash
+VITE_API_BASE=https://example.com npm run build
+```
+
+`VITE_API_BASE` 是编译期变量，修改后必须重新执行 `npm run build` 并复制新的 `dist`。如果没有设置，前端会默认请求本地开发地址，线上页面会连不到后端。
+
+确认前端和反向代理是否正常：
+
+```bash
+curl -I http://127.0.0.1:8780/
+curl http://127.0.0.1:8780/api/public/topics
+```
+
+Nginx 站点根目录不要直接设置到 `/root`、`/www`、`/usr` 等系统目录；应使用 `/www/wwwroot/today-highlights` 这种静态发布目录。宝塔生成的 `.user.ini` 可能不允许修改属主，执行 `chown` 时报 `Operation not permitted` 通常可以忽略。
+
 ## 环境变量
 
 | 变量 | 说明 |
@@ -121,10 +209,10 @@ Redis 故障时自动降级为进程内存缓存，不会阻止应用启动。`/
 
 **生产部署命令**（宝塔面板）：
 ```bash
-cd /root/projects/daily_highlights/TodayHighlights/backend
+cd /www/wwwroot/TodayHighlights/backend
 mkdir -p logs
 chmod 750 logs
-python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --workers 1 --no-access-log
+python -m uvicorn app.main:app --host 127.0.0.1 --port 8770 --workers 1 --no-access-log
 ```
 
 **运维命令**：

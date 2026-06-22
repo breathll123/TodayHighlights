@@ -1,4 +1,6 @@
 from app.services.adapters import qiumiwu
+from app.models.entities import PageBlock
+from app.services.blocks import resolve_block_data
 
 
 class _FakeMediaCache:
@@ -74,3 +76,55 @@ def test_fetch_matches_reuses_remote_data_but_refreshes_local_logo_paths(monkeyp
     assert second[0]["logo_a_local"] == "/api/public/media/second-2"
     assert len(first_cache.calls) == 3
     assert len(second_cache.calls) == 3
+
+
+class _RaisingMediaCache:
+    def cache_remote_image(self, *args, **kwargs) -> str:
+        raise AssertionError("football block reads should not synchronously cache logos by default")
+
+
+def test_resolve_qiumiwu_block_does_not_eagerly_cache_logos_by_default(monkeypatch) -> None:
+    def fake_fetch_matches(config: dict, limit: int) -> list[dict]:
+        assert "_media_cache" not in config
+        return [
+            {
+                "id": "100",
+                "title": "阿森纳 vs 切尔西",
+                "logo_a": "https://file.qiumiwu.com/team/arsenal.png",
+                "logo_b": "https://file.qiumiwu.com/team/chelsea.png",
+            }
+        ]
+
+    monkeypatch.setattr(qiumiwu, "fetch_matches", fake_fetch_matches)
+    block = PageBlock(
+        page_route="/topics/football",
+        title="当日比赛",
+        source_type="qiumiwu_matches",
+        source_config={"topic_id": 4},
+        display_count=5,
+        status="published",
+    )
+
+    data = resolve_block_data(None, block, cookie="", media_cache=_RaisingMediaCache())
+
+    assert data[0]["logo_a"] == "https://file.qiumiwu.com/team/arsenal.png"
+
+
+def test_resolve_qiumiwu_block_can_opt_into_eager_logo_cache(monkeypatch) -> None:
+    def fake_fetch_matches(config: dict, limit: int) -> list[dict]:
+        assert isinstance(config.get("_media_cache"), _FakeMediaCache)
+        return [{"id": "100", "title": "阿森纳 vs 切尔西"}]
+
+    monkeypatch.setattr(qiumiwu, "fetch_matches", fake_fetch_matches)
+    block = PageBlock(
+        page_route="/topics/football",
+        title="当日比赛",
+        source_type="qiumiwu_matches",
+        source_config={"topic_id": 4, "eager_media_cache": True},
+        display_count=5,
+        status="published",
+    )
+
+    data = resolve_block_data(None, block, cookie="", media_cache=_FakeMediaCache())
+
+    assert data[0]["title"] == "阿森纳 vs 切尔西"
