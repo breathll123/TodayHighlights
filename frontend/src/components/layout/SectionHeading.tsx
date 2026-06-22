@@ -1,5 +1,5 @@
 import type { LucideIcon } from "lucide-react";
-import { Clock, ExternalLink } from "lucide-react";
+import { ExternalLink } from "lucide-react";
 import { useId, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
@@ -31,11 +31,13 @@ function UpdatedAtBadge({ date }: { date: Date }) {
   return (
     <span className="section-updated-trigger" onClick={(event) => event.stopPropagation()}>
       <span
-        className="inline-flex items-center gap-1 text-[11px] text-muted-foreground/60 tabular-nums outline-none transition-colors hover:text-muted-foreground focus-visible:text-muted-foreground"
+        className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground/60 tabular-nums outline-none transition-colors hover:text-muted-foreground focus-visible:text-muted-foreground"
         aria-describedby={tooltipId}
         tabIndex={0}
       >
-        <Clock className="h-3 w-3" aria-hidden="true" />
+        {/* A single green "active" light — a steady status indicator, not a
+            claim of real-time refresh (many sources update on their own cadence). */}
+        <span className="signal-blip h-1.5 w-1.5 shrink-0 rounded-full bg-green-500" aria-hidden="true" />
         更新 {formatClockTime(date)}
       </span>
       <span id={tooltipId} role="tooltip" className="section-updated-tooltip">
@@ -68,10 +70,10 @@ export function SectionHeading({
   const updatedAt = parseUpdatedAt(dataUpdatedAt);
 
   return (
-    <div className={cn("space-y-1", className)}>
+    <div className={cn("space-y-1.5", className)}>
       <div className="flex min-w-0 items-center justify-between gap-3">
-        <h2 className="flex min-w-0 items-center gap-2.5 text-sm font-semibold text-foreground/90">
-          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-primary/30 bg-primary/10 text-primary">
+        <h2 className="flex min-w-0 items-center gap-2.5 text-sm font-semibold text-foreground">
+          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-primary/30 bg-primary/10 text-primary transition-colors duration-200 group-hover:border-primary/50 group-hover:bg-primary/15">
             <Icon data-testid="section-heading-icon" className="h-3.5 w-3.5" aria-hidden="true" />
           </span>
           <span className="truncate">{title}</span>
@@ -84,16 +86,20 @@ export function SectionHeading({
           {action}
         </div>
       </div>
+
+      <div className="header-rule h-px w-full bg-gradient-to-r from-primary/45 via-primary/10 to-transparent" />
+
       {sourceName && (
-        <div className="flex items-center gap-1 text-[10px] text-blue-400">
-          数据来源：
+        <div className="flex items-center gap-1 text-[10px] text-muted-foreground/70">
+          <span>来源</span>
+          <span className="text-muted-foreground/35" aria-hidden="true">·</span>
           {sourceUrl ? (
-            <a href={sourceUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-0.5 text-blue-400 hover:text-blue-300 no-underline">
+            <a href={sourceUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-0.5 text-primary/80 transition-colors hover:text-primary no-underline">
               {sourceName}
               <ExternalLink className="h-2.5 w-2.5" />
             </a>
           ) : (
-            <span>{sourceName}</span>
+            <span className="text-muted-foreground">{sourceName}</span>
           )}
         </div>
       )}

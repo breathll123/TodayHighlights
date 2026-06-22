@@ -159,6 +159,7 @@ function TeamLogo({ url, name, size = "sm" }: { url?: string; name?: string; siz
       alt=""
       className={`${dims} shrink-0 rounded-full object-contain`}
       loading="lazy"
+      decoding="async"
       onError={() => setFailed(true)}
     />
   );

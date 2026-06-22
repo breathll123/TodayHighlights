@@ -85,6 +85,7 @@ function TeamLogo({ url, name }: { url?: string; name?: string }) {
       alt=""
       className="h-5 w-5 shrink-0 rounded-full object-contain"
       loading="lazy"
+      decoding="async"
       onError={() => setFailed(true)}
     />
   );

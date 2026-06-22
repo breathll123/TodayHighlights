@@ -3,6 +3,8 @@ import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { AreaChart, Area, XAxis, YAxis, ResponsiveContainer, Tooltip, ReferenceLine } from "recharts";
 import { fetchMarketIndices } from "@/api/client";
+import { AnimatedNumber, useTickFlash } from "./AnimatedNumber";
+import { cn } from "@/lib/utils";
 import type { MarketIndex, MarketIndexTrend } from "@/api/types";
 
 const easeOutQuint = [0.22, 1, 0.36, 1] as const;
@@ -236,12 +238,38 @@ function TrendChart({ idx }: { idx: MarketIndex }) {
             strokeWidth={1.5}
             fill="url(#idx-grad)"
             dot={false}
-            isAnimationActive={false}
+            isAnimationActive
+            animationDuration={520}
+            animationEasing="ease-out"
           />
           {/* Invisible line keeps the right axis on the same price scale as the visible chart. */}
           <Area yAxisId="pct" type="monotone" dataKey="price" stroke="none" fill="none" dot={false} isAnimationActive={false} />
         </AreaChart>
       </ResponsiveContainer>
+    </div>
+  );
+}
+
+function IndexPriceHeader({ idx, accent }: { idx: MarketIndex; accent: string }) {
+  const flashClass = useTickFlash(idx.current);
+  return (
+    <div className={cn("-mx-1.5 mb-3 flex items-baseline gap-3 rounded-md px-1.5 py-0.5", flashClass)}>
+      <AnimatedNumber
+        value={idx.current}
+        format={(n) => fmt(n)}
+        className="text-2xl font-bold text-foreground"
+      />
+      <AnimatedNumber
+        value={idx.change_pct}
+        format={(n) => `${n >= 0 ? "+" : ""}${n.toFixed(2)}%`}
+        className="text-sm font-semibold"
+        style={{ color: accent }}
+      />
+      <AnimatedNumber
+        value={idx.change_amount}
+        format={(n) => `${n >= 0 ? "+" : ""}${fmt(n)}`}
+        className="text-sm text-muted-foreground"
+      />
     </div>
   );
 }
@@ -310,15 +338,7 @@ export function MarketIndexBar({ data: externalData }: { data?: MarketIndex[] })
         className="p-4 sm:p-5"
       >
         {/* Price header */}
-        <div className="flex items-baseline gap-3 mb-3">
-          <span className="text-2xl font-bold tabular-nums text-foreground">{fmt(idx.current)}</span>
-          <span className="text-sm font-semibold tabular-nums" style={{ color: accent }}>
-            {isUp ? "+" : ""}{idx.change_pct.toFixed(2)}%
-          </span>
-          <span className="text-sm tabular-nums text-muted-foreground">
-            {idx.change_amount >= 0 ? "+" : ""}{fmt(idx.change_amount)}
-          </span>
-        </div>
+        <IndexPriceHeader idx={idx} accent={accent} />
 
         {/* OHLC + Turnover row */}
         <div className="flex flex-wrap gap-x-5 gap-y-1 mb-4 text-xs text-muted-foreground">

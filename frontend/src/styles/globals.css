@@ -197,6 +197,61 @@
   }
 }
 
+/* ── Living-tape motion primitives ──────────────────────────────────
+   The terminal "tell": values flash on the tick (红涨绿跌), the active
+   subject lights a teal signal-rail, the live feed breathes. */
+
+/* Tick-flash — a brief wash behind a value the moment it changes. */
+@keyframes tick-flash-up {
+  0%   { background-color: hsl(0 72% 51% / 0.20); }
+  100% { background-color: transparent; }
+}
+@keyframes tick-flash-down {
+  0%   { background-color: hsl(160 84% 39% / 0.18); }
+  100% { background-color: transparent; }
+}
+.tick-flash-up   { animation: tick-flash-up 0.75s ease-out; }
+.tick-flash-down { animation: tick-flash-down 0.75s ease-out; }
+
+/* Signal-rail — a teal bar that wipes down the left edge of the row
+   you're pointing at. Echoes the inset signal bar used for medal rows,
+   but transient and interaction-driven. */
+.signal-row::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: hsl(var(--primary));
+  transform: scaleY(0);
+  transform-origin: top center;
+  transition: transform 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.signal-row:hover::before,
+.signal-row:focus-visible::before,
+.signal-row:focus-within::before {
+  transform: scaleY(1);
+}
+
+/* Signal-blip — a slow breathing pulse for "this feed is live" markers. */
+@keyframes signal-blip {
+  0%, 100% { opacity: 0.55; transform: scale(1); }
+  50%      { opacity: 1;    transform: scale(1.18); }
+}
+.signal-blip { animation: signal-blip 2.4s ease-in-out infinite; }
+
+/* Header-rule — a teal hairline that extends from under the panel icon on
+   load, like a terminal underline cursor. The panel's signature flourish. */
+@keyframes header-rule-in {
+  from { transform: scaleX(0); }
+  to   { transform: scaleX(1); }
+}
+.header-rule {
+  transform-origin: left center;
+  animation: header-rule-in 0.55s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;

@@ -99,13 +99,16 @@ export function ArtificialAnalysisRanking({ data, meta }: Props) {
 
   return (
     <div className="border rounded-lg bg-card overflow-hidden">
-      <div className="flex items-center justify-between border-b border-border/50 bg-muted/30 pl-4 pr-3 py-2.5">
-        <div className="flex items-center gap-1.5">
+      {/* 头部布局：在移动端 (sm 以下) 使用垂直排列以防止挤压，在桌面端使用水平排列 */}
+      <div className="flex flex-col gap-2 border-b border-border/50 bg-muted/30 px-4 py-2.5 sm:flex-row sm:items-center sm:justify-between">
+        {/* Tab 栏切换容器：在移动端支持横向滑动 (overflow-x-auto)，并隐藏滚动条，同时底部加上微小填充防止裁切 */}
+        <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none w-full sm:w-auto -mb-px pb-1 sm:pb-0">
           {keys.map((key) => (
             <button
               key={key}
               onClick={() => setActiveKey(key)}
-              className={`rounded-md px-3 py-1 text-xs font-medium transition-[color,background-color,transform] active:scale-[0.97] ${
+              // 添加 shrink-0 防止在横向滚动时按钮文本被压缩变形
+              className={`shrink-0 rounded-md px-3 py-1 text-xs font-medium transition-[color,background-color,transform] active:scale-[0.97] ${
                 activeKey === key
                   ? "bg-primary text-primary-foreground"
                   : "text-muted-foreground hover:text-foreground"
@@ -115,11 +118,12 @@ export function ArtificialAnalysisRanking({ data, meta }: Props) {
             </button>
           ))}
         </div>
+        {/* 数据来源链接：在移动端靠左对齐 (self-start)，防止被挤扁 */}
         <a
           href="https://artificialanalysis.ai/"
           target="_blank"
           rel="noopener noreferrer"
-          className="flex items-center gap-1 shrink-0 text-[10px] text-blue-400 hover:text-blue-300 transition-colors no-underline"
+          className="flex items-center gap-1 self-start sm:self-auto shrink-0 text-[10px] text-blue-400 hover:text-blue-300 transition-colors no-underline"
         >
           数据来源：Artificial Analysis
           <ExternalLink className="h-3 w-3" />

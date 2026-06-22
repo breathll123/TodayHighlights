@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { motion } from "framer-motion";
-import { BrainCircuit, CalendarClock, ChartNoAxesCombined, Newspaper, Trophy } from "lucide-react";
+import { ArrowDown, ArrowUp, BrainCircuit, CalendarClock, ChartNoAxesCombined, Newspaper, Trophy } from "lucide-react";
 import { useMutation } from "@tanstack/react-query";
 import { useLocation } from "react-router-dom";
 import { BlockCard } from "./BlockCard";
@@ -131,6 +131,78 @@ function sectionIcon(sourceType: string) {
   if (sourceType.startsWith("datalearner_")) return BrainCircuit;
   if (sourceType === "tonghuashun_news") return Newspaper;
   return ChartNoAxesCombined;
+}
+
+// Breadth: how many of this panel's entities are up vs. down right now.
+function countBreadth(data: any[]): { up: number; down: number } | null {
+  let up = 0;
+  let down = 0;
+  let seen = false;
+  for (const item of data) {
+    const pct = typeof item?.percent === "number" ? item.percent : null;
+    if (pct == null) continue;
+    seen = true;
+    if (pct > 0) up += 1;
+    else if (pct < 0) down += 1;
+  }
+  return seen ? { up, down } : null;
+}
+
+// A one-glance summary chip for the panel header — the gist without expanding.
+function renderBlockStat(sourceType: string, data: any[]): ReactNode {
+  if (!Array.isArray(data) || data.length === 0) return undefined;
+
+  if (sourceType === "qiumiwu_matches") {
+    const live = data.filter((m) => m.status === 2 || m.status === 8 || m.status === "Playing").length;
+    if (live > 0) {
+      return (
+        <span className="inline-flex items-center gap-1 font-medium text-red-500">
+          <span className="h-1.5 w-1.5 rounded-full bg-red-500 motion-safe:animate-pulse" />
+          {live} 进行中
+        </span>
+      );
+    }
+    return <span>{data.length} 场</span>;
+  }
+
+  const breadth = countBreadth(data);
+  if (breadth && (breadth.up > 0 || breadth.down > 0)) {
+    return (
+      <span className="inline-flex items-center gap-2 font-medium tabular-nums">
+        <span className="inline-flex items-center gap-0.5 text-red-500">
+          <ArrowUp className="h-3 w-3" aria-hidden="true" />{breadth.up}
+        </span>
+        <span className="inline-flex items-center gap-0.5 text-green-500">
+          <ArrowDown className="h-3 w-3" aria-hidden="true" />{breadth.down}
+        </span>
+      </span>
+    );
+  }
+
+  // 移除模型排行榜、Artificial Analysis 等看板的“榜首”统计展示，避免统计偏差和显示问题
+  /*
+  if (
+    sourceType === "datalearner_leaderboard" ||
+    sourceType === "artificial_analysis_ranking" ||
+    sourceType === "datalearner_aa_index"
+  ) {
+    const top = data[0]?.title ?? data[0]?.name ?? data[0]?.model;
+    if (top) {
+      return (
+        <span className="inline-flex min-w-0 max-w-[140px] items-center gap-1">
+          榜首
+          <span className="truncate font-medium text-foreground">{top}</span>
+        </span>
+      );
+    }
+  }
+  */
+
+  if (sourceType === "tonghuashun_news" || sourceType === "aihot_news") {
+    return <span>{data.length} 条</span>;
+  }
+
+  return undefined;
 }
 
 function mapItem(item: any, sourceType: string) {
@@ -329,6 +401,7 @@ export function GridRenderer({ blocks, isLoading, dataUpdatedAt }: { blocks: any
               <SectionHeading
                 icon={sectionIcon(st)}
                 title={block.title}
+                meta={renderBlockStat(st, block.data)}
                 dataUpdatedAt={block.data_updated_at}
                 sourceName={st === "topic" || st === "raw" ? undefined : SOURCE_NAMES[st] ?? undefined}
                 sourceUrl={st === "artificial_analysis_ranking" ? undefined : sourceUrlFor(st)}

@@ -70,6 +70,7 @@ function TeamLogo({ url, name, size = "md" }: { url?: string; name?: string; siz
       alt=""
       className={`${cls} shrink-0 rounded-full object-contain`}
       loading="lazy"
+      decoding="async"
       onError={() => setFailed(true)}
     />
   );
@@ -99,7 +100,13 @@ function MatchCard({ m }: { m: MatchItem }) {
       <div className="flex items-center justify-between gap-2 mb-3">
         <div className="flex items-center gap-1 min-w-0">
           {m.logo_league ? (
-            <img src={logoSrc(m.logo_league_local, m.logo_league)} alt="" className="h-3.5 w-3.5 shrink-0 rounded object-contain" loading="lazy" />
+            <img
+              src={logoSrc(m.logo_league_local, m.logo_league)}
+              alt=""
+              className="h-3.5 w-3.5 shrink-0 rounded object-contain"
+              loading="lazy"
+              decoding="async"
+            />
           ) : (
             <Dot className="h-3 w-3 shrink-0 text-muted-foreground/40" />
           )}

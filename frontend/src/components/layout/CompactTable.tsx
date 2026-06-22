@@ -1,6 +1,10 @@
+import { motion } from "framer-motion";
 import type { FieldDef } from "@/lib/field-defs";
 import { cn } from "@/lib/utils";
+import { FlashValue } from "./AnimatedNumber";
 import { RankBadge, rankRowTone } from "./RankBadge";
+
+const easeOutQuint: [number, number, number, number] = [0.22, 1, 0.36, 1];
 
 interface Row {
   id?: string | number;
@@ -34,17 +38,25 @@ function cell(key: string, item: Row) {
   switch (key) {
     case "title":
       return item.url ? (
-        <a href={item.url} target="_blank" rel="noopener noreferrer" className="block truncate hover:text-primary transition-colors">
+        <a
+          href={item.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="block truncate font-medium text-foreground underline-offset-2 decoration-primary/40 transition-colors hover:text-primary hover:underline"
+        >
           {item.title}
         </a>
       ) : (
-        <span className="truncate">{item.title}</span>
+        <span className="block truncate font-medium text-foreground">{item.title}</span>
       );
     case "percent":
       return (
-        <span className={`text-xs font-semibold tabular-nums ${item.percent != null ? (item.percent > 0 ? "text-red-500" : "text-green-500") : "text-muted-foreground"}`}>
+        <FlashValue
+          value={item.percent}
+          className={`text-xs font-semibold tabular-nums ${item.percent != null ? (item.percent > 0 ? "text-red-500" : "text-green-500") : "text-muted-foreground"}`}
+        >
           {item.percent != null ? `${item.percent > 0 ? "+" : ""}${item.percent.toFixed(2)}%` : "—"}
-        </span>
+        </FlashValue>
       );
     case "score":
       return <span className="text-xs text-muted-foreground tabular-nums">{fmtNum(item.score)}</span>;
@@ -53,9 +65,9 @@ function cell(key: string, item: Row) {
       const tone = value > 0 ? "text-red-500" : value < 0 ? "text-green-500" : "text-muted-foreground";
       const sign = value > 0 ? "+" : value < 0 ? "-" : "";
       return (
-        <span className={`text-xs font-semibold tabular-nums ${tone}`}>
+        <FlashValue value={value} className={`text-xs font-semibold tabular-nums ${tone}`}>
           {sign}{fmtNum(Math.abs(value))}
-        </span>
+        </FlashValue>
       );
     }
     case "reason": {
@@ -92,31 +104,43 @@ function colAlign(f: FieldDef, i: number): string {
 export function CompactTable({ data, fields, showRank = false }: Props) {
   const cols = gridCols(fields, showRank);
   return (
-    <div className="overflow-hidden bg-card/70 backdrop-blur-md border border-white/20 rounded-lg">
-      <div className="grid items-center gap-x-3 border-b bg-muted/30 px-3 py-2 text-[11px] font-medium text-muted-foreground" style={{ gridTemplateColumns: cols }}>
-        {showRank ? <span className="text-center">排名</span> : null}
-        {fields.map((f, i) => (
-          <span key={f.key} className={colAlign(f, i)}>{f.label}</span>
-        ))}
-      </div>
-      {data.map((item, idx) => (
-        <div
-          key={item.id ?? idx}
-          data-rank-row={showRank ? item.rank : undefined}
-          className={cn(
-            "grid min-h-10 items-center gap-x-3 border-b px-3 py-2.5 text-sm transition-colors last:border-0 hover:bg-muted/30",
-            showRank && rankRowTone(item.rank),
-          )}
-          style={{ gridTemplateColumns: cols }}
-        >
-          {showRank ? <RankBadge rank={item.rank} className="justify-center" /> : null}
+    /* 外层滚动容器：在移动端如果宽度不足，支持横向滚动，避免表格被压挤变形 */
+    <div className="w-full overflow-x-auto scrollbar-thin">
+      {/* 表格主体：在小屏幕 (max-width: 640px) 时限制最小宽度为 500px，防止内容堆叠看不清；在大屏幕下自适应 */}
+      <div className="min-w-[500px] sm:min-w-0 overflow-hidden rounded-lg border border-border/70 bg-card/75">
+        <div className="grid items-center gap-x-3 border-b bg-muted/30 px-3 py-2 text-[11px] font-medium text-muted-foreground" style={{ gridTemplateColumns: cols }}>
+          {showRank ? <span className="text-center">排名</span> : null}
           {fields.map((f, i) => (
-            <div key={f.key} className={colAlign(f, i)}>
-              {cell(f.key, item)}
-            </div>
+            /* 单元格表头：加入 min-w-0 以防文本超出时溢出 */
+            <span key={f.key} className={cn(colAlign(f, i), "min-w-0")}>{f.label}</span>
           ))}
         </div>
-      ))}
+        {data.map((item, idx) => {
+          const tone = showRank ? rankRowTone(item.rank) : "";
+          return (
+            <motion.div
+              key={item.id ?? idx}
+              data-rank-row={showRank ? item.rank : undefined}
+              initial={{ opacity: 0, y: 4 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.22, delay: Math.min(idx, 8) * 0.025, ease: easeOutQuint }}
+              className={cn(
+                "relative grid min-h-10 items-center gap-x-3 border-b px-3 py-2.5 text-sm transition-colors last:border-0 hover:bg-muted/30",
+                tone || "signal-row",
+              )}
+              style={{ gridTemplateColumns: cols }}
+            >
+              {showRank ? <RankBadge rank={item.rank} className="justify-center" /> : null}
+              {fields.map((f, i) => (
+                /* 单元格内容：加入 min-w-0 配合 truncate 实现超出自动截断，避免撑大 Grid 列 */
+                <div key={f.key} className={cn(colAlign(f, i), "min-w-0")}>
+                  {cell(f.key, item)}
+                </div>
+              ))}
+            </motion.div>
+          );
+        })}
+      </div>
     </div>
   );
 }

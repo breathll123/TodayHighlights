@@ -33,24 +33,27 @@ export function NewsTimeline({ data }: { data: NewsItem[] }) {
   return (
     <div className="relative rounded-xl border border-border/70 bg-card/75 p-3 shadow-sm">
       <div className="mb-2 flex items-center gap-2 px-1 text-[11px] font-medium uppercase text-muted-foreground">
-        <Radio className="h-3.5 w-3.5 text-primary" aria-hidden="true" />
+        <span className="relative flex h-3.5 w-3.5 items-center justify-center">
+          <Radio className="h-3.5 w-3.5 text-primary" aria-hidden="true" />
+          <span className="signal-blip absolute -right-0.5 -top-0.5 h-1.5 w-1.5 rounded-full bg-primary" aria-hidden="true" />
+        </span>
         AI 资讯快讯
       </div>
       <div className="absolute bottom-4 left-[18px] top-11 w-px bg-border" />
 
       <div className="space-y-0">
-        <AnimatePresence initial={false}>
+        <AnimatePresence initial>
           {data.map((item, i) => (
             <motion.div
               key={item.id ?? i}
-              initial={{ opacity: 0, height: 0, marginBottom: 0 }}
-              animate={{ opacity: 1, height: "auto", marginBottom: 0 }}
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, height: 0 }}
-              transition={{ duration: 0.35, ease: "easeOut" }}
+              transition={{ duration: 0.3, delay: Math.min(i, 9) * 0.03, ease: [0.22, 1, 0.36, 1] }}
               className="group relative rounded-lg py-2 pl-7 pr-2 transition-colors hover:bg-muted/35"
             >
               <div className="absolute left-[8px] top-[15px] flex h-[15px] w-[15px] items-center justify-center rounded-full bg-card">
-                <div className="h-2 w-2 rounded-full bg-primary/55 transition-all duration-200 group-hover:scale-125 group-hover:bg-primary" />
+                <div className="h-2 w-2 rounded-full bg-primary/55 transition-all duration-200 group-hover:scale-[1.35] group-hover:bg-primary group-hover:shadow-[0_0_8px_hsl(var(--primary)/0.7)]" />
               </div>
 
               <div className="min-w-0">
@@ -66,7 +69,7 @@ export function NewsTimeline({ data }: { data: NewsItem[] }) {
                   )}
                 </div>
 
-                {/* Title */}
+                {/* Title — the subject */}
                 <div className="mt-0.5 flex items-start gap-2">
                   <div className="min-w-0 flex-1">
                     {item.url ? (
@@ -74,12 +77,12 @@ export function NewsTimeline({ data }: { data: NewsItem[] }) {
                         href={item.url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-[13px] font-medium leading-snug text-foreground/90 transition-colors hover:text-primary"
+                        className="text-[13px] font-semibold leading-snug text-foreground underline-offset-2 decoration-primary/40 transition-colors hover:text-primary hover:underline"
                       >
                         {item.title}
                       </a>
                     ) : (
-                      <span className="text-[13px] font-medium leading-snug text-foreground/90">
+                      <span className="text-[13px] font-semibold leading-snug text-foreground">
                         {item.title}
                       </span>
                     )}

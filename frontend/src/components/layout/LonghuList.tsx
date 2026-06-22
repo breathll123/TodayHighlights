@@ -3,6 +3,7 @@ import { Info } from "lucide-react";
 
 import type { FieldDef } from "@/lib/field-defs";
 import { cn } from "@/lib/utils";
+import { FlashValue } from "./AnimatedNumber";
 
 interface LonghuItem {
   id?: string | number;
@@ -108,12 +109,12 @@ export function LonghuList({ data, fields }: Props) {
             {showTitle ? <div role="cell"><StockIdentity item={item} /></div> : null}
             {showPercent ? (
               <span role="cell" className={cn("text-right font-semibold tabular-nums", valueTone(item.percent))}>
-                {formatPercent(item.percent)}
+                <FlashValue value={item.percent}>{formatPercent(item.percent)}</FlashValue>
               </span>
             ) : null}
             {showNetAmount ? (
               <span role="cell" className={cn("text-right font-semibold tabular-nums", valueTone(item.net_amount))}>
-                {formatAmount(item.net_amount)}
+                <FlashValue value={item.net_amount}>{formatAmount(item.net_amount)}</FlashValue>
               </span>
             ) : null}
             {showReason ? (

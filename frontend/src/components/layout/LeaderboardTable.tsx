@@ -45,7 +45,7 @@ export function LeaderboardTable({ data }: Props) {
 
   return (
     <div className="min-w-0 overflow-hidden rounded-lg border border-border/70 bg-card/75 shadow-sm">
-      {/* Header */}
+      {/* Header 保持在滚动容器外部，固定不滚动 */}
       <div className="flex items-center justify-between gap-2 border-b border-border/50 bg-muted/30 px-3 py-2">
         <h4 className="flex items-center gap-1.5 text-xs font-semibold text-foreground/85">
           <BrainCircuit className="h-3.5 w-3.5 text-primary" aria-hidden="true" />
@@ -56,62 +56,68 @@ export function LeaderboardTable({ data }: Props) {
         </span>
       </div>
 
-      {/* Column headers */}
-      <div className={`${colClass} border-b border-border/40 bg-muted/20 px-2.5 py-1.5 text-[10px] font-medium text-muted-foreground`}>
-        <span className="text-center">#</span>
-        <span>模型</span>
-        {activeBenchmarks.map((b) => (
-          <span key={b} className="text-center">{BENCHMARK_LABELS[b] || b}</span>
-        ))}
-        <span className="text-center">许可</span>
-      </div>
+      {/* 滚动容器：如果在移动端宽度不足，允许横向滚动，避免表格中的指标列被挤爆 */}
+      <div className="w-full overflow-x-auto scrollbar-thin">
+        {/* 限制移动端最小宽度为 600px，在桌面端自适应宽度 */}
+        <div className="min-w-[600px] sm:min-w-0">
+          {/* Column headers */}
+          <div className={`${colClass} border-b border-border/40 bg-muted/20 px-2.5 py-1.5 text-[10px] font-medium text-muted-foreground`}>
+            <span className="text-center">#</span>
+            <span>模型</span>
+            {activeBenchmarks.map((b) => (
+              <span key={b} className="text-center">{BENCHMARK_LABELS[b] || b}</span>
+            ))}
+            <span className="text-center">许可</span>
+          </div>
 
-      {/* Rows */}
-      {data.map((item, i) => (
-        <motion.a
-          key={item.id}
-          href={item.url || "#"}
-          target="_blank"
-          rel="noopener noreferrer"
-          data-rank-row={item.rank}
-          initial={{ opacity: 0, y: 4 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.22, delay: Math.min(i, 6) * 0.03, ease: "easeOut" }}
-          className={`${colClass} ${rankRowTone(item.rank)} group min-h-10 items-center border-b border-border/40 px-2.5 py-2 text-xs transition-[background-color,border-color,transform] last:border-b-0 hover:bg-primary/[0.06] active:scale-[0.99]`}
-        >
-          <RankBadge rank={item.rank} className="justify-center" />
-          <span className="flex items-center gap-1.5 truncate">
-            <span className="truncate font-medium">{item.model || item.title}</span>
-            {item.company ? (
-              <span className="text-[10px] text-muted-foreground/60 shrink-0 hidden sm:inline">{item.company}</span>
-            ) : null}
-            <ExternalLink className="ml-auto hidden h-3 w-3 shrink-0 text-muted-foreground/45 opacity-0 transition-opacity group-hover:opacity-100 sm:block" aria-hidden="true" />
-          </span>
-          {activeBenchmarks.map((b) => {
-            const val = (item as any)[b] || "";
-            const isTop = val && item.rank && item.rank <= 3;
-            return (
-              <span
-                key={b}
-                className={`text-center tabular-nums ${
-                  isTop ? "font-semibold text-foreground" : "text-muted-foreground"
-                }`}
-              >
-                {fmtScore(val)}
+          {/* Rows */}
+          {data.map((item, i) => (
+            <motion.a
+              key={item.id}
+              href={item.url || "#"}
+              target="_blank"
+              rel="noopener noreferrer"
+              data-rank-row={item.rank}
+              initial={{ opacity: 0, y: 4 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.22, delay: Math.min(i, 6) * 0.03, ease: "easeOut" }}
+              className={`${colClass} ${rankRowTone(item.rank)} group min-h-10 items-center border-b border-border/40 px-2.5 py-2 text-xs transition-[background-color,border-color,transform] last:border-b-0 hover:bg-primary/[0.06] active:scale-[0.99]`}
+            >
+              <RankBadge rank={item.rank} className="justify-center" />
+              <span className="flex items-center gap-1.5 truncate">
+                <span className="truncate font-medium">{item.model || item.title}</span>
+                {item.company ? (
+                  <span className="text-[10px] text-muted-foreground/60 shrink-0 hidden sm:inline">{item.company}</span>
+                ) : null}
+                <ExternalLink className="ml-auto hidden h-3 w-3 shrink-0 text-muted-foreground/45 opacity-0 transition-opacity group-hover:opacity-100 sm:block" aria-hidden="true" />
               </span>
-            );
-          })}
-          <span className="text-center text-[10px] text-muted-foreground/70">
-            {item.license === "免费商用" ? (
-              <span className="text-green-500">开源</span>
-            ) : item.license === "开源" ? (
-              <span className="text-green-500">开源</span>
-            ) : (
-              item.license || "—"
-            )}
-          </span>
-        </motion.a>
-      ))}
+              {activeBenchmarks.map((b) => {
+                const val = (item as any)[b] || "";
+                const isTop = val && item.rank && item.rank <= 3;
+                return (
+                  <span
+                    key={b}
+                    className={`text-center tabular-nums ${
+                      isTop ? "font-semibold text-foreground" : "text-muted-foreground"
+                    }`}
+                  >
+                    {fmtScore(val)}
+                  </span>
+                );
+              })}
+              <span className="text-center text-[10px] text-muted-foreground/70">
+                {item.license === "免费商用" ? (
+                  <span className="text-green-500">开源</span>
+                ) : item.license === "开源" ? (
+                  <span className="text-green-500">开源</span>
+                ) : (
+                  item.license || "—"
+                )}
+              </span>
+            </motion.a>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
