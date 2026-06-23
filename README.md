@@ -147,6 +147,7 @@ curl http://127.0.0.1:8770/health
 cd /www/wwwroot/TodayHighlights/frontend
 npm ci
 VITE_API_BASE=http://8.130.152.32:8780 npm run build
+rm -rf /www/wwwroot/today-highlights
 mkdir -p /www/wwwroot/today-highlights
 cp -a dist/. /www/wwwroot/today-highlights/
 ```
