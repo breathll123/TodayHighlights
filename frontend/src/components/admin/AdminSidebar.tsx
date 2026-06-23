@@ -1,4 +1,5 @@
 import { Link, useLocation, useNavigate } from "react-router-dom";
+import { motion } from "framer-motion";
 import { BrainCircuit, Clock, FileText, LayoutDashboard, LogOut, RadioTower, ScrollText, Settings, Tag, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
@@ -33,22 +34,33 @@ export function AdminSidebar() {
         </Link>
       </div>
       <nav className="space-y-1 px-3 py-4" aria-label="后台导航">
-        {links.map((l) => (
-          <Link
-            key={l.href}
-            to={l.href}
-            title={l.label}
-            className={cn(
-              "flex min-h-10 items-center justify-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:justify-start",
-              location.pathname === l.href
-                ? "bg-primary text-primary-foreground shadow-sm"
-                : "text-muted-foreground hover:bg-muted/70 hover:text-foreground"
-            )}
-          >
-            <l.icon className="h-4 w-4" aria-hidden="true" />
-            <span className="hidden md:inline">{l.label}</span>
-          </Link>
-        ))}
+        {links.map((l) => {
+          const active = location.pathname === l.href;
+          return (
+            <Link
+              key={l.href}
+              to={l.href}
+              title={l.label}
+              aria-current={active ? "page" : undefined}
+              className={cn(
+                "relative flex min-h-10 items-center justify-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:justify-start",
+                active
+                  ? "text-primary-foreground"
+                  : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+              )}
+            >
+              {active ? (
+                <motion.span
+                  layoutId="admin-nav-active"
+                  className="absolute inset-0 rounded-lg bg-primary shadow-sm"
+                  transition={{ type: "spring", stiffness: 420, damping: 36 }}
+                />
+              ) : null}
+              <l.icon className="relative z-10 h-4 w-4" aria-hidden="true" />
+              <span className="relative z-10 hidden md:inline">{l.label}</span>
+            </Link>
+          );
+        })}
       </nav>
       <div className="absolute bottom-4 left-3 right-3">
         <Link

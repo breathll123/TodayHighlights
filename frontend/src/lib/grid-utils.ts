@@ -68,22 +68,20 @@ export function reflowBlocks(
   return blocks.map((block) => byId.get(block.id) ?? block);
 }
 
-export function insertBlockAtTop(
+export function insertBlockAtBottom(
   blocks: Block[],
-  colSpan: number,
-  rowSpan: number,
-): { blocks: Block[]; position: { x: 0; y: 0 } } {
-  const position = { x: 0 as const, y: 0 as const };
-  const anchor: GridRect = {
-    grid_x: position.x,
-    grid_y: position.y,
-    col_span: colSpan,
-    row_span: rowSpan,
-  };
+): { blocks: Block[]; position: { x: number; y: number } } {
+  // Drop the new block onto a fresh row below the lowest existing block.
+  // Because nothing already lives there, the current layout never has to
+  // reflow — existing blocks keep their positions.
+  const bottomY = blocks.reduce(
+    (max, block) => Math.max(max, block.grid_y + block.row_span),
+    0,
+  );
 
   return {
-    blocks: reflowAfterAnchor(blocks, anchor),
-    position,
+    blocks: [...blocks],
+    position: { x: 0, y: bottomY },
   };
 }
 

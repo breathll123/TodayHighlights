@@ -143,11 +143,11 @@ describe("AdminLayoutPage persistence", () => {
     });
   });
 
-  it("pushes the complete collision chain before creating a top block", async () => {
+  it("adds a new block at the bottom without moving existing blocks", async () => {
     fetchBlocks.mockResolvedValue([
-      block(1, 0, 0),
-      block(2, 0, 1),
-      block(3, 0, 2),
+      block(1, 0, 0), // rows 0–0
+      block(2, 0, 1), // rows 1–1
+      block(3, 0, 2), // rows 2–2
     ]);
 
     render(<AdminLayoutPage />, { wrapper: Wrapper });
@@ -157,12 +157,12 @@ describe("AdminLayoutPage persistence", () => {
     await waitFor(() => {
       expect(createBlock).toHaveBeenCalledTimes(1);
     });
-    expect(updateBlock).toHaveBeenCalledWith(1, expect.objectContaining({ grid_y: 1 }));
-    expect(updateBlock).toHaveBeenCalledWith(2, expect.objectContaining({ grid_y: 2 }));
-    expect(updateBlock).toHaveBeenCalledWith(3, expect.objectContaining({ grid_y: 3 }));
+    // Existing blocks stay exactly where they are — nothing is pushed down.
+    expect(updateBlock).not.toHaveBeenCalled();
+    // The new block lands on a fresh row below the lowest block (bottom = 3).
     expect(createBlock).toHaveBeenCalledWith(expect.objectContaining({
       grid_x: 0,
-      grid_y: 0,
+      grid_y: 3,
       col_span: 2,
       row_span: 1,
       source_config: { topic_id: 10 },

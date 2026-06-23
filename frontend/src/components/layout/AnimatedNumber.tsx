@@ -18,6 +18,8 @@ interface AnimatedNumberProps {
   /** Render the (possibly fractional, mid-animation) value to a string. */
   format?: (value: number) => string;
   durationMs?: number;
+  /** Roll up from zero on first mount — for KPI/stat reveals. */
+  animateOnMount?: boolean;
   className?: string;
   style?: CSSProperties;
 }
@@ -31,11 +33,13 @@ export function AnimatedNumber({
   value,
   format = (n) => n.toFixed(2),
   durationMs = 650,
+  animateOnMount = false,
   className,
   style,
 }: AnimatedNumberProps) {
-  const [display, setDisplay] = useState(value);
-  const displayRef = useRef(value);
+  const initial = animateOnMount ? 0 : value;
+  const [display, setDisplay] = useState(initial);
+  const displayRef = useRef(initial);
   const rafRef = useRef<number | undefined>(undefined);
 
   useEffect(() => {

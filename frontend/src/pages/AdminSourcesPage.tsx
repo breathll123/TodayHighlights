@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "sonner";
 import { Pencil } from "lucide-react";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
+import { Skeleton } from "@/components/ui/skeleton";
 
 const ADAPTER_OPTIONS = [
   { value: "xueqiu", label: "雪球" },
@@ -80,7 +81,15 @@ export function AdminSourcesPage() {
     onError: (err: Error) => toast.error(`爬取失败: ${err.message}`),
   });
 
-  if (isLoading || topicsLoading) return <div className="text-center py-12 text-muted-foreground">加载中...</div>;
+  if (isLoading || topicsLoading) {
+    return (
+      <div className="space-y-6">
+        <Skeleton className="h-9 w-44" />
+        <Skeleton className="h-44 w-full rounded-lg" style={{ animationDelay: "60ms" }} />
+        <Skeleton className="h-72 w-full rounded-lg" style={{ animationDelay: "120ms" }} />
+      </div>
+    );
+  }
 
   const openEdit = (s: EditState) => {
     setEditSource(s);
@@ -167,8 +176,8 @@ export function AdminSourcesPage() {
           <CardTitle>数据源列表</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="rounded-md border">
-            <table className="w-full text-sm">
+          <div className="overflow-x-auto rounded-md border">
+            <table className="w-full min-w-[640px] text-sm stagger-rows">
               <thead>
                 <tr className="border-b bg-muted/50">
                   <th className="px-4 py-3 text-left font-medium">名称</th>
@@ -222,7 +231,7 @@ export function AdminSourcesPage() {
               />
               <p className="text-xs text-muted-foreground">粘贴浏览器 Cookie 后点击保存即可更新</p>
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label>爬取间隔(分)</Label>
                 <Input

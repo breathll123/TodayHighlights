@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate, Outlet, useLocation } from "react-router-dom";
+import { MotionConfig, motion } from "framer-motion";
 import { AuthProvider, useAuth } from "@/hooks/use-auth";
 import { PublicNavbar } from "@/components/layout/PublicNavbar";
 import { AdminSidebar } from "@/components/admin/AdminSidebar";
@@ -29,15 +30,25 @@ function PublicLayout() {
 }
 
 function AdminLayout() {
+  const location = useLocation();
   return (
-    <div className="min-h-screen bg-background">
-      <div className="flex">
-        <AdminSidebar />
-        <main id="main-content" className="min-w-0 flex-1 px-4 py-5 sm:px-6 lg:px-8 lg:py-7">
-          <Outlet />
-        </main>
+    <MotionConfig reducedMotion="user">
+      <div className="min-h-screen bg-background">
+        <div className="flex">
+          <AdminSidebar />
+          <main id="main-content" className="min-w-0 flex-1 px-4 py-5 sm:px-6 lg:px-8 lg:py-7">
+            <motion.div
+              key={location.pathname}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
+            >
+              <Outlet />
+            </motion.div>
+          </main>
+        </div>
       </div>
-    </div>
+    </MotionConfig>
   );
 }
 

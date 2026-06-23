@@ -1,10 +1,13 @@
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useState, type CSSProperties } from "react";
+import { motion } from "framer-motion";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar } from "recharts";
 import { Activity, ArrowDown, ArrowUp, CheckCircle2, Cpu, Eye, TrendingUp, XCircle, Zap, ChevronLeft, ChevronRight } from "lucide-react";
 import { fetchAITokenUsages, fetchAITokenUsageDetail, fetchAIOpsStats } from "@/api/client";
 import type { AITokenUsage, AITokenUsageDetail } from "@/api/types";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
+import { AnimatedNumber } from "@/components/layout/AnimatedNumber";
+import { Skeleton } from "@/components/ui/skeleton";
 import { AIUsageDetailDrawer } from "@/components/layout/AIUsageDetailDrawer";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -22,16 +25,27 @@ function formatTime(ts: string | null): string {
   return `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-function StatCard({ icon: Icon, label, value, color }: { icon: typeof Zap; label: string; value: string; color: string }) {
+function StatCard({ icon: Icon, label, value, color, index }: { icon: typeof Zap; label: string; value: number | undefined; color: string; index: number }) {
   return (
-    <div className="rounded-xl border border-border/70 bg-card p-3.5">
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.32, delay: index * 0.05, ease: [0.22, 1, 0.36, 1] }}
+      className="stat-card rounded-xl border border-border/70 bg-card p-3.5"
+      style={{ "--glow": color } as CSSProperties}
+    >
       <div className="flex items-center gap-2.5">
         <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border" style={{ borderColor: `${color}33`, backgroundColor: `${color}11`, color }}>
           <Icon className="h-3.5 w-3.5" />
         </span>
-        <div className="min-w-0"><p className="text-[10px] uppercase tracking-wide text-muted-foreground/70">{label}</p><p className="text-lg font-bold tabular-nums text-foreground leading-tight">{value}</p></div>
+        <div className="min-w-0">
+          <p className="text-[10px] uppercase tracking-wide text-muted-foreground/70">{label}</p>
+          <p className="text-lg font-bold tabular-nums text-foreground leading-tight">
+            {value == null ? "—" : <AnimatedNumber value={value} animateOnMount durationMs={900} format={(n) => Math.round(n).toLocaleString()} />}
+          </p>
+        </div>
       </div>
-    </div>
+    </motion.div>
   );
 }
 
@@ -80,11 +94,11 @@ export function AdminAIOpsPage() {
       <AdminPageHeader eyebrow="AI Ops" title="AI 运营" description="Token 消耗追踪、任务执行状态与模型使用分布。" />
 
       <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-5">
-        <StatCard icon={Zap} label="今日 Token" value={stats?.today_tokens.toLocaleString() ?? "—"} color="#F5A623" />
-        <StatCard icon={Activity} label="今日调用" value={`${stats?.today_calls ?? "—"}`} color={CHART_TEAL} />
-        <StatCard icon={CheckCircle2} label="今日成功" value={`${stats?.today_succeeded ?? "—"}`} color="#10b981" />
-        <StatCard icon={XCircle} label="今日失败" value={`${stats?.today_failed ?? "—"}`} color="#ef4444" />
-        <StatCard icon={Cpu} label="活跃模型" value={`${stats?.active_models ?? "—"}`} color="#8b5cf6" />
+        <StatCard icon={Zap} label="今日 Token" value={stats?.today_tokens} color="#F5A623" index={0} />
+        <StatCard icon={Activity} label="今日调用" value={stats?.today_calls} color={CHART_TEAL} index={1} />
+        <StatCard icon={CheckCircle2} label="今日成功" value={stats?.today_succeeded} color="#10b981" index={2} />
+        <StatCard icon={XCircle} label="今日失败" value={stats?.today_failed} color="#ef4444" index={3} />
+        <StatCard icon={Cpu} label="活跃模型" value={stats?.active_models} color="#8b5cf6" index={4} />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">
@@ -122,13 +136,17 @@ export function AdminAIOpsPage() {
       </div>
 
       {isLoading ? (
-        <div className="text-center py-12 text-muted-foreground text-sm">加载中...</div>
+        <div className="space-y-2 rounded-xl border border-border/70 bg-card p-4">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <Skeleton key={i} className="h-9 w-full" style={{ animationDelay: `${i * 60}ms` }} />
+          ))}
+        </div>
       ) : sorted.length === 0 ? (
         <div className="text-center py-16 border border-dashed rounded-xl text-sm text-muted-foreground">暂无记录</div>
       ) : (
         <>
-          <div className="overflow-hidden rounded-xl border border-border/70 bg-card">
-            <table className="w-full text-sm">
+          <div className="overflow-x-auto rounded-xl border border-border/70 bg-card">
+            <table className="w-full min-w-[720px] text-sm stagger-rows">
               <thead className="bg-muted/40 text-muted-foreground">
                 <tr>
                   <th className="px-4 py-2.5 text-left text-xs font-medium cursor-pointer hover:text-foreground" onClick={() => toggleSort("created_at")}>时间 <SortIcon k="created_at" /></th>

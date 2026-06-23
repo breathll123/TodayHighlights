@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useState, type CSSProperties } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { motion } from "framer-motion";
 import { fetchJobs } from "../api/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -7,6 +8,8 @@ import { Button } from "@/components/ui/button";
 import { ChevronDown, ChevronUp, ChevronLeft, ChevronRight, AlertCircle, CheckCircle2, Clock, RotateCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
+import { AnimatedNumber } from "@/components/layout/AnimatedNumber";
+import { Skeleton } from "@/components/ui/skeleton";
 
 const statusLabel: Record<string, string> = {
   success: "成功", failed: "失败", running: "运行中", pending: "等待中",
@@ -36,11 +39,16 @@ export function AdminJobsPage() {
     refetchInterval: 10000,
   });
 
-  if (isLoading) return <div className="text-center py-12 text-muted-foreground">加载中...</div>;
-
   const jobs = data?.items ?? [];
   const total = data?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+
+  const summary: { label: string; value: number; glow: string; numberClass: string }[] = [
+    { label: "总任务", value: total, glow: "#1DB8A8", numberClass: "text-foreground" },
+    { label: "本页成功", value: jobs.filter((j) => j.status === "success").length, glow: "#10b981", numberClass: "text-green-500" },
+    { label: "本页失败", value: jobs.filter((j) => j.status === "failed").length, glow: "#ef4444", numberClass: "text-red-500" },
+    { label: "运行中", value: jobs.filter((j) => j.status === "running").length, glow: "#3b82f6", numberClass: "text-blue-500" },
+  ];
 
   const toggle = (id: number) => {
     setExpanded((prev) => {
@@ -59,37 +67,26 @@ export function AdminJobsPage() {
       />
 
       {/* Summary */}
-      <div className="grid grid-cols-4 gap-3">
-        <Card>
-          <CardContent className="p-4 text-center">
-            <div className="text-2xl font-bold">{total}</div>
-            <div className="text-xs text-muted-foreground">总任务</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4 text-center">
-            <div className="text-2xl font-bold text-green-600">
-              {jobs.filter((j) => j.status === "success").length}
-            </div>
-            <div className="text-xs text-muted-foreground">本页成功</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4 text-center">
-            <div className="text-2xl font-bold text-red-600">
-              {jobs.filter((j) => j.status === "failed").length}
-            </div>
-            <div className="text-xs text-muted-foreground">本页失败</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4 text-center">
-            <div className="text-2xl font-bold text-blue-600">
-              {jobs.filter((j) => j.status === "running").length}
-            </div>
-            <div className="text-xs text-muted-foreground">运行中</div>
-          </CardContent>
-        </Card>
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        {isLoading
+          ? Array.from({ length: 4 }).map((_, i) => (
+              <Skeleton key={i} className="h-[88px] rounded-xl" style={{ animationDelay: `${i * 50}ms` }} />
+            ))
+          : summary.map((s, i) => (
+              <motion.div
+                key={s.label}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.32, delay: i * 0.05, ease: [0.22, 1, 0.36, 1] }}
+                className="stat-card rounded-xl border border-border/70 bg-card p-4 text-center"
+                style={{ "--glow": s.glow } as CSSProperties}
+              >
+                <div className={cn("text-2xl font-bold tabular-nums", s.numberClass)}>
+                  <AnimatedNumber value={s.value} animateOnMount durationMs={800} format={(n) => String(Math.round(n))} />
+                </div>
+                <div className="mt-0.5 text-xs text-muted-foreground">{s.label}</div>
+              </motion.div>
+            ))}
       </div>
 
       {/* Job list */}
@@ -117,7 +114,14 @@ export function AdminJobsPage() {
           </div>
         </CardHeader>
         <CardContent className="space-y-2">
-          {jobs.map((j) => {
+          {isLoading ? (
+            Array.from({ length: 5 }).map((_, i) => (
+              <Skeleton key={i} className="h-[60px] rounded-lg" style={{ animationDelay: `${i * 60}ms` }} />
+            ))
+          ) : jobs.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground text-sm">暂无任务记录</div>
+          ) : (
+            jobs.map((j) => {
             const Icon = statusIcon[j.status] ?? Clock;
             const isExpanded = expanded.has(j.id);
             const isFailed = j.status === "failed";
@@ -173,9 +177,7 @@ export function AdminJobsPage() {
                 )}
               </div>
             );
-          })}
-          {jobs.length === 0 && (
-            <div className="text-center py-8 text-muted-foreground text-sm">暂无任务记录</div>
+          })
           )}
         </CardContent>
       </Card>

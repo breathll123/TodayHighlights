@@ -3,6 +3,7 @@ import { useState } from "react";
 import { createAIPromptTemplate, deleteAIPromptTemplate, fetchAIPromptTemplates, updateAIPromptTemplate } from "@/api/client";
 import type { AIPromptTemplate, AIPromptTemplateWrite } from "@/api/types";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
+import { TableSkeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -47,8 +48,8 @@ export function AdminPromptTemplatesPage() {
       <AdminPageHeader eyebrow="Prompt Templates" title="Prompt 模板" description="按主题和内容类型维护区块 AI 分析的领域背景与额外禁令。" />
 
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
-        <div className="overflow-hidden rounded-lg border bg-card">
-          <table className="w-full text-sm">
+        <div className="overflow-x-auto rounded-lg border bg-card">
+          <table className="w-full min-w-[520px] text-sm stagger-rows">
             <thead className="bg-muted/50 text-muted-foreground">
               <tr>
                 <th className="px-4 py-3 text-left">主题</th>
@@ -58,10 +59,9 @@ export function AdminPromptTemplatesPage() {
                 <th className="px-4 py-3 text-right">操作</th>
               </tr>
             </thead>
+            {isLoading ? <TableSkeleton columns={5} rows={5} /> : (
             <tbody>
-              {isLoading ? (
-                <tr><td className="px-4 py-4" colSpan={5}>加载中</td></tr>
-              ) : templates.map((template) => (
+              {templates.map((template) => (
                 <tr key={template.id} className="border-t">
                   <td className="px-4 py-3">{template.topic_slug}</td>
                   <td className="px-4 py-3">{template.content_class}</td>
@@ -81,6 +81,7 @@ export function AdminPromptTemplatesPage() {
                 </tr>
               ))}
             </tbody>
+            )}
           </table>
         </div>
 

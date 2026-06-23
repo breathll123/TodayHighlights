@@ -252,6 +252,51 @@
   animation: header-rule-in 0.55s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
+/* ── Admin motion system ───────────────────────────────────────────
+   State-conveying motion for the back-office: shimmering load skeletons,
+   a soft accent glow on stat cards, and a capped row-reveal cascade. */
+
+/* Skeleton sweep — a light passes across the placeholder while it loads. */
+.skeleton-shimmer { position: relative; overflow: hidden; }
+.skeleton-shimmer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, hsl(var(--foreground) / 0.07), transparent);
+  animation: skeleton-sweep 1.5s ease-in-out infinite;
+}
+@keyframes skeleton-sweep { to { transform: translateX(100%); } }
+
+/* Stat card — lifts and picks up a glow in its own accent hue on hover.
+   Each card sets --glow inline; falls back to the teal primary. */
+.stat-card {
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+}
+.stat-card:hover {
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--glow, hsl(var(--primary))) 55%, transparent);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--glow, hsl(var(--primary))) 28%, transparent),
+    0 10px 30px -12px color-mix(in srgb, var(--glow, hsl(var(--primary))) 50%, transparent);
+}
+
+/* Row cascade — table rows rise in on first load, capped so a 50-row table
+   doesn't turn into a 2-second wave. */
+@keyframes admin-row-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: none; }
+}
+.stagger-rows tbody tr { animation: admin-row-in 0.34s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.stagger-rows tbody tr:nth-child(1) { animation-delay: 0ms; }
+.stagger-rows tbody tr:nth-child(2) { animation-delay: 35ms; }
+.stagger-rows tbody tr:nth-child(3) { animation-delay: 70ms; }
+.stagger-rows tbody tr:nth-child(4) { animation-delay: 105ms; }
+.stagger-rows tbody tr:nth-child(5) { animation-delay: 140ms; }
+.stagger-rows tbody tr:nth-child(6) { animation-delay: 175ms; }
+.stagger-rows tbody tr:nth-child(7) { animation-delay: 210ms; }
+.stagger-rows tbody tr:nth-child(n+8) { animation-delay: 240ms; }
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;

@@ -4,8 +4,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Block } from "../api/types";
 
-const { toastError } = vi.hoisted(() => ({
+const { toastError, gridProps } = vi.hoisted(() => ({
   toastError: vi.fn(),
+  gridProps: { current: null as Record<string, unknown> | null },
 }));
 
 vi.mock("sonner", () => ({
@@ -23,11 +24,14 @@ vi.mock("react-grid-layout", () => ({
     children,
     onDragStop,
     onResizeStop,
+    dragConfig,
   }: {
     children: ReactNode;
     onDragStop: (layout: unknown[], oldItem: null, newItem: object) => void;
     onResizeStop: (layout: unknown[], oldItem: null, newItem: object) => void;
+    dragConfig?: Record<string, unknown>;
   }) => (
+    (gridProps.current = { dragConfig }),
     <div>
       <button
         type="button"
@@ -151,5 +155,20 @@ describe("CanvasEditor collision reflow", () => {
     });
     expect(next.find((item) => item.id === 2)?.grid_y).toBe(2);
     expect(toastError).not.toHaveBeenCalled();
+  });
+
+  it("excludes .no-drag controls from the drag handle so touch taps reach them", () => {
+    render(
+      <CanvasEditor
+        blocks={[block(1, 0, 0)]}
+        onLayoutChange={vi.fn()}
+        onEdit={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+    );
+
+    const dragConfig = gridProps.current?.dragConfig as { handle?: string; cancel?: string };
+    expect(dragConfig?.handle).toBe(".drag-handle");
+    expect(dragConfig?.cancel).toBe(".no-drag");
   });
 });

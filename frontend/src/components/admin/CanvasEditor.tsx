@@ -69,7 +69,7 @@ export function CanvasEditor({ blocks, onLayoutChange, onEdit, onDelete }: Props
       layout={layout}
       width={width}
       gridConfig={{ cols: 4, rowHeight: 140, margin: [12, 12] }}
-      dragConfig={{ handle: ".drag-handle" }}
+      dragConfig={{ handle: ".drag-handle", cancel: ".no-drag" }}
       resizeConfig={{ enabled: true }}
       compactor={noCompactor}
       onDragStop={handleDragStop}

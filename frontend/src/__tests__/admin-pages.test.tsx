@@ -75,7 +75,8 @@ describe("AdminJobsPage", () => {
   it("renders job log page with success status", async () => {
     render(<AdminJobsPage />, { wrapper: Wrapper });
     expect(await screen.findByText("任务日志")).toBeInTheDocument();
-    expect(screen.getByText("成功")).toBeInTheDocument();
+    // Header now renders immediately with a skeleton; wait for the row data to land.
+    expect(await screen.findByText("成功")).toBeInTheDocument();
     expect(screen.getByText("雪球自选")).toBeInTheDocument();
   });
 });

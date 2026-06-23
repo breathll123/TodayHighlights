@@ -103,7 +103,7 @@ export function BlockConfigPanel({ form, onChange, onSave, onCancel }: Props) {
   };
 
   return (
-    <div className="w-80 border-l bg-card h-full overflow-y-auto p-4 space-y-4">
+    <div className="w-80 max-w-[88vw] border-l bg-card h-full overflow-y-auto p-4 space-y-4 max-md:fixed max-md:inset-y-0 max-md:right-0 max-md:z-50 max-md:shadow-2xl">
       <h3 className="font-semibold text-sm">方块配置</h3>
 
       {/* Title */}

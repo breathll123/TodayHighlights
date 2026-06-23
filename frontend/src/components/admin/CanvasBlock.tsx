@@ -16,7 +16,10 @@ export function CanvasBlock({ block, onEdit, onDelete }: Props) {
           <GripHorizontal className="w-4 h-4 text-muted-foreground shrink-0" />
           <span className="text-xs font-medium truncate">{block.title}</span>
         </div>
-        <div className="flex items-center gap-1 shrink-0">
+        {/* no-drag: keep these out of the grid's drag layer. On touch devices the
+            drag layer preventDefaults touchstart, which would swallow the tap's
+            click and stop the edit/delete panel from ever opening. */}
+        <div className="flex items-center gap-1 shrink-0 no-drag">
           <Button variant="ghost" size="icon" className="h-6 w-6" aria-label={`编辑 ${block.title}`} onClick={(e) => { e.stopPropagation(); onEdit(); }}>
             <Pencil className="w-3 h-3" />
           </Button>

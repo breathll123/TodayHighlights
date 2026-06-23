@@ -6,7 +6,8 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CanvasEditor } from "@/components/admin/CanvasEditor";
 import { SizePresetPicker } from "@/components/admin/SizePresetPicker";
 import { BlockConfigPanel } from "@/components/admin/BlockConfigPanel";
-import { changedLayoutBlocks, insertBlockAtTop } from "@/lib/grid-utils";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { changedLayoutBlocks, insertBlockAtBottom } from "@/lib/grid-utils";
 import { safeUUID } from "@/lib/utils";
 import { fetchAdminTopics, fetchBlocks, createBlock, updateBlock, deleteBlock, publishPage } from "@/api/client";
 import type { Block } from "@/api/types";
@@ -26,6 +27,7 @@ export function AdminLayoutPage() {
   const [sizePickerOpen, setSizePickerOpen] = useState(false);
   const [configBlock, setConfigBlock] = useState<Block | null>(null);
   const [configForm, setConfigForm] = useState<Omit<Block, "id" | "created_at" | "updated_at"> | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<Block | null>(null);
 
   const { data: allBlocks = [], isLoading } = useQuery({ queryKey: ["blocks"], queryFn: fetchBlocks });
   const { data: topics = [] } = useQuery({ queryKey: ["admin-topics"], queryFn: fetchAdminTopics });
@@ -51,6 +53,7 @@ export function AdminLayoutPage() {
     mutationFn: deleteBlock,
     onSuccess: () => { invalidate(); toast.success("已删除"); },
     onError: (err: Error) => toast.error(`删除失败: ${err.message}`),
+    onSettled: () => setPendingDelete(null),
   });
   const publishMut = useMutation({
     mutationFn: publishPage,
@@ -78,7 +81,7 @@ export function AdminLayoutPage() {
       return;
     }
 
-    const inserted = insertBlockAtTop(draftBlocks, col, row);
+    const inserted = insertBlockAtBottom(draftBlocks);
     applyDraftLayout(inserted.blocks);
     try {
       await persistLayoutChanges(draftBlocks, inserted.blocks);
@@ -142,7 +145,7 @@ export function AdminLayoutPage() {
 
   return (
     <div className="flex h-[calc(100vh-3.5rem)] overflow-hidden">
-      <div className="flex-1 overflow-auto p-6 max-w-[calc(100vw-20rem)]">
+      <div className="flex-1 overflow-auto p-6 md:max-w-[calc(100vw-20rem)]">
         <div className="flex items-center justify-between mb-6">
           <Tabs value={activePage} onValueChange={setActivePage}>
             <TabsList>
@@ -171,7 +174,7 @@ export function AdminLayoutPage() {
               blocks={draftBlocks}
               onLayoutChange={handleLayoutChange}
               onEdit={handleEditBlock}
-              onDelete={(id) => { if (confirm("确定删除？")) deleteMut.mutate(id); }}
+              onDelete={(id) => setPendingDelete(draftBlocks.find((b) => b.id === id) ?? null)}
             />
             <Button variant="outline" onClick={() => setSizePickerOpen(true)}>
               <Plus className="w-4 h-4 mr-2" />添加方块
@@ -208,13 +211,39 @@ export function AdminLayoutPage() {
       </div>
 
       {configBlock && configForm && (
-        <BlockConfigPanel
-          form={configForm}
-          onChange={setConfigForm}
-          onSave={handleSaveConfig}
-          onCancel={() => setConfigBlock(null)}
-        />
+        <>
+          {/* Mobile: dim the canvas behind the drawer; tap to dismiss. */}
+          <div
+            className="fixed inset-0 z-40 bg-black/50 md:hidden"
+            aria-hidden="true"
+            onClick={() => setConfigBlock(null)}
+          />
+          <BlockConfigPanel
+            form={configForm}
+            onChange={setConfigForm}
+            onSave={handleSaveConfig}
+            onCancel={() => setConfigBlock(null)}
+          />
+        </>
       )}
+
+      <ConfirmDialog
+        open={pendingDelete !== null}
+        title="删除方块"
+        description={
+          pendingDelete ? (
+            <>
+              「<span className="font-medium text-foreground">{pendingDelete.title}</span>」将从该页面移除，此操作无法撤销。
+            </>
+          ) : null
+        }
+        confirmLabel="删除"
+        cancelLabel="取消"
+        tone="destructive"
+        loading={deleteMut.isPending}
+        onConfirm={() => { if (pendingDelete) deleteMut.mutate(pendingDelete.id); }}
+        onCancel={() => setPendingDelete(null)}
+      />
     </div>
   );
 }

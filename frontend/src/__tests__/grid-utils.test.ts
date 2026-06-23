@@ -4,7 +4,7 @@ import type { Block } from "../api/types";
 import {
   changedLayoutBlocks,
   hasCollision,
-  insertBlockAtTop,
+  insertBlockAtBottom,
   reflowBlocks,
 } from "../lib/grid-utils";
 
@@ -108,18 +108,20 @@ describe("grid reflow", () => {
     expectNoOverlaps(next);
   });
 
-  it("inserts a new block at the top without overlaps", () => {
+  it("inserts a new block at the bottom without moving existing blocks", () => {
     const blocks = [
-      block(1, 0, 0),
-      block(2, 0, 1),
-      block(3, 2, 0),
+      block(1, 0, 0),       // occupies rows 0–0
+      block(2, 0, 1),       // occupies rows 1–1
+      block(3, 2, 0, 2, 2), // occupies rows 0–1
     ];
 
-    const result = insertBlockAtTop(blocks, 2, 1);
+    const result = insertBlockAtBottom(blocks);
 
-    expect(result.position).toEqual({ x: 0, y: 0 });
-    expect(result.blocks.find((item) => item.id === 1)?.grid_y).toBe(1);
-    expect(result.blocks.find((item) => item.id === 2)?.grid_y).toBe(2);
+    // New block lands on a fresh row below the lowest block (max bottom = 2).
+    expect(result.position).toEqual({ x: 0, y: 2 });
+    // Existing blocks are left exactly where they were.
+    expect(result.blocks.find((item) => item.id === 1)?.grid_y).toBe(0);
+    expect(result.blocks.find((item) => item.id === 2)?.grid_y).toBe(1);
     expect(result.blocks.find((item) => item.id === 3)?.grid_y).toBe(0);
     expectNoOverlaps([
       ...result.blocks,
