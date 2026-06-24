@@ -2,8 +2,9 @@
 """Run one GitHub skills sync manually (initial backfill or on demand).
 
 Fetches candidates, classifies + translates via your default AIModelConfig, and
-writes github_skill_repos / github_skill_stats. Run from the backend dir with
-the project Python env and a populated .env:
+writes the generic skills / skill_stats tables. Normally you'd use the admin
+「采集」button instead; this is the CLI equivalent. Run from the backend dir
+with the project Python env and a populated .env:
 
     python3 scripts/github_skills_sync.py
 """
