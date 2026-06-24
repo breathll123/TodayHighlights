@@ -14,6 +14,19 @@ logger = logging.getLogger("today_highlights.ai")
 PostJson = Callable[[dict], Awaitable[dict]]
 
 
+def _strip_json_fence(text: str) -> str:
+    """Some models wrap JSON in a ```json … ``` block despite instructions.
+    Strip the fence so json.loads sees the bare object."""
+    stripped = text.strip()
+    if not stripped.startswith("```"):
+        return stripped
+    lines = stripped.split("\n")
+    lines = lines[1:]  # drop the opening ``` / ```json line
+    if lines and lines[-1].strip().startswith("```"):
+        lines = lines[:-1]  # drop the closing ```
+    return "\n".join(lines).strip()
+
+
 @dataclass(frozen=True)
 class AIJSONResult:
     content: dict
@@ -73,7 +86,7 @@ class AIClient:
             content_text = response["choices"][0]["message"]["content"]
 
             stage = "decode"
-            parsed = json.loads(content_text)
+            parsed = json.loads(_strip_json_fence(content_text))
             usage = extract_token_usage(response, f"{system_prompt}\n{user_prompt}", content_text)
 
             log_event(

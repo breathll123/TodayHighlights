@@ -59,6 +59,7 @@ const SOURCE_TYPE_OPTIONS_AI: { value: Block["source_type"]; label: string }[] =
   { value: "datalearner_aa_index", label: "AI模型智能指数排行榜" },
   { value: "artificial_analysis_ranking", label: "Artificial Analysis 排行榜" },
   { value: "aihot_news", label: "AI 资讯快讯" },
+  { value: "github_skills", label: "GitHub Skills 排行" },
 ];
 
 const ARTIFICIAL_ANALYSIS_DATASETS = [
@@ -257,7 +258,7 @@ export function BlockConfigPanel({ form, onChange, onSave, onCancel }: Props) {
       )}
 
       {/* Display Style — hidden for AA index (list only) */}
-      {form.source_type !== "datalearner_aa_index" && form.source_type !== "artificial_analysis_ranking" && form.source_type !== "market_index_trends" && (
+      {form.source_type !== "datalearner_aa_index" && form.source_type !== "artificial_analysis_ranking" && form.source_type !== "market_index_trends" && form.source_type !== "github_skills" && (
         <div className="space-y-1.5">
           <Label className="text-xs">展示样式</Label>
           <Select value={form.display_style} onValueChange={(v) => update("display_style", v as Block["display_style"])}>

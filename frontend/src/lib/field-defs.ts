@@ -96,6 +96,11 @@ export const FIELD_DEFS: Record<string, FieldDef[]> = {
     { key: "title", label: "标题", type: "text" },
     { key: "subtitle", label: "来源", type: "text" },
   ],
+  github_skills: [
+    { key: "title", label: "名称", type: "text" },
+    { key: "summary", label: "描述", type: "text" },
+    { key: "score", label: "Stars", type: "number" },
+  ],
 };
 
 const DEFAULT_STOCK = ["title", "percent", "score"];
@@ -125,6 +130,7 @@ export const DEFAULT_FIELDS: Record<string, string[]> = {
   artificial_analysis_ranking: ["title", "subtitle", "release", "score"],
   market_index_trends: ["title", "current", "percent"],
   aihot_news: ["title", "subtitle"],
+  github_skills: ["title", "summary", "score"],
 };
 
 export function resolveDisplayFieldKeys(sourceType: string, configuredFields?: unknown): string[] {

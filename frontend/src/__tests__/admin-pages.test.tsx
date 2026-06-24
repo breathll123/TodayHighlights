@@ -15,6 +15,11 @@ vi.mock("../api/client", () => ({
   createSource: vi.fn(),
   triggerCrawl: vi.fn(),
   deleteSource: vi.fn(),
+  fetchGithubSkillsStatus: vi.fn().mockResolvedValue({
+    enabled: false, running: false, repo_count: 0, skill_count: 0, last_synced_at: null,
+  }),
+  setGithubSkillsSyncEnabled: vi.fn(),
+  triggerGithubSkillsSync: vi.fn(),
   fetchJobs: vi.fn().mockResolvedValue({
     total: 1,
     page: 1,

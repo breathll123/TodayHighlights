@@ -9,7 +9,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.logging import bind_log_context, log_event
-from app.models.entities import AARankingDataset, Highlight, PageBlock, RawItem, Source
+from app.models.entities import AARankingDataset, GithubSkillRepo, Highlight, PageBlock, RawItem, Source
 from app.services.adapters.xueqiu import (
     fetch_hot_events, fetch_hot_stocks, fetch_hot_stocks_cn,
     fetch_hot_stocks_hk, fetch_hot_stocks_us, fetch_screener, get_cookie,
@@ -155,6 +155,9 @@ def _source_last_crawled_at(session: Session, block: PageBlock) -> datetime | No
     if block.source_type == "artificial_analysis_ranking":
         return _published_aa_dataset_updated_at(session, block)
 
+    if block.source_type == "github_skills":
+        return session.scalar(select(func.max(GithubSkillRepo.last_synced_at)))
+
     entry_url = _SOURCE_ENTRY_URLS_BY_BLOCK_TYPE.get(block.source_type)
     if entry_url:
         return session.scalar(
@@ -259,6 +262,28 @@ def resolve_block_data(
                 "source_type": "raw",
             }
             for ri in raw_items
+        ]
+
+    if source_type == "github_skills":
+        stmt = (
+            select(GithubSkillRepo)
+            .where(GithubSkillRepo.is_skill.is_(True), GithubSkillRepo.status == "active")
+            .order_by(GithubSkillRepo.stars.desc())
+            .limit(limit)
+        )
+        repos = session.scalars(stmt).all()
+        return [
+            {
+                "id": repo.id,
+                "rank": index + 1,
+                "title": repo.name,
+                "owner": repo.owner,
+                "summary": repo.description_zh or repo.description,
+                "url": repo.url,
+                "score": repo.stars,
+                "source_type": "github_skills",
+            }
+            for index, repo in enumerate(repos)
         ]
 
     if cookie is None:
@@ -470,7 +495,7 @@ def get_page_blocks(session: Session, route: str) -> list[dict]:
         )
 
     # Separate DB-dependent blocks (topic, raw) from live-API blocks
-    db_types = {"topic", "raw", "eastmoney_longhu", "tonghuashun_news", "artificial_analysis_ranking"}
+    db_types = {"topic", "raw", "eastmoney_longhu", "tonghuashun_news", "artificial_analysis_ranking", "github_skills"}
     db_blocks = [b for b in blocks if b.source_type in db_types]
     live_blocks = [b for b in blocks if b.source_type not in db_types]
 

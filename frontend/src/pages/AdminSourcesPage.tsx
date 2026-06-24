@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "sonner";
 import { Pencil } from "lucide-react";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
+import { GithubSkillsSyncCard } from "@/components/admin/GithubSkillsSyncCard";
 import { Skeleton } from "@/components/ui/skeleton";
 
 const ADAPTER_OPTIONS = [
@@ -103,6 +104,8 @@ export function AdminSourcesPage() {
         title="数据源管理"
         description="维护各主题的数据入口、采集周期和访问凭证。新增 AI、足球等垂类时，只需要继续扩展来源适配器。"
       />
+
+      <GithubSkillsSyncCard />
 
       <form
         className="space-y-4 rounded-xl border border-border/75 bg-card/80 p-6 shadow-sm"

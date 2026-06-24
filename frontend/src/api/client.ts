@@ -83,6 +83,26 @@ export function triggerCrawl(sourceId: number): Promise<{ id: number; status: st
   return api.post(`/api/admin/sources/${sourceId}/crawl`, {}).then((r) => r.data);
 }
 
+export interface GithubSkillsStatus {
+  enabled: boolean;
+  running: boolean;
+  repo_count: number;
+  skill_count: number;
+  last_synced_at: string | null;
+}
+
+export function fetchGithubSkillsStatus(): Promise<GithubSkillsStatus> {
+  return api.get<GithubSkillsStatus>("/api/admin/github-skills").then((r) => r.data);
+}
+
+export function setGithubSkillsSyncEnabled(enabled: boolean): Promise<GithubSkillsStatus> {
+  return api.put<GithubSkillsStatus>("/api/admin/github-skills", { enabled }).then((r) => r.data);
+}
+
+export function triggerGithubSkillsSync(): Promise<GithubSkillsStatus> {
+  return api.post<GithubSkillsStatus>("/api/admin/github-skills/sync", {}).then((r) => r.data);
+}
+
 export function deleteSource(sourceId: number): Promise<{ deleted: boolean }> {
   return api.delete(`/api/admin/sources/${sourceId}`).then((r) => r.data);
 }

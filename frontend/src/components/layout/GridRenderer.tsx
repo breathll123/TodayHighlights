@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { motion } from "framer-motion";
-import { ArrowDown, ArrowUp, BrainCircuit, CalendarClock, ChartNoAxesCombined, Newspaper, Trophy } from "lucide-react";
+import { ArrowDown, ArrowUp, BrainCircuit, CalendarClock, ChartNoAxesCombined, Newspaper, Star, Trophy } from "lucide-react";
 import { useMutation } from "@tanstack/react-query";
 import { useLocation } from "react-router-dom";
 import { BlockCard } from "./BlockCard";
@@ -12,6 +12,7 @@ import { NewsTimeline } from "./NewsTimeline";
 import { StandingsTable } from "./StandingsTable";
 import { LeaderboardTable } from "./LeaderboardTable";
 import { LonghuList } from "./LonghuList";
+import { SkillRanking } from "./SkillRanking";
 import { ArtificialAnalysisRanking } from "./ArtificialAnalysisRanking";
 import { MarketIndexBar } from "./MarketIndexBar";
 import { SectionHeading } from "./SectionHeading";
@@ -88,6 +89,7 @@ const SOURCE_NAMES: Record<string, string> = {
   aihot_news: "AI HOT",
   artificial_analysis_ranking: "Artificial Analysis",
   market_index_trends: "东方财富",
+  github_skills: "GitHub",
 };
 
 const SOURCE_URLS: Record<string, string> = {
@@ -99,6 +101,7 @@ const SOURCE_URLS: Record<string, string> = {
   datalearner: "https://www.datalearner.com/",
   aihot: "https://aihot.virxact.com/",
   artificial_analysis: "https://artificialanalysis.ai/",
+  github: "https://github.com/",
 };
 
 function sourceUrlFor(sourceType: string): string | undefined {
@@ -111,6 +114,7 @@ function sourceUrlFor(sourceType: string): string | undefined {
   if (sourceType.startsWith("aihot")) return SOURCE_URLS.aihot;
   if (sourceType.startsWith("artificial_analysis")) return SOURCE_URLS.artificial_analysis;
   if (sourceType.startsWith("market_index")) return SOURCE_URLS.eastmoney;
+  if (sourceType === "github_skills") return SOURCE_URLS.github;
   return undefined;
 }
 
@@ -130,6 +134,7 @@ function sectionIcon(sourceType: string) {
   if (sourceType === "qiumiwu_standings") return Trophy;
   if (sourceType.startsWith("datalearner_")) return BrainCircuit;
   if (sourceType === "tonghuashun_news") return Newspaper;
+  if (sourceType === "github_skills") return Star;
   return ChartNoAxesCombined;
 }
 
@@ -444,6 +449,8 @@ export function GridRenderer({ blocks, isLoading, dataUpdatedAt }: { blocks: any
               <AAIndexBlock block={block} displayFields={displayFields} onAnalysisDataChange={(visible, label) => setBlockAnalysisScope(block.id, visible, label)} />
             ) : block.source_type === "datalearner_leaderboard" ? (
               <LeaderboardTable data={block.data} />
+            ) : block.source_type === "github_skills" ? (
+              <SkillRanking data={block.data} fields={displayFields} />
             ) : block.source_type === "market_index_trends" ? (
               <MarketIndexBar data={block.data} />
             ) : block.source_type === "artificial_analysis_ranking" ? (
