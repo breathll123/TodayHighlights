@@ -3,6 +3,7 @@ import { useState } from "react";
 import { createAIPromptTemplate, deleteAIPromptTemplate, fetchAIPromptTemplates, updateAIPromptTemplate } from "@/api/client";
 import type { AIPromptTemplate, AIPromptTemplateWrite } from "@/api/types";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
+import { SkillsPromptsSection } from "@/components/admin/SkillsPromptsSection";
 import { TableSkeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -46,6 +47,8 @@ export function AdminPromptTemplatesPage() {
   return (
     <div className="space-y-5">
       <AdminPageHeader eyebrow="Prompt Templates" title="Prompt 模板" description="按主题和内容类型维护区块 AI 分析的领域背景与额外禁令。" />
+
+      <SkillsPromptsSection />
 
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
         <div className="overflow-x-auto rounded-lg border bg-card">

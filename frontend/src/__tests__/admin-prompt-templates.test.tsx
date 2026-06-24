@@ -23,6 +23,8 @@ vi.mock("@/api/client", () => ({
   createAIPromptTemplate: vi.fn(),
   updateAIPromptTemplate: vi.fn(),
   deleteAIPromptTemplate: vi.fn(),
+  fetchSkillsPrompts: vi.fn().mockResolvedValue({ classify_prompt: "c", translate_prompt: "t" }),
+  setSkillsPrompts: vi.fn(),
 }));
 
 function Wrapper({ children }: { children: React.ReactNode }) {

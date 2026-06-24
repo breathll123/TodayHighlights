@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { fetchAdminTopics, fetchSources, createSource, updateSource, triggerCrawl } from "../api/client";
+import { fetchAdminTopics, fetchSources, createSource, updateSource, triggerCrawl, reparseSource } from "../api/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -8,9 +8,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Pencil } from "lucide-react";
+import { Pencil, Sparkles } from "lucide-react";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
-import { GithubSkillsSyncCard } from "@/components/admin/GithubSkillsSyncCard";
 import { Skeleton } from "@/components/ui/skeleton";
 
 const ADAPTER_OPTIONS = [
@@ -81,6 +80,11 @@ export function AdminSourcesPage() {
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["jobs"] }); toast.success("爬取已触发"); },
     onError: (err: Error) => toast.error(`爬取失败: ${err.message}`),
   });
+  const reparseMut = useMutation({
+    mutationFn: reparseSource,
+    onSuccess: () => toast.success("已开始重新解析，完成后排行自动更新"),
+    onError: (err: Error) => toast.error(`重新解析失败: ${err.message}`),
+  });
 
   if (isLoading || topicsLoading) {
     return (
@@ -104,8 +108,6 @@ export function AdminSourcesPage() {
         title="数据源管理"
         description="维护各主题的数据入口、采集周期和访问凭证。新增 AI、足球等垂类时，只需要继续扩展来源适配器。"
       />
-
-      <GithubSkillsSyncCard />
 
       <form
         className="space-y-4 rounded-xl border border-border/75 bg-card/80 p-6 shadow-sm"
@@ -208,8 +210,13 @@ export function AdminSourcesPage() {
                         <Pencil className="w-3 h-3 mr-1" />编辑
                       </Button>
                       <Button size="sm" onClick={() => crawlMut.mutate(s.id)} disabled={crawlMut.isPending}>
-                        立即爬取
+                        {s.site === "github_skills" ? "采集" : "立即爬取"}
                       </Button>
+                      {s.site === "github_skills" ? (
+                        <Button size="sm" variant="outline" onClick={() => reparseMut.mutate(s.id)} disabled={reparseMut.isPending}>
+                          <Sparkles className="w-3 h-3 mr-1" />重新解析
+                        </Button>
+                      ) : null}
                     </td>
                   </tr>
                 ))}

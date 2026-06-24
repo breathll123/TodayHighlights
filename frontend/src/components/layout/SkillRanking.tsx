@@ -1,9 +1,9 @@
 import { motion } from "framer-motion";
 import { Star } from "lucide-react";
 import type { FieldDef } from "@/lib/field-defs";
+import { cn } from "@/lib/utils";
 
 const easeOutQuint: [number, number, number, number] = [0.22, 1, 0.36, 1];
-const DESC_MAX = 30;
 
 interface SkillItem {
   id?: string | number;
@@ -13,10 +13,6 @@ interface SkillItem {
   summary?: string;
   url?: string;
   score?: number;
-}
-
-function truncate(text: string, max: number): string {
-  return text.length > max ? `${text.slice(0, max)}…` : text;
 }
 
 function formatStars(value: number | undefined): string {
@@ -39,7 +35,7 @@ export function SkillRanking({ data, fields }: { data: SkillItem[]; fields: Fiel
   }
 
   return (
-    <div className="overflow-hidden rounded-lg border border-border/70 bg-card/75">
+    <div className="rounded-lg border border-border/70 bg-card/75">
       {data.map((item, index) => (
         <motion.a
           key={item.id ?? index}
@@ -49,22 +45,29 @@ export function SkillRanking({ data, fields }: { data: SkillItem[]; fields: Fiel
           initial={{ opacity: 0, y: 4 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.22, delay: Math.min(index, 8) * 0.025, ease: easeOutQuint }}
-          className="signal-row relative flex items-center gap-3 border-b px-3 py-2.5 transition-colors last:border-0 hover:bg-muted/30"
+          className="skill-row signal-row relative flex items-center gap-3 border-b px-3 py-2.5 transition-colors first:rounded-t-lg last:rounded-b-lg last:border-0 hover:bg-muted/30"
         >
           <span className="w-6 shrink-0 text-center text-xs font-semibold tabular-nums text-muted-foreground">
             {item.rank ?? index + 1}
           </span>
-          <div className="min-w-0 flex-1">
+          <div className={cn("min-w-0", showDesc ? "max-w-[42%] shrink-0" : "flex-1")}>
             <div className="flex items-baseline gap-1.5">
               <span className="truncate text-sm font-medium text-foreground">{item.title}</span>
               {item.owner ? (
                 <span className="shrink-0 text-[11px] text-muted-foreground/70">{item.owner}</span>
               ) : null}
             </div>
-            {showDesc && item.summary ? (
-              <p className="mt-0.5 truncate text-xs text-muted-foreground">{truncate(item.summary, DESC_MAX)}</p>
-            ) : null}
           </div>
+          {showDesc ? (
+            item.summary ? (
+              <div className="skill-desc relative min-w-0 flex-1">
+                <p className="truncate text-xs text-muted-foreground">{item.summary}</p>
+                <span className="skill-desc-tip" role="tooltip">{item.summary}</span>
+              </div>
+            ) : (
+              <div className="flex-1" />
+            )
+          ) : null}
           {showStars ? (
             <span className="inline-flex shrink-0 items-center gap-1 text-xs tabular-nums text-muted-foreground">
               <Star className="h-3 w-3 text-amber-400" aria-hidden="true" />

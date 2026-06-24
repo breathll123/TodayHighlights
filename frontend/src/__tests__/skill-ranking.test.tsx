@@ -7,33 +7,32 @@ import { FIELD_DEFS } from "../lib/field-defs";
 const ALL_FIELDS = FIELD_DEFS.github_skills;
 
 describe("SkillRanking", () => {
-  it("renders name, owner, truncated description, compact stars, and links to GitHub", () => {
-    const longDesc = "这是一个非常非常非常非常非常非常长的中文描述用来测试三十字截断逻辑是否真正生效";
+  it("renders name + owner, compact stars, links to GitHub, and shows the full description (truncated row + hover tooltip)", () => {
+    const longDesc = "一个把任意代码仓库、SQL 模式、脚本、文档转成可查询知识图谱的 skill，支持多种 AI 编码助手";
     render(
       <SkillRanking
         data={[
           {
             id: 1,
             rank: 1,
-            title: "frontend-slides",
-            owner: "zarazhangrui",
+            title: "graphify",
+            owner: "safishamsi",
             summary: longDesc,
-            url: "https://github.com/zarazhangrui/frontend-slides",
-            score: 22630,
+            url: "https://github.com/safishamsi/graphify",
+            score: 71371,
           },
         ]}
         fields={ALL_FIELDS}
       />,
     );
 
-    expect(screen.getByRole("link")).toHaveAttribute(
-      "href",
-      "https://github.com/zarazhangrui/frontend-slides",
-    );
-    expect(screen.getByText("frontend-slides")).toBeInTheDocument();
-    expect(screen.getByText("zarazhangrui")).toBeInTheDocument();
-    expect(screen.getByText("22.6k")).toBeInTheDocument();
-    expect(screen.getByText(`${longDesc.slice(0, 30)}…`)).toBeInTheDocument();
+    expect(screen.getByRole("link")).toHaveAttribute("href", "https://github.com/safishamsi/graphify");
+    expect(screen.getByText("graphify")).toBeInTheDocument();
+    expect(screen.getByText("safishamsi")).toBeInTheDocument();
+    expect(screen.getByText("71.4k")).toBeInTheDocument();
+    // Full text is rendered (not cut to 30 chars): the visible row + the hover tooltip.
+    expect(screen.getAllByText(longDesc).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByRole("tooltip")).toHaveTextContent(longDesc);
   });
 
   it("hides description and stars when those fields are deselected", () => {

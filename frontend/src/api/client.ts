@@ -83,24 +83,21 @@ export function triggerCrawl(sourceId: number): Promise<{ id: number; status: st
   return api.post(`/api/admin/sources/${sourceId}/crawl`, {}).then((r) => r.data);
 }
 
-export interface GithubSkillsStatus {
-  enabled: boolean;
-  running: boolean;
-  repo_count: number;
-  skill_count: number;
-  last_synced_at: string | null;
+export function reparseSource(sourceId: number): Promise<{ status: string }> {
+  return api.post(`/api/admin/sources/${sourceId}/reparse`, {}).then((r) => r.data);
 }
 
-export function fetchGithubSkillsStatus(): Promise<GithubSkillsStatus> {
-  return api.get<GithubSkillsStatus>("/api/admin/github-skills").then((r) => r.data);
+export interface SkillsPrompts {
+  classify_prompt: string;
+  translate_prompt: string;
 }
 
-export function setGithubSkillsSyncEnabled(enabled: boolean): Promise<GithubSkillsStatus> {
-  return api.put<GithubSkillsStatus>("/api/admin/github-skills", { enabled }).then((r) => r.data);
+export function fetchSkillsPrompts(): Promise<SkillsPrompts> {
+  return api.get<SkillsPrompts>("/api/admin/skills-prompts").then((r) => r.data);
 }
 
-export function triggerGithubSkillsSync(): Promise<GithubSkillsStatus> {
-  return api.post<GithubSkillsStatus>("/api/admin/github-skills/sync", {}).then((r) => r.data);
+export function setSkillsPrompts(data: SkillsPrompts): Promise<SkillsPrompts> {
+  return api.put<SkillsPrompts>("/api/admin/skills-prompts", data).then((r) => r.data);
 }
 
 export function deleteSource(sourceId: number): Promise<{ deleted: boolean }> {
