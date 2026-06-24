@@ -493,35 +493,37 @@ class AACreatorRegion(TimestampMixin, Base):
     notes: Mapped[str] = mapped_column(Text, default="", nullable=False)
 
 
-class GithubSkillRepo(TimestampMixin, Base):
-    """A GitHub repository surfaced by the skill-topic search — current snapshot
-    plus the cached LLM classification and Chinese description."""
+class Skill(TimestampMixin, Base):
+    """A source-agnostic skill record. Each provider (github, and future ones)
+    upserts here keyed by (source, external_id). The current snapshot plus the
+    cached LLM classification and Chinese description."""
 
-    __tablename__ = "github_skill_repos"
+    __tablename__ = "skills"
     __table_args__ = (
-        Index("ix_github_skill_repos_skill_stars", "is_skill", "status", "stars"),
+        UniqueConstraint("source", "external_id", name="uq_skills_source_external"),
+        Index("ix_skills_kept_pop", "is_skill", "status", "popularity"),
     )
 
-    # GitHub's repo id is the primary key (stable, not autoincrement).
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=False)
-    full_name: Mapped[str] = mapped_column(String(255), nullable=False)
-    owner: Mapped[str] = mapped_column(String(120), default="", nullable=False)
-    name: Mapped[str] = mapped_column(String(160), default="", nullable=False)
+    id: Mapped[int] = mapped_column(BIGINT_PK, primary_key=True, autoincrement=True)
+    source: Mapped[str] = mapped_column(String(40), nullable=False)            # "github"
+    external_id: Mapped[str] = mapped_column(String(120), nullable=False)      # provider's stable id
+    name: Mapped[str] = mapped_column(String(200), default="", nullable=False)
+    author: Mapped[str] = mapped_column(String(160), default="", nullable=False)  # owner/creator
     url: Mapped[str] = mapped_column(String(500), default="", nullable=False)
     language: Mapped[str] = mapped_column(String(60), default="", nullable=False)
-    topics_json: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
-    topics_matched_json: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
-    stars: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
-    forks: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
-    pushed_at: Mapped[datetime | None] = mapped_column(DateTime)
 
     description: Mapped[str] = mapped_column(Text, default="", nullable=False)
     description_zh: Mapped[str] = mapped_column(Text, default="", nullable=False)
 
-    # LLM classification (cached; recomputed only when the description changes).
+    popularity: Mapped[int] = mapped_column(BigInteger, default=0, nullable=False)   # generic ranking metric (stars)
+    popularity_kind: Mapped[str] = mapped_column(String(20), default="stars", nullable=False)
+    extra_json: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)      # provider-specific (topics, forks, ...)
+
+    # LLM classification (cached; recomputed on new / desc change / prompt change).
     is_skill: Mapped[bool | None] = mapped_column(Boolean)
     skill_kind: Mapped[str] = mapped_column(String(30), default="", nullable=False)
     classify_reason: Mapped[str] = mapped_column(String(120), default="", nullable=False)
+    classify_prompt_version: Mapped[str] = mapped_column(String(64), default="", nullable=False)
     classified_by_model: Mapped[str] = mapped_column(String(120), default="", nullable=False)
     classified_at: Mapped[datetime | None] = mapped_column(DateTime)
 
@@ -533,17 +535,16 @@ class GithubSkillRepo(TimestampMixin, Base):
     status: Mapped[str] = mapped_column(String(20), default="active", nullable=False)
 
 
-class GithubSkillStat(Base):
-    """Daily stars/forks snapshot per repo — the time series behind the future
+class SkillStat(Base):
+    """Daily popularity snapshot per skill — the time series behind the future
     day/week/month trend leaderboards (recorded from day one, not yet displayed)."""
 
-    __tablename__ = "github_skill_stats"
+    __tablename__ = "skill_stats"
     __table_args__ = (
-        Index("ix_github_skill_stats_repo_captured", "repo_id", "captured_at"),
+        Index("ix_skill_stats_skill_captured", "skill_id", "captured_at"),
     )
 
     id: Mapped[int] = mapped_column(BIGINT_PK, primary_key=True, autoincrement=True)
-    repo_id: Mapped[int] = mapped_column(ForeignKey("github_skill_repos.id"), nullable=False)
-    stars: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
-    forks: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    skill_id: Mapped[int] = mapped_column(ForeignKey("skills.id"), nullable=False)
+    popularity: Mapped[int] = mapped_column(BigInteger, default=0, nullable=False)
     captured_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
