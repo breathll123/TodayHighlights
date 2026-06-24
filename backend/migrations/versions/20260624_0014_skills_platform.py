@@ -88,12 +88,15 @@ def upgrade() -> None:
             FROM github_skill_repos
             """
         ))
+        # Join on the numeric id (external_id holds the github repo id as a
+        # string) to avoid a utf8mb4 collation clash between the column and the
+        # CAST(... AS CHAR) result on MySQL 8.
         bind.execute(sa.text(
             """
             INSERT INTO skill_stats (skill_id, popularity, captured_at)
             SELECT s.id, st.stars, st.captured_at
             FROM github_skill_stats st
-            JOIN skills s ON s.source = 'github' AND s.external_id = CAST(st.repo_id AS CHAR)
+            JOIN skills s ON s.source = 'github' AND CAST(s.external_id AS UNSIGNED) = st.repo_id
             """
         ))
         op.drop_table("github_skill_stats")

@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 import { AdminPromptTemplatesPage } from "@/pages/AdminPromptTemplatesPage";
@@ -36,13 +37,37 @@ function Wrapper({ children }: { children: React.ReactNode }) {
 }
 
 describe("AdminPromptTemplatesPage", () => {
-  it("renders prompt templates and constrained form fields", async () => {
+  it("separates page analysis and data cleaning prompts", async () => {
     render(<AdminPromptTemplatesPage />, { wrapper: Wrapper });
 
     expect(screen.getByText("Prompt 模板")).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /页面级分析/ })).toHaveAttribute("aria-selected", "true");
+    expect(await screen.findByText("stocks")).toBeInTheDocument();
+    expect(screen.queryByText("Skills 数据清洗")).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("tab", { name: /数据清洗级/ }));
+
+    expect(await screen.findByText("Skills 数据清洗")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /内容识别/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /中文整理/ })).toBeInTheDocument();
+  });
+
+  it("opens page template create and edit forms in a dialog", async () => {
+    render(<AdminPromptTemplatesPage />, { wrapper: Wrapper });
+
+    expect(screen.queryByLabelText("主题 slug")).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /新增模板/ }));
+
+    expect(screen.getByRole("dialog", { name: "新增页面分析模板" })).toBeInTheDocument();
     expect(screen.getByLabelText("主题 slug")).toBeInTheDocument();
     expect(screen.getByLabelText("内容类型")).toBeInTheDocument();
     expect(screen.getByLabelText("领域背景")).toBeInTheDocument();
     expect(screen.getByLabelText("额外禁令")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "取消" }));
+    await userEvent.click(screen.getByRole("button", { name: /编辑 stocks/ }));
+
+    expect(screen.getByRole("dialog", { name: "编辑页面分析模板" })).toBeInTheDocument();
+    expect(screen.getByDisplayValue("关注政策信号")).toBeInTheDocument();
   });
 });
