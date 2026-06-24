@@ -10,7 +10,7 @@ from app.core.auth import get_current_user, verify_admin
 from app.core.config import settings
 from app.core.crypto import CryptoService
 from app.core.database import get_session
-from app.models.entities import AIGenerationJob, AIBlockAnalysis, AIPromptTemplate, AITokenUsage, CrawlJob, GithubSkillRepo, Highlight, PageBlock, Source, Topic, User
+from app.models.entities import AIGenerationJob, AIBlockAnalysis, AIPromptTemplate, AITokenUsage, CrawlJob, Highlight, PageBlock, Source, Topic, User
 from app.schemas.admin import AIJobListResponse, AIJobRead, AIModelConfigWrite, BlockCreate, BlockRead, BlockUpdate, HighlightUpdate, ReorderRequest, SourceCreate, SourceRead, SourceUpdate
 from app.schemas.ai_prompt_template import AIPromptTemplateRead, AIPromptTemplateWrite
 from app.schemas.auth import UserRead
@@ -19,7 +19,9 @@ from app.services.ai_enrichment import generate_topic_summary, retry_item_enrich
 from app.services.ai_models import create_ai_model, list_ai_models, serialize_ai_model, set_default_ai_model, update_ai_model
 from app.services.content import update_highlight_review
 from app.services.jobs import run_crawl_job
-from app.services.github_skills import is_sync_enabled, is_sync_running, set_sync_enabled, trigger_sync_async
+from app.services.skills.providers import SITE_TO_SOURCE
+from app.services.skills.sync import submit_reparse, submit_source_sync
+from app.services.skills.prompts import get_classify_prompt, get_translate_prompt, set_classify_prompt, set_translate_prompt
 from app.services.settings import get_plain_setting, get_secret_setting, set_plain_setting, set_secret_setting
 from app.services.audit_logging import log_admin_change
 
@@ -135,67 +137,63 @@ def trigger_crawl(source_id: int, request: Request, session: Session = Depends(g
     source = session.get(Source, source_id)
     if source is None:
         raise HTTPException(status_code=404, detail="Source not found")
-    job = run_crawl_job(session, source_id, "manual")
     log_admin_change(
-        request=request,
-        action="trigger",
-        object_type="source",
-        object_name=source.name,
-        object_id=source.id,
-        changed_fields=["crawl"],
+        request=request, action="trigger", object_type="source",
+        object_name=source.name, object_id=source.id, changed_fields=["crawl"],
     )
+    # Skills sources run a slow AI pipeline — dispatch in the background and let
+    # the 任务 page show the resulting CrawlJob.
+    if source.site in SITE_TO_SOURCE:
+        submit_source_sync(source_id)
+        return {"status": "running", "background": True}
+    job = run_crawl_job(session, source_id, "manual")
     return {"id": job.id, "status": job.status, "items_found": job.items_found, "items_saved": job.items_saved}
 
 
-class GithubSkillsToggle(BaseModel):
-    enabled: bool
+@router.post("/sources/{source_id}/reparse")
+def reparse_source(source_id: int, request: Request, session: Session = Depends(get_session)) -> dict:
+    """「重新解析」: re-run the AI classify+translate on the rows already in the DB
+    (no provider re-fetch). Only valid for skills sources."""
+    source = session.get(Source, source_id)
+    if source is None or source.site not in SITE_TO_SOURCE:
+        raise HTTPException(status_code=404, detail="Not a skills source")
+    submit_reparse(SITE_TO_SOURCE[source.site])
+    log_admin_change(
+        request=request, action="reparse", object_type="source",
+        object_name=source.name, object_id=source.id, changed_fields=["reparse"],
+    )
+    return {"status": "started"}
 
 
-def _github_skills_status(session: Session) -> dict:
-    repo_count = session.scalar(
-        select(func.count()).select_from(GithubSkillRepo).where(GithubSkillRepo.status == "active")
-    ) or 0
-    skill_count = session.scalar(
-        select(func.count()).select_from(GithubSkillRepo)
-        .where(GithubSkillRepo.is_skill.is_(True), GithubSkillRepo.status == "active")
-    ) or 0
-    last_synced = session.scalar(select(func.max(GithubSkillRepo.last_synced_at)))
+class SkillsPromptWrite(BaseModel):
+    classify_prompt: str
+    translate_prompt: str
+
+
+@router.get("/skills-prompts")
+def get_skills_prompts(session: Session = Depends(get_session)) -> dict:
     return {
-        "enabled": is_sync_enabled(session),
-        "running": is_sync_running(),
-        "repo_count": repo_count,
-        "skill_count": skill_count,
-        "last_synced_at": last_synced.isoformat() if last_synced else None,
+        "classify_prompt": get_classify_prompt(session),
+        "translate_prompt": get_translate_prompt(session),
     }
 
 
-@router.get("/github-skills")
-def github_skills_status(session: Session = Depends(get_session)) -> dict:
-    return _github_skills_status(session)
-
-
-@router.put("/github-skills")
-def github_skills_set_enabled(
-    body: GithubSkillsToggle, request: Request, session: Session = Depends(get_session)
+@router.put("/skills-prompts")
+def update_skills_prompts(
+    body: SkillsPromptWrite, request: Request, session: Session = Depends(get_session)
 ) -> dict:
-    set_sync_enabled(session, body.enabled)
+    set_classify_prompt(session, body.classify_prompt)
+    set_translate_prompt(session, body.translate_prompt)
+    session.commit()
     log_admin_change(
-        request=request, action="update", object_type="github_skills",
-        object_name="GitHub Skills 同步", object_id=0,
-        changed_fields=["sync_enabled"],
+        request=request, action="update", object_type="skills_prompts",
+        object_name="Skills 解析提示词", object_id=0,
+        changed_fields=["classify_prompt", "translate_prompt"],
     )
-    return _github_skills_status(session)
-
-
-@router.post("/github-skills/sync")
-def github_skills_sync_now(request: Request, session: Session = Depends(get_session)) -> dict:
-    if not trigger_sync_async():
-        raise HTTPException(status_code=409, detail="同步正在进行中")
-    log_admin_change(
-        request=request, action="trigger", object_type="github_skills",
-        object_name="GitHub Skills 同步", object_id=0, changed_fields=["sync"],
-    )
-    return _github_skills_status(session)
+    return {
+        "classify_prompt": get_classify_prompt(session),
+        "translate_prompt": get_translate_prompt(session),
+    }
 
 
 @router.get("/jobs")

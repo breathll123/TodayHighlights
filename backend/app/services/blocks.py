@@ -9,7 +9,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.logging import bind_log_context, log_event
-from app.models.entities import AARankingDataset, GithubSkillRepo, Highlight, PageBlock, RawItem, Source
+from app.models.entities import AARankingDataset, Highlight, PageBlock, RawItem, Skill, Source
 from app.services.adapters.xueqiu import (
     fetch_hot_events, fetch_hot_stocks, fetch_hot_stocks_cn,
     fetch_hot_stocks_hk, fetch_hot_stocks_us, fetch_screener, get_cookie,
@@ -156,7 +156,7 @@ def _source_last_crawled_at(session: Session, block: PageBlock) -> datetime | No
         return _published_aa_dataset_updated_at(session, block)
 
     if block.source_type == "github_skills":
-        return session.scalar(select(func.max(GithubSkillRepo.last_synced_at)))
+        return session.scalar(select(func.max(Skill.last_synced_at)).where(Skill.source == "github"))
 
     entry_url = _SOURCE_ENTRY_URLS_BY_BLOCK_TYPE.get(block.source_type)
     if entry_url:
@@ -266,24 +266,24 @@ def resolve_block_data(
 
     if source_type == "github_skills":
         stmt = (
-            select(GithubSkillRepo)
-            .where(GithubSkillRepo.is_skill.is_(True), GithubSkillRepo.status == "active")
-            .order_by(GithubSkillRepo.stars.desc())
+            select(Skill)
+            .where(Skill.source == "github", Skill.is_skill.is_(True), Skill.status == "active")
+            .order_by(Skill.popularity.desc())
             .limit(limit)
         )
-        repos = session.scalars(stmt).all()
+        skills = session.scalars(stmt).all()
         return [
             {
-                "id": repo.id,
+                "id": skill.id,
                 "rank": index + 1,
-                "title": repo.name,
-                "owner": repo.owner,
-                "summary": repo.description_zh or repo.description,
-                "url": repo.url,
-                "score": repo.stars,
+                "title": skill.name,
+                "owner": skill.author,
+                "summary": skill.description_zh or skill.description,
+                "url": skill.url,
+                "score": skill.popularity,
                 "source_type": "github_skills",
             }
-            for index, repo in enumerate(repos)
+            for index, skill in enumerate(skills)
         ]
 
     if cookie is None:

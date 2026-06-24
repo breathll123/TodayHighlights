@@ -20,7 +20,6 @@ SCHEDULER_JOB_NAMES = {
     "scheduled_cleanup": "清理过期数据",
     "artificial_analysis_morning": "同步模型榜单（早间）",
     "artificial_analysis_evening": "同步模型榜单（晚间）",
-    "github_skills_sync": "同步 GitHub Skills 排行",
 }
 
 
@@ -121,14 +120,6 @@ def create_scheduler() -> BackgroundScheduler:
             id="artificial_analysis_evening", replace_existing=True,
         )
 
-    # Always registered; the job itself checks the admin toggle (app_settings)
-    # at fire time, so enabling/disabling from the UI needs no restart.
-    from app.services.github_skills import scheduled_sync as github_skills_sync
-
-    gh_parts = settings.github_skills_schedule.strip().split(":")
-    scheduler.add_job(
-        github_skills_sync, "cron", hour=int(gh_parts[0]), minute=int(gh_parts[1]),
-        id="github_skills_sync", replace_existing=True,
-    )
-
+    # GitHub Skills sync is now a Source row driven by crawl_enabled_sources
+    # (next_crawl_at + crawl_interval), no dedicated cron needed.
     return scheduler

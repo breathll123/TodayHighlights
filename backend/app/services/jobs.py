@@ -15,6 +15,8 @@ from app.services.ai_enrichment import create_pending_enrichments, process_item_
 logger = logging.getLogger("today_highlights.crawler")
 from app.services.content import save_raw_items
 from app.services.settings import get_plain_setting, get_secret_setting
+from app.services.skills.providers import SITE_TO_SOURCE
+from app.services.skills.sync import run_provider_sync_inline
 from app.services.summarizer import HighlightDraft, SummarizerClient
 from app.sources import get_adapter
 
@@ -102,6 +104,26 @@ def run_crawl_job(session: Session, source_id: int, trigger_type: str) -> CrawlJ
         stage = "fetch"
 
         try:
+            # Skills sources (e.g. github_skills) don't crawl into RawItems — they
+            # run the skills pipeline (fetch → classify → translate) and report
+            # candidate/kept counts as the job's found/saved.
+            if source.site in SITE_TO_SOURCE:
+                stage = "skills_sync"
+                summary = run_provider_sync_inline(session, source)
+                job.status = "success"
+                job.items_found = summary.get("candidates", 0)
+                job.items_saved = summary.get("kept", 0)
+                job.finished_at = datetime.now(SH_TZ)
+                source.last_crawled_at = job.finished_at
+                source.next_crawl_at = job.finished_at.replace(tzinfo=None) + timedelta(minutes=source.crawl_interval_minutes)
+                log_event(
+                    logger, channel="application", category="crawler", event="crawl.completed",
+                    status="success", found=job.items_found, saved=job.items_saved,
+                    duration=format_duration(time.perf_counter() - started),
+                )
+                session.commit()
+                return job
+
             stage = "decrypt"
             cookie = CryptoService(settings.app_secret_key).decrypt(source.cookie_encrypted)
 

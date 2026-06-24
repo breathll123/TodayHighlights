@@ -15,12 +15,14 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from app.core.database import SessionLocal  # noqa: E402
-from app.services.github_skills import sync_github_skills  # noqa: E402
+from app.services.skills.providers import fetch_candidates  # noqa: E402
+from app.services.skills.sync import sync_provider  # noqa: E402
 
 
 def main() -> None:
     with SessionLocal() as session:
-        summary = sync_github_skills(session)
+        candidates = fetch_candidates("github")
+        summary = sync_provider(session, "github", candidates)
     print(f"done: {summary}")
 
 

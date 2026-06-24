@@ -47,6 +47,7 @@ BUILTIN_SOURCES = (
     BuiltinSource("football", "dongqiudi", "懂球帝-比赛数据", "dongqiudi://matches", 1),
     BuiltinSource("football", "qiumiwu", "球迷屋-比赛数据", "qiumiwu://matches", 2),
     BuiltinSource("ai", "aihot", "AI HOT-资讯快讯", "aihot://news", 2),
+    BuiltinSource("ai", "github_skills", "GitHub-Skills 排行", "github_skills://ranking", 1440, enabled=False),
 )
 
 

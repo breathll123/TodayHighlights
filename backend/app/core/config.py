@@ -27,7 +27,6 @@ class Settings(BaseSettings):
     artificial_analysis_schedule_evening: str = "20:30"
     artificial_analysis_stale_hours: int = 36
     github_token: str = ""  # optional PAT — raises GitHub search rate limit 10→30/min
-    github_skills_schedule: str = "04:00"  # daily sync time (HH:MM, Asia/Shanghai)
     github_skills_topics: str = "topic:claude-skill,topic:codex-skill,topic:skills"
     github_skills_min_stars: int = 30
     github_skills_top_k: int = 150  # how many top-starred candidates to classify
