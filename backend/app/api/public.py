@@ -1,6 +1,5 @@
 from hashlib import sha256
 from pathlib import Path
-from urllib.parse import urlparse
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -9,6 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.database import get_session
+from app.core.url_security import UnsafeURLError, is_safe_url, safe_get
 from app.models.entities import AITopicSummary, Highlight, MediaAsset, Topic
 from app.schemas.public import AITopicSummaryItemRead, AITopicSummaryRead, HighlightRead, TopicRead
 from app.services.adapters.eastmoney import fetch_index_trends
@@ -94,7 +94,15 @@ def get_cached_media(url_hash: str, session: Session = Depends(get_session)):
     return FileResponse(asset.local_path, media_type=asset.content_type or "application/octet-stream")
 
 
-_IMAGE_CLIENT = httpx.Client(timeout=10, headers={"User-Agent": "Mozilla/5.0", "Referer": "https://www.qiumiwu.com/"})
+# follow_redirects=False: 重定向由 safe_get() 逐跳校验，杜绝"公网 URL 302 跳内网"绕过
+_IMAGE_CLIENT = httpx.Client(
+    timeout=10,
+    follow_redirects=False,
+    headers={"User-Agent": "Mozilla/5.0", "Referer": "https://www.qiumiwu.com/"},
+)
+
+# 单张代理图片的最大字节数，防止超大响应耗尽内存/磁盘
+_MAX_IMAGE_BYTES = 10 * 1024 * 1024
 
 # Disk cache for proxied images
 _IMG_CACHE_DIR = Path("/tmp/today-highlights-img-cache")
@@ -103,10 +111,12 @@ _IMG_CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
 @router.get("/proxy/image")
 def proxy_image(url: str = Query(...)):
-    """Proxy third-party images with local disk cache."""
-    domain = urlparse(url).netloc
-    if domain in ("localhost", "127.0.0.1", "::1") or domain.startswith("10.") or domain.startswith("192.168.") or domain.startswith("172.16."):
-        raise HTTPException(status_code=403, detail=f"Internal host blocked: {domain}")
+    """Proxy third-party images with local disk cache.
+
+    SSRF 防护：仅允许解析到公网 IP 的 http(s) 地址；重定向逐跳校验。
+    """
+    if not is_safe_url(url):
+        raise HTTPException(status_code=403, detail="Blocked: target is not a public http(s) URL")
 
     # Disk cache: hash URL → local file
     cache_key = sha256(url.encode()).hexdigest()[:24]
@@ -116,7 +126,7 @@ def proxy_image(url: str = Query(...)):
         return FileResponse(cache_file, media_type="image/png")
 
     try:
-        resp = _IMAGE_CLIENT.get(url)
+        resp = safe_get(_IMAGE_CLIENT, url, max_bytes=_MAX_IMAGE_BYTES)
         resp.raise_for_status()
         body = resp.content
         if not body:
@@ -128,6 +138,8 @@ def proxy_image(url: str = Query(...)):
         # Save to disk cache
         cache_file.write_bytes(body)
         return FileResponse(cache_file, media_type=content_type)
+    except UnsafeURLError:
+        raise HTTPException(status_code=403, detail="Blocked: redirect target is not public")
     except Exception:
         # Return 1x1 transparent PNG (not cached)
         return StreamingResponse(

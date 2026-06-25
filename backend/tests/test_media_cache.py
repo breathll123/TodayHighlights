@@ -1,14 +1,32 @@
 import logging
+import socket
 from datetime import datetime
 from pathlib import Path
 
+import pytest
 from sqlalchemy import inspect
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session as SASession
 
+import app.core.url_security as url_security
 from app.core.database import get_session
 from app.models.entities import MediaAsset
 from app.services.media_cache import MediaCacheService, is_safe_remote_url, url_hash
+
+
+@pytest.fixture(autouse=True)
+def _stub_public_dns(monkeypatch):
+    """让 *.qiumiwu.com 在离线测试环境里"解析"到一个公网 IP，
+    其余主机（含 127.0.0.1/192.168.x 等 IP 字面量）走真实解析。
+    这样 SSRF 守卫的 DNS 解析逻辑在无网络时也能确定性测试。"""
+    real = socket.getaddrinfo
+
+    def fake(host, port, *args, **kwargs):
+        if host and str(host).endswith("qiumiwu.com"):
+            return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", port or 80))]
+        return real(host, port, *args, **kwargs)
+
+    monkeypatch.setattr(url_security.socket, "getaddrinfo", fake)
 
 
 def test_media_assets_table_has_rich_metadata_columns(client) -> None:
@@ -63,13 +81,19 @@ def test_is_safe_remote_url_blocks_internal_hosts() -> None:
     assert is_safe_remote_url("http://127.0.0.1/a.png") is False
     assert is_safe_remote_url("http://localhost/a.png") is False
     assert is_safe_remote_url("http://192.168.1.2/a.png") is False
+    # 阿里云元数据地址（100.64.0.0/10 共享地址段）必须被拦
+    assert is_safe_remote_url("http://100.100.100.200/latest/meta-data/") is False
 
 
 class _FakeImageResponse:
-    headers = {"content-type": "image/png"}
+    is_redirect = False
+    headers = {"content-type": "image/png", "content-length": "13"}
     content = b"\x89PNG\r\n\x1a\nfake"
 
     def raise_for_status(self) -> None:
+        return None
+
+    def close(self) -> None:
         return None
 
 
@@ -77,7 +101,7 @@ class _FakeClient:
     def __init__(self) -> None:
         self.calls = 0
 
-    def get(self, url: str):
+    def get(self, url: str, follow_redirects: bool = False):
         self.calls += 1
         return _FakeImageResponse()
 

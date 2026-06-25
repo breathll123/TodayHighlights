@@ -13,6 +13,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.logging import log_event
+from app.core.url_security import is_safe_url, safe_get
 from app.models.entities import MediaAsset
 
 logger = logging.getLogger("today_highlights.media")
@@ -40,20 +41,14 @@ def url_hash(url: str) -> str:
     return sha256(normalize_url(url).encode("utf-8")).hexdigest()
 
 
+# SSRF 守卫统一收敛到 app.core.url_security.is_safe_url（解析真实 IP + 拒绝内网段）。
+# 保留此函数名以兼容既有调用方/测试。
 def is_safe_remote_url(url: str) -> bool:
-    parsed = urlparse((url or "").strip())
-    host = parsed.hostname or ""
-    if parsed.scheme not in {"http", "https"}:
-        return False
-    if host in {"localhost", "127.0.0.1", "::1"}:
-        return False
-    if host.startswith("10.") or host.startswith("192.168."):
-        return False
-    if host.startswith("172."):
-        parts = host.split(".")
-        if len(parts) > 1 and parts[1].isdigit() and 16 <= int(parts[1]) <= 31:
-            return False
-    return True
+    return is_safe_url(url)
+
+
+# 单张远程图片的最大字节数，防止超大响应耗尽内存/磁盘
+MAX_MEDIA_BYTES = 10 * 1024 * 1024
 
 
 def extension_for(content_type: str, url: str) -> str:
@@ -75,10 +70,11 @@ class MediaCacheService:
         http_client: httpx.Client | None = None,
     ) -> None:
         self.storage_root = storage_root or DEFAULT_STORAGE_ROOT
+        # follow_redirects=False：重定向交由 safe_get() 逐跳校验，杜绝跳转绕过 SSRF 守卫
         self.http_client = http_client or httpx.Client(
             timeout=10,
             headers={"User-Agent": "Mozilla/5.0 TodayHighlights/0.1"},
-            follow_redirects=True,
+            follow_redirects=False,
         )
         self._bind = session.get_bind()
 
@@ -168,7 +164,7 @@ class MediaCacheService:
             if existing is None:
                 sess.add(asset)
 
-            response = self.http_client.get(normalized)
+            response = safe_get(self.http_client, normalized, max_bytes=MAX_MEDIA_BYTES)
             response.raise_for_status()
             body = response.content
             if not body:
