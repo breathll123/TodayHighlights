@@ -3,6 +3,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import httpx
 from app.core.cache import ttl_cache
+from app.core.config import SH_TZ  # 导入项目统一的上海时区配置
 from app.core.logging import log_adapter_failure, observed_http_get
 
 _headers = {
@@ -93,7 +94,8 @@ def _fetch_matches_raw(limit: int) -> list[dict]:
 
             # Build summary
             import datetime as _dt
-            time_str = _dt.datetime.fromtimestamp(start_ts).strftime("%H:%M") if start_ts else ""
+            # 显式指定上海时区，消除本地开发环境与线上容器/系统的时区配置差异
+            time_str = _dt.datetime.fromtimestamp(start_ts, SH_TZ).strftime("%H:%M") if start_ts else ""
 
             if status in (2, 8):  # Playing
                 summary = f"{league_name} · {status_name} · {home.get('name','?')} {home_score}-{away_score} {away.get('name','?')}"
@@ -126,7 +128,8 @@ def _fetch_matches_raw(limit: int) -> list[dict]:
                 "score_b": away_score,
                 "score_ht_a": home_ht,
                 "score_ht_b": away_ht,
-                "start_time": _dt.datetime.fromtimestamp(start_ts).isoformat() if start_ts else "",
+                # 显式指定上海时区以生成一致的北京时间 ISO 字符串
+                "start_time": _dt.datetime.fromtimestamp(start_ts, SH_TZ).isoformat() if start_ts else "",
                 "note": note,
                 "stage": m.get("stage", ""),
                 "priority": priority,
