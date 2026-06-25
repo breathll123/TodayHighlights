@@ -529,6 +529,8 @@ class LoggingRuntime:
         self._saved_root_level: int = logging.WARNING
         self._error_fallback: logging.Handler | None = None
         self._saved_library_levels: dict[str, int] = {}
+        # 初始化任务日志处理器，默认为空
+        self.job_log_handler: JobLogHandler | None = None
 
     def start(self) -> None:
         root = logging.getLogger()
@@ -542,6 +544,11 @@ class LoggingRuntime:
         }
         for name in noisy_loggers:
             logging.getLogger(name).setLevel(logging.WARNING)
+
+        # DB sink：把带 crawl_job_id 的事件落库，供后台【任务】页时间线。
+        # 尽力而为——内部 flush 异常自吞，绝不影响文件日志。
+        self.job_log_handler = JobLogHandler()
+        self.job_log_handler.setLevel(self.config.level)
 
         # Console handler
         if self.config.console_enabled:
@@ -606,6 +613,8 @@ class LoggingRuntime:
             targets.extend(self.file_handlers)
         if self.console_handler:
             targets.append(self.console_handler)
+        if self.job_log_handler is not None:
+            targets.append(self.job_log_handler)
         queue_handler = SafeQueueHandler(
             self.queue,
             error_fallback=overflow_fallback,
@@ -625,6 +634,12 @@ class LoggingRuntime:
     def stop(self) -> None:
         if self.listener:
             self.listener.stop()
+        # 安全强刷，确保缓存在内存中的日志数据全部持久化到数据库中
+        if self.job_log_handler is not None:
+            try:
+                self.job_log_handler.flush()
+            except Exception:
+                pass
         root = logging.getLogger()
         root.handlers.clear()
         for h in self._saved_root_handlers:
