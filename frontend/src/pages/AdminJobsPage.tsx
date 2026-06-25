@@ -1,16 +1,17 @@
-import { useState, type CSSProperties } from "react";
+// -*- coding: utf-8 -*-
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { motion } from "framer-motion";
 import { fetchJobs } from "../api/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input"; // 导入 Input 搜索框组件
-import { ChevronDown, ChevronUp, ChevronLeft, ChevronRight, AlertCircle, CheckCircle2, Clock, RotateCw } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { ChevronLeft, ChevronRight, AlertCircle, CheckCircle2, Clock, RotateCw, Activity, FileText } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { AnimatedNumber } from "@/components/layout/AnimatedNumber";
 import { Skeleton } from "@/components/ui/skeleton";
+import { JobLogModal } from "@/components/admin/JobLogModal";
 
 const statusLabel: Record<string, string> = {
   success: "成功", failed: "失败", running: "运行中", pending: "等待中",
@@ -22,6 +23,7 @@ const triggerLabel: Record<string, string> = {
   manual: "手动", scheduled: "定时",
 };
 
+// 格式化展示日期的辅助函数
 function fmtTime(ts: string | null) {
   if (!ts) return "-";
   const d = new Date(ts);
@@ -32,12 +34,13 @@ const PAGE_SIZE = 20;
 
 export function AdminJobsPage() {
   const [page, setPage] = useState(1);
-  const [expanded, setExpanded] = useState<Set<number>>(new Set());
   const [inputValue, setInputValue] = useState(""); // 存放输入框中的即时查询内容
   const [search, setSearch] = useState(""); // 触发真正后端检索的搜索词
+  // 选中的用于在弹窗中展示日志的任务 ID，为 null 时弹窗关闭
+  const [logJobId, setLogJobId] = useState<number | null>(null);
 
   const { data, isLoading } = useQuery({
-    queryKey: ["jobs", page, search], // 当搜索词变化时，重新获取数据
+    queryKey: ["jobs", page, search], // 当搜索词或页码变化时，重新获取数据
     queryFn: () => fetchJobs(page, PAGE_SIZE, search),
     refetchInterval: 10000,
   });
@@ -66,22 +69,20 @@ export function AdminJobsPage() {
 
   const jobs = data?.items ?? [];
   const total = data?.total ?? 0;
+  const stats = data?.stats ?? {
+    total,
+    success: jobs.filter((j) => j.status === "success").length,
+    failed: jobs.filter((j) => j.status === "failed").length,
+    running: jobs.filter((j) => j.status === "running").length,
+    pending: jobs.filter((j) => j.status === "pending").length,
+  };
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
-  const summary: { label: string; value: number; glow: string; numberClass: string }[] = [
-    { label: "总任务", value: total, glow: "#1DB8A8", numberClass: "text-foreground" },
-    { label: "本页成功", value: jobs.filter((j) => j.status === "success").length, glow: "#10b981", numberClass: "text-green-500" },
-    { label: "本页失败", value: jobs.filter((j) => j.status === "failed").length, glow: "#ef4444", numberClass: "text-red-500" },
-    { label: "运行中", value: jobs.filter((j) => j.status === "running").length, glow: "#3b82f6", numberClass: "text-blue-500" },
+  const statItems = [
+    { label: "成功", value: stats.success, className: "text-emerald-500", dotClassName: "bg-emerald-500" },
+    { label: "失败", value: stats.failed, className: "text-red-500", dotClassName: "bg-red-500" },
+    { label: "运行中", value: stats.running, className: "text-blue-500", dotClassName: "bg-blue-500" },
   ];
-
-  const toggle = (id: number) => {
-    setExpanded((prev) => {
-      const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
-      return next;
-    });
-  };
 
   return (
     <div className="space-y-6">
@@ -92,27 +93,41 @@ export function AdminJobsPage() {
       />
 
       {/* Summary */}
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        {isLoading
-          ? Array.from({ length: 4 }).map((_, i) => (
-              <Skeleton key={i} className="h-[88px] rounded-xl" style={{ animationDelay: `${i * 50}ms` }} />
-            ))
-          : summary.map((s, i) => (
-              <motion.div
-                key={s.label}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.32, delay: i * 0.05, ease: [0.22, 1, 0.36, 1] }}
-                className="stat-card rounded-xl border border-border/70 bg-card p-4 text-center"
-                style={{ "--glow": s.glow } as CSSProperties}
-              >
-                <div className={cn("text-2xl font-bold tabular-nums", s.numberClass)}>
-                  <AnimatedNumber value={s.value} animateOnMount durationMs={800} format={(n) => String(Math.round(n))} />
+      {isLoading ? (
+        <Skeleton className="h-[92px] rounded-xl" />
+      ) : (
+        <Card className="overflow-hidden border-border/70 bg-card/80">
+          <CardContent className="p-0">
+            <div className="flex flex-col gap-0 md:flex-row md:items-stretch">
+              <div className="flex items-center gap-4 border-b border-border/70 px-5 py-4 md:w-[260px] md:border-b-0 md:border-r">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                  <Activity className="h-5 w-5" />
                 </div>
-                <div className="mt-0.5 text-xs text-muted-foreground">{s.label}</div>
-              </motion.div>
-            ))}
-      </div>
+                <div>
+                  <div className="text-xs text-muted-foreground">总任务</div>
+                  <div className="mt-0.5 text-2xl font-semibold tabular-nums text-foreground">
+                    <AnimatedNumber value={stats.total} animateOnMount durationMs={700} format={(n) => String(Math.round(n))} />
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid flex-1 grid-cols-3 divide-x divide-border/60">
+                {statItems.map((item) => (
+                  <div key={item.label} className="px-4 py-4 md:px-6">
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <span className={cn("h-1.5 w-1.5 rounded-full", item.dotClassName)} />
+                      {item.label}
+                    </div>
+                    <div className={cn("mt-1.5 text-xl font-semibold tabular-nums md:text-2xl", item.className)}>
+                      <AnimatedNumber value={item.value} animateOnMount durationMs={700} format={(n) => String(Math.round(n))} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Job list */}
       <Card>
@@ -164,65 +179,60 @@ export function AdminJobsPage() {
             <div className="text-center py-8 text-muted-foreground text-sm">暂无任务记录</div>
           ) : (
             jobs.map((j) => {
-            const Icon = statusIcon[j.status] ?? Clock;
-            const isExpanded = expanded.has(j.id);
-            const isFailed = j.status === "failed";
+              const Icon = statusIcon[j.status] ?? Clock;
+              const isFailed = j.status === "failed";
 
-            return (
-              <div
-                key={j.id}
-                className={cn(
-                  "rounded-lg border p-4 transition-colors",
-                  isFailed && "border-red-200 bg-red-50/50 dark:border-red-900 dark:bg-red-950/20"
-                )}
-              >
-                <div className="flex items-center gap-4">
-                  <div className="min-w-0 flex-1">
-                    <div className="font-medium text-sm truncate">{j.source_name}</div>
-                    <div className="text-xs text-muted-foreground mt-0.5">
-                      {triggerLabel[j.trigger_type] ?? j.trigger_type} · {fmtTime(j.started_at)} → {fmtTime(j.finished_at)}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-3 text-sm">
-                    <span className="text-muted-foreground">
-                      发现 <strong>{j.items_found}</strong> · 保存 <strong>{j.items_saved}</strong>
-                    </span>
-                  </div>
-                  <Badge
-                    variant={j.status === "failed" ? "destructive" : j.status === "success" ? "default" : "secondary"}
-                    className="gap-1"
-                  >
-                    <Icon className="w-3 h-3" />
-                    {statusLabel[j.status] ?? j.status}
-                  </Badge>
-                  {isFailed && j.error_message && (
-                    <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => toggle(j.id)}>
-                      {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                    </Button>
+              return (
+                <div
+                  key={j.id}
+                  className={cn(
+                    "rounded-lg border p-4 transition-colors",
+                    isFailed && "border-red-200 bg-red-50/50 dark:border-red-900 dark:bg-red-950/20"
                   )}
-                </div>
-                {isExpanded && isFailed && (
-                  <div className="mt-3 pt-3 border-t space-y-2">
-                    <div className="rounded-md bg-red-100 dark:bg-red-950/50 p-3">
-                      <div className="text-xs font-medium text-red-800 dark:text-red-200 mb-1">错误原因</div>
-                      <div className="text-sm text-red-700 dark:text-red-300 whitespace-pre-wrap break-all">
-                        {j.error_message}
+                >
+                  <div className="flex items-center gap-4">
+                    <div className="min-w-0 flex-1">
+                      <div className="font-medium text-sm truncate">{j.source_name}</div>
+                      <div className="text-xs text-muted-foreground mt-0.5">
+                        {triggerLabel[j.trigger_type] ?? j.trigger_type} · {fmtTime(j.started_at)} → {fmtTime(j.finished_at)}
                       </div>
                     </div>
-                    {j.log_excerpt && (
-                      <div className="rounded-md bg-muted/50 p-3">
-                        <div className="text-xs font-medium text-muted-foreground mb-1">日志摘要</div>
-                        <pre className="text-xs text-muted-foreground whitespace-pre-wrap break-all">{j.log_excerpt}</pre>
-                      </div>
-                    )}
+                    <div className="flex items-center gap-3 text-sm">
+                      <span className="text-muted-foreground">
+                        发现 <strong>{j.items_found}</strong> · 保存 <strong>{j.items_saved}</strong>
+                      </span>
+                    </div>
+                    <Badge
+                      variant={j.status === "failed" ? "destructive" : j.status === "success" ? "default" : "secondary"}
+                      className="gap-1"
+                    >
+                      <Icon className="w-3 h-3" />
+                      {statusLabel[j.status] ?? j.status}
+                    </Badge>
+                    {/* 查看任务日志详情的模态弹窗入口按钮 */}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 gap-1 px-2 text-xs"
+                      onClick={() => setLogJobId(j.id)}
+                    >
+                      <FileText className="h-3.5 w-3.5" />
+                      日志
+                    </Button>
                   </div>
-                )}
-              </div>
-            );
-          })
+                </div>
+              );
+            })
           )}
         </CardContent>
       </Card>
+
+      {/* 挂载结构化日志模态弹窗 */}
+      <JobLogModal
+        jobId={logJobId}
+        open={logJobId != null}
+        onOpenChange={(o) => { if (!o) setLogJobId(null); }}
+      />
     </div>
   );
 }

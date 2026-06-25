@@ -20,6 +20,13 @@ vi.mock("../api/client", () => ({
     total: 1,
     page: 1,
     page_size: 20,
+    stats: {
+      total: 12,
+      success: 8,
+      failed: 3,
+      running: 1,
+      pending: 0,
+    },
     items: [
       {
         id: 1,
@@ -35,6 +42,11 @@ vi.mock("../api/client", () => ({
         finished_at: "2026-05-20T10:01:00",
       },
     ],
+  }),
+  fetchJobLogs: vi.fn().mockResolvedValue({
+    job: { id: 1, status: "success", started_at: null, finished_at: null,
+           items_found: 5, items_saved: 5, error_message: "" },
+    entries: [], latest_id: 0, done: true,
   }),
   fetchPageBlocks: vi.fn().mockResolvedValue({ blocks: [] }),
   fetchBlocks: vi.fn().mockResolvedValue([]),
@@ -77,7 +89,17 @@ describe("AdminJobsPage", () => {
     render(<AdminJobsPage />, { wrapper: Wrapper });
     expect(await screen.findByText("任务日志")).toBeInTheDocument();
     // Header now renders immediately with a skeleton; wait for the row data to land.
-    expect(await screen.findByText("成功")).toBeInTheDocument();
+    expect((await screen.findAllByText("成功")).length).toBeGreaterThan(0);
+    expect(screen.getByText("总任务")).toBeInTheDocument();
+    expect(screen.getByText("失败")).toBeInTheDocument();
+    expect(screen.getByText("运行中")).toBeInTheDocument();
     expect(screen.getByText("雪球自选")).toBeInTheDocument();
+  });
+
+  it("renders a 日志 button per job row", async () => {
+    // 渲染 AdminJobsPage，确保在任务行中渲染了日志按钮
+    render(<AdminJobsPage />, { wrapper: Wrapper });
+    expect(await screen.findByText("雪球自选")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "日志" })).toBeInTheDocument();
   });
 });
