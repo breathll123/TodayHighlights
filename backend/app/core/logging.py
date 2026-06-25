@@ -364,6 +364,82 @@ def log_adapter_failure(
     )
 
 
+class JobLogHandler(logging.Handler):
+    """把带 crawl_job_id 的结构化事件落到 job_log_entries（后台【任务】页时间线）。
+
+    运行在 QueueListener 线程；每次 flush 用独立短会话，写失败静默丢弃，绝不影响
+    任务事务或文件日志（对齐 MediaCacheService 会话隔离铁律）。批量降低高频 HTTP 源写压。
+    """
+
+    _TERMINAL_SUFFIXES = (".completed", ".failed")
+
+    def __init__(self, session_factory=None, *, batch_size: int = 50, flush_interval: float = 0.25):
+        # 初始化 JobLogHandler，接收可选的会话工厂、批处理大小和强刷间隔
+        super().__init__()
+        self._session_factory = session_factory
+        self._batch_size = batch_size
+        self._flush_interval = flush_interval
+        self._buffer: list[dict[str, Any]] = []
+        self._lock = threading.Lock()
+        self._last_flush = time.monotonic()
+
+    def _factory(self):
+        # 获取数据库会话工厂，若未注入则从 app.core.database 动态导入 SessionLocal
+        if self._session_factory is not None:
+            return self._session_factory
+        from app.core.database import SessionLocal
+        return SessionLocal
+
+    def emit(self, record: logging.LogRecord) -> None:
+        # 处理单条日志记录，过滤出带有 crawl_job_id 的结构化事件并写入缓冲区
+        try:
+            fields = dict(getattr(record, "event_fields", {}) or {})
+            job_id = fields.get("crawl_job_id")
+            if job_id is None:
+                return
+            from app.core.logging_catalog import event_spec
+            event = (getattr(record, "event", "") or record.getMessage())[:80]
+            row = {
+                "crawl_job_id": int(job_id),
+                "ts": datetime.fromtimestamp(record.created, tz=SH_TZ).replace(tzinfo=None),
+                "level": record.levelname,
+                "channel": getattr(record, "log_channel", "application"),
+                "event": event,
+                "category": str(fields.get("category", ""))[:20],
+                "stage": str(fields.get("stage", ""))[:30],
+                "message": event_spec(event).description,
+                "fields_json": fields,
+            }
+            # 如果是终态事件或者警告错误级别以上的日志，需要立即刷入数据库
+            terminal = event.endswith(self._TERMINAL_SUFFIXES) or record.levelno >= logging.WARNING
+            with self._lock:
+                self._buffer.append(row)
+                due = (
+                    terminal
+                    or len(self._buffer) >= self._batch_size
+                    or (time.monotonic() - self._last_flush) >= self._flush_interval
+                )
+            if due:
+                self.flush()
+        except Exception:  # noqa: BLE001 — 日志逻辑绝不能影响正常的业务执行，静默丢弃
+            pass
+
+    def flush(self) -> None:
+        # 将缓冲区中的所有日志记录批量写入 job_log_entries 数据表
+        with self._lock:
+            rows, self._buffer = self._buffer, []
+            self._last_flush = time.monotonic()
+        if not rows:
+            return
+        from app.models.entities import JobLogEntry
+        try:
+            with self._factory()() as session:
+                session.add_all([JobLogEntry(**r) for r in rows])
+                session.commit()
+        except Exception:  # noqa: BLE001 — 写入数据库异常时静默丢弃，确保系统鲁棒性
+            pass
+
+
 # ---------------------------------------------------------------------------
 # Logging runtime
 # ---------------------------------------------------------------------------
