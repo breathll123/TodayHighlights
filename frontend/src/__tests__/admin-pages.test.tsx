@@ -48,6 +48,7 @@ vi.mock("../api/client", () => ({
            items_found: 5, items_saved: 5, error_message: "" },
     entries: [], latest_id: 0, done: true,
   }),
+  stopJob: vi.fn(),
   fetchPageBlocks: vi.fn().mockResolvedValue({ blocks: [] }),
   fetchBlocks: vi.fn().mockResolvedValue([]),
   createBlock: vi.fn(),
@@ -91,8 +92,9 @@ describe("AdminJobsPage", () => {
     // Header now renders immediately with a skeleton; wait for the row data to land.
     expect((await screen.findAllByText("成功")).length).toBeGreaterThan(0);
     expect(screen.getByText("总任务")).toBeInTheDocument();
-    expect(screen.getByText("失败")).toBeInTheDocument();
-    expect(screen.getByText("运行中")).toBeInTheDocument();
+    // 「失败」「运行中」现同时出现在统计卡与状态筛选条，故用 getAllByText。
+    expect(screen.getAllByText("失败").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("运行中").length).toBeGreaterThan(0);
     expect(screen.getByText("雪球自选")).toBeInTheDocument();
   });
 

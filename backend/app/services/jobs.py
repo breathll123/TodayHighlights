@@ -211,3 +211,49 @@ def run_crawl_job(session: Session, source_id: int, trigger_type: str) -> CrawlJ
             )
     session.commit()
     return job
+
+
+def stop_job(session: Session, job_id: int) -> CrawlJob:
+    """Stop a stuck/running job, releasing the per-source running guard so new
+    crawls can start.
+
+    This does NOT kill an in-flight worker thread (Python threads aren't
+    forcibly killable, and a zombie left by a process restart has no thread at
+    all) — it releases the DB lock. If a thread really is still alive it will
+    overwrite the status when it finishes; for the common case (a zombie that
+    never finishes) the 'stopped' state sticks. Idempotent: a job that already
+    finished is returned untouched.
+    """
+    job = session.get(CrawlJob, job_id)
+    if job is None:
+        raise ValueError("Job not found")
+    if job.status == "running":
+        job.status = "stopped"
+        job.error_message = job.error_message or "手动停止"
+        job.finished_at = datetime.now(SH_TZ)
+        session.commit()
+        log_event(
+            logger, channel="application", category="crawler", event="crawl.stopped",
+            crawl_job_id=job.id, job_id=job.id, source_id=job.source_id,
+        )
+    return job
+
+
+def reconcile_stale_jobs(session: Session) -> int:
+    """On startup: any job still 'running' was orphaned by a process restart —
+    its worker thread is gone and can never resume. Mark them failed so a
+    restart never permanently blocks a source via the running guard. Returns
+    how many were reconciled.
+    """
+    stale = session.scalars(select(CrawlJob).where(CrawlJob.status == "running")).all()
+    for job in stale:
+        job.status = "failed"
+        job.error_message = job.error_message or "进程重启，任务中断未完成"
+        job.finished_at = datetime.now(SH_TZ)
+    if stale:
+        session.commit()
+        log_event(
+            logger, channel="application", category="crawler",
+            event="crawl.reconciled", count=len(stale),
+        )
+    return len(stale)

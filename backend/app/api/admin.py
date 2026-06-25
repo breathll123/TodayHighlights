@@ -18,7 +18,7 @@ from app.services.ai_block_analysis import analyze_block
 from app.services.ai_enrichment import generate_topic_summary, retry_item_enrichment
 from app.services.ai_models import create_ai_model, list_ai_models, serialize_ai_model, set_default_ai_model, update_ai_model
 from app.services.content import update_highlight_review
-from app.services.jobs import run_crawl_job
+from app.services.jobs import run_crawl_job, stop_job
 from app.services.skills.providers import SITE_TO_SOURCE
 from app.services.skills.sync import submit_reparse, submit_source_sync
 from app.services.skills.prompts import get_classify_prompt, get_translate_prompt, set_classify_prompt, set_translate_prompt
@@ -201,6 +201,7 @@ def list_jobs(
     page: int = 1,
     page_size: int = 20,
     q: str | None = None,
+    status: str | None = None,
     session: Session = Depends(get_session)
 ) -> dict:
     # 构造核心查询，联合加载数据源对象，并按创建时间降序排序
@@ -230,8 +231,13 @@ def list_jobs(
             (CrawlJob.error_message.like(q_like))
         )
 
+    # 状态筛选只作用于列表与计数，不影响顶部统计卡（统计始终展示整体分布）。
+    if status and status not in ("", "all"):
+        stmt = stmt.where(CrawlJob.status == status)
+        count_stmt = count_stmt.where(CrawlJob.status == status)
+
     total = session.scalar(count_stmt)
-    status_counts = {status: count for status, count in session.execute(stats_stmt).all()}
+    status_counts = {st: count for st, count in session.execute(stats_stmt).all()}
     jobs = session.scalars(stmt.limit(page_size).offset((page - 1) * page_size)).all()
     return {
         "total": total or 0,
@@ -299,8 +305,23 @@ def get_job_logs(job_id: int, after_id: int = 0, session: Session = Depends(get_
             for e in rows
         ],
         "latest_id": latest_id,
-        "done": job.status in ("success", "failed"),
+        "done": job.status in ("success", "failed", "stopped"),
     }
+
+
+@router.post("/jobs/{job_id}/stop")
+def stop_crawl_job(job_id: int, request: Request, session: Session = Depends(get_session)) -> dict:
+    # 手动停止卡住的运行中任务，释放该数据源的运行守卫以便重新采集。
+    try:
+        job = stop_job(session, job_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="job not found")
+    log_admin_change(
+        request=request, action="stop", object_type="crawl_job",
+        object_name=job.source.name if job.source else str(job.source_id),
+        object_id=job.id, changed_fields=["status"],
+    )
+    return {"id": job.id, "status": job.status}
 
 
 @router.patch("/highlights/{highlight_id}")

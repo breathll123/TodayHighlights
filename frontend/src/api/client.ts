@@ -87,6 +87,10 @@ export function reparseSource(sourceId: number): Promise<{ status: string }> {
   return api.post(`/api/admin/sources/${sourceId}/reparse`, {}).then((r) => r.data);
 }
 
+export function stopJob(jobId: number): Promise<{ id: number; status: string }> {
+  return api.post(`/api/admin/jobs/${jobId}/stop`, {}).then((r) => r.data);
+}
+
 export interface SkillsPrompts {
   classify_prompt: string;
   translate_prompt: string;
@@ -104,8 +108,11 @@ export function deleteSource(sourceId: number): Promise<{ deleted: boolean }> {
   return api.delete(`/api/admin/sources/${sourceId}`).then((r) => r.data);
 }
 
-export function fetchJobs(page = 1, pageSize = 20, q = ""): Promise<JobListResponse> {
-  return api.get<JobListResponse>("/api/admin/jobs", { params: { page, page_size: pageSize, q } }).then((r) => r.data);
+export function fetchJobs(page = 1, pageSize = 20, q = "", status = "all"): Promise<JobListResponse> {
+  // status="all" 时不传，交由后端返回全部
+  const params: Record<string, string | number> = { page, page_size: pageSize, q };
+  if (status && status !== "all") params.status = status;
+  return api.get<JobListResponse>("/api/admin/jobs", { params }).then((r) => r.data);
 }
 
 export function fetchJobLogs(jobId: number, afterId = 0): Promise<JobLogResponse> {

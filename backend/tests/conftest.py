@@ -3,6 +3,8 @@ import tempfile
 from pathlib import Path
 
 os.environ.setdefault("REDIS_ENABLED", "false")
+# 测试不连真实 MySQL：禁用启动时的遗留任务回收（reconcile 走真实 SessionLocal）。
+os.environ.setdefault("CRAWL_RECONCILE_ON_STARTUP", "false")
 
 _TEST_LOG_DIR = Path(tempfile.gettempdir()) / "today-highlights-test-logs"
 os.environ.setdefault("LOG_DIR", str(_TEST_LOG_DIR))

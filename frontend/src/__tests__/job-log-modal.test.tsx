@@ -87,8 +87,9 @@ describe("JobLogModal", () => {
     expect(screen.getByText(/x\.test\/api/)).toBeInTheDocument();
 
     // 模拟点击上游请求失败这行，由于其可展开，点击后应当渲染具体的 response preview 细节
+    // 预览以「response: forbidden」形式渲染在同一 <pre> 内，故用子串匹配。
     fireEvent.click(screen.getByText("上游请求失败"));
-    await waitFor(() => expect(screen.getByText("forbidden")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText(/forbidden/)).toBeInTheDocument());
   });
 
   it("does not fetch when closed", () => {

@@ -16,6 +16,16 @@ from app.core.scheduler import create_scheduler
 async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
     initialize_logging()
     initialize_cache()
+    if settings.crawl_reconcile_on_startup:
+        # 进程重启会留下永远停在 running 的孤儿任务，挡住该数据源的后续采集；
+        # 启动时统一标记失败，释放运行守卫。尽力而为，DB 不可用不阻断启动。
+        try:
+            from app.core.database import SessionLocal
+            from app.services.jobs import reconcile_stale_jobs
+            with SessionLocal() as session:
+                reconcile_stale_jobs(session)
+        except Exception:
+            pass
     if settings.scheduler_enabled:
         scheduler = create_scheduler()
         scheduler.start()

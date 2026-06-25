@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     app_secret_key: str
     cors_origins: str = "http://localhost:5173,http://localhost:5175,http://192.168.1.12:5175"
     scheduler_enabled: bool = True
+    crawl_reconcile_on_startup: bool = True  # 启动时把遗留的 running 任务标记失败，释放运行守卫
     eastmoney_proxy: str | None = None  # e.g. http://127.0.0.1:7890
     redis_enabled: bool = False
     redis_url: str = "redis://127.0.0.1:6379/0"
@@ -27,9 +28,9 @@ class Settings(BaseSettings):
     artificial_analysis_schedule_evening: str = "20:30"
     artificial_analysis_stale_hours: int = 36
     github_token: str = ""  # optional PAT — raises GitHub search rate limit 10→30/min
-    github_skills_topics: str = "topic:claude-skill,topic:codex-skill,topic:skills"
+    github_skills_topics: str = "topic:claude-skill,topic:codex-skill,topic:skills,topic:ai-skills"
     github_skills_min_stars: int = 30
-    github_skills_top_k: int = 150  # how many top-starred candidates to classify
+    github_skills_top_k: int = 300  # how many top-starred candidates to classify
     github_skills_classify_batch: int = 18
     log_dir: str = "logs"
     log_level: str = "INFO"

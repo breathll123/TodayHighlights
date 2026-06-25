@@ -1,12 +1,12 @@
 // -*- coding: utf-8 -*-
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { fetchJobs } from "../api/client";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { fetchJobs, stopJob } from "../api/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ChevronLeft, ChevronRight, AlertCircle, CheckCircle2, Clock, RotateCw, Activity, FileText } from "lucide-react";
+import { ChevronLeft, ChevronRight, AlertCircle, CheckCircle2, Clock, RotateCw, Activity, FileText, Ban } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { AnimatedNumber } from "@/components/layout/AnimatedNumber";
@@ -14,14 +14,23 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { JobLogModal } from "@/components/admin/JobLogModal";
 
 const statusLabel: Record<string, string> = {
-  success: "成功", failed: "失败", running: "运行中", pending: "等待中",
+  success: "成功", failed: "失败", running: "运行中", pending: "等待中", stopped: "已停止",
 };
 const statusIcon: Record<string, typeof AlertCircle> = {
-  success: CheckCircle2, failed: AlertCircle, running: RotateCw, pending: Clock,
+  success: CheckCircle2, failed: AlertCircle, running: RotateCw, pending: Clock, stopped: Ban,
 };
 const triggerLabel: Record<string, string> = {
   manual: "手动", scheduled: "定时",
 };
+
+// 状态快速筛选：标签 + 信号色圆点，与翻页控件同款分段外框
+const STATUS_FILTERS: { value: string; label: string; dot: string }[] = [
+  { value: "all", label: "全部", dot: "" },
+  { value: "running", label: "运行中", dot: "bg-blue-500" },
+  { value: "failed", label: "失败", dot: "bg-red-500" },
+  { value: "success", label: "成功", dot: "bg-emerald-500" },
+  { value: "stopped", label: "已停止", dot: "bg-amber-500" },
+];
 
 // 格式化展示日期的辅助函数
 function fmtTime(ts: string | null) {
@@ -36,13 +45,22 @@ export function AdminJobsPage() {
   const [page, setPage] = useState(1);
   const [inputValue, setInputValue] = useState(""); // 存放输入框中的即时查询内容
   const [search, setSearch] = useState(""); // 触发真正后端检索的搜索词
+  const [statusFilter, setStatusFilter] = useState("all"); // 状态筛选，"all" 表示不筛选
   // 选中的用于在弹窗中展示日志的任务 ID，为 null 时弹窗关闭
   const [logJobId, setLogJobId] = useState<number | null>(null);
 
+  const queryClient = useQueryClient();
+
   const { data, isLoading } = useQuery({
-    queryKey: ["jobs", page, search], // 当搜索词或页码变化时，重新获取数据
-    queryFn: () => fetchJobs(page, PAGE_SIZE, search),
+    queryKey: ["jobs", page, search, statusFilter], // 搜索词/页码/状态筛选变化时重新获取
+    queryFn: () => fetchJobs(page, PAGE_SIZE, search, statusFilter),
     refetchInterval: 10000,
+  });
+
+  // 停止卡住的运行中任务，释放该数据源的运行守卫；成功后刷新列表
+  const stopMut = useMutation({
+    mutationFn: (jobId: number) => stopJob(jobId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["jobs"] }),
   });
 
   // 处理输入内容变化，清空搜索时即时刷新
@@ -137,6 +155,29 @@ export function AdminJobsPage() {
             
             {/* 搜索与翻页控制区 */}
             <div className="flex flex-wrap items-center gap-3 flex-1 justify-end">
+              {/* 状态快速筛选：一键缩到失败/运行中等 */}
+              <div className="inline-flex items-center rounded-md border border-border/50 bg-muted/20 p-0.5">
+                {STATUS_FILTERS.map((f) => {
+                  const active = statusFilter === f.value;
+                  return (
+                    <button
+                      key={f.value}
+                      type="button"
+                      onClick={() => { setStatusFilter(f.value); setPage(1); }}
+                      className={cn(
+                        "flex items-center gap-1.5 h-7 px-2.5 rounded text-xs transition-colors",
+                        active
+                          ? "bg-background text-foreground font-medium shadow-sm"
+                          : "text-muted-foreground hover:text-foreground",
+                      )}
+                    >
+                      {f.dot && <span className={cn("h-1.5 w-1.5 rounded-full", f.dot)} />}
+                      {f.label}
+                    </button>
+                  );
+                })}
+              </div>
+
               <div className="flex max-w-xs w-full items-center gap-1.5">
                 <Input
                   placeholder="搜索数据源、状态、类型、日志原因..."
@@ -206,9 +247,22 @@ export function AdminJobsPage() {
                       variant={j.status === "failed" ? "destructive" : j.status === "success" ? "default" : "secondary"}
                       className="gap-1"
                     >
-                      <Icon className="w-3 h-3" />
+                      <Icon className={cn("w-3 h-3", j.status === "running" && "animate-spin")} />
                       {statusLabel[j.status] ?? j.status}
                     </Badge>
+                    {/* 运行中任务：手动停止，释放运行守卫以便重新采集 */}
+                    {j.status === "running" && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 gap-1 px-2 text-xs text-red-600 hover:text-red-700 dark:text-red-400"
+                        disabled={stopMut.isPending}
+                        onClick={() => stopMut.mutate(j.id)}
+                      >
+                        <Ban className="h-3.5 w-3.5" />
+                        停止
+                      </Button>
+                    )}
                     {/* 查看任务日志详情的模态弹窗入口按钮 */}
                     <Button
                       variant="ghost"
