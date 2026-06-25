@@ -157,7 +157,7 @@ def reparse_source(source_id: int, request: Request, session: Session = Depends(
     source = session.get(Source, source_id)
     if source is None or source.site not in SITE_TO_SOURCE:
         raise HTTPException(status_code=404, detail="Not a skills source")
-    submit_reparse(SITE_TO_SOURCE[source.site])
+    submit_reparse(source_id)  # 调用重新解析服务，传入数据源 ID 以便关联后台 CrawlJob 任务跟踪
     log_admin_change(
         request=request, action="reparse", object_type="source",
         object_name=source.name, object_id=source.id, changed_fields=["reparse"],
@@ -197,12 +197,34 @@ def update_skills_prompts(
 
 
 @router.get("/jobs")
-def list_jobs(page: int = 1, page_size: int = 20, session: Session = Depends(get_session)) -> dict:
-    total = session.scalar(select(func.count()).select_from(CrawlJob))
-    jobs = session.scalars(
-        select(CrawlJob).options(joinedload(CrawlJob.source)).order_by(CrawlJob.created_at.desc())
-        .limit(page_size).offset((page - 1) * page_size)
-    ).all()
+def list_jobs(
+    page: int = 1,
+    page_size: int = 20,
+    q: str | None = None,
+    session: Session = Depends(get_session)
+) -> dict:
+    # 构造核心查询，联合加载数据源对象，并按创建时间降序排序
+    stmt = select(CrawlJob).options(joinedload(CrawlJob.source)).order_by(CrawlJob.created_at.desc())
+    count_stmt = select(func.count()).select_from(CrawlJob)
+
+    # 若指定了模糊检索关键字，根据数据源名称、触发方式、任务状态及错误日志进行模糊匹配
+    if q and q.strip():
+        q_like = f"%{q.strip()}%"
+        stmt = stmt.join(CrawlJob.source).where(
+            (Source.name.like(q_like)) |
+            (CrawlJob.trigger_type.like(q_like)) |
+            (CrawlJob.status.like(q_like)) |
+            (CrawlJob.error_message.like(q_like))
+        )
+        count_stmt = count_stmt.join(CrawlJob.source).where(
+            (Source.name.like(q_like)) |
+            (CrawlJob.trigger_type.like(q_like)) |
+            (CrawlJob.status.like(q_like)) |
+            (CrawlJob.error_message.like(q_like))
+        )
+
+    total = session.scalar(count_stmt)
+    jobs = session.scalars(stmt.limit(page_size).offset((page - 1) * page_size)).all()
     return {
         "total": total or 0,
         "page": page,

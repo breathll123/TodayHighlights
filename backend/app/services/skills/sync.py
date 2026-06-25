@@ -19,7 +19,8 @@ from sqlalchemy import select
 from app.core.config import SH_TZ, settings
 from app.core.crypto import CryptoService
 from app.core.logging import log_event
-from app.models.entities import AIModelConfig, Skill, SkillStat, Source
+# 导入实体模型，新增导入 CrawlJob 任务记录实体模型
+from app.models.entities import AIModelConfig, Skill, SkillStat, Source, CrawlJob
 from app.services.ai_client import AIClient
 from app.services.ai_models import get_default_ai_model
 from app.services.skills import classify as _classify
@@ -43,12 +44,14 @@ def submit_source_sync(source_id: int) -> None:
     _job_executor.submit(_run)
 
 
-def submit_reparse(source: str) -> None:
-    """Background: re-run AI parsing on existing rows (the 重新解析 button)."""
+def submit_reparse(source_id: int) -> None:
+    """Background: re-run AI parsing on existing rows (the 重新解析 button).
+    接收数据源 ID 并调度后台任务执行，在后台线程中初始化数据库 Session。
+    """
     def _run() -> None:
         from app.core.database import SessionLocal
         with SessionLocal() as session:
-            reparse_existing(session, source)
+            reparse_existing(session, source_id)
     _job_executor.submit(_run)
 
 
@@ -167,34 +170,86 @@ def run_provider_sync_inline(session, source_row: Source) -> dict:
     return sync_provider(session, source, candidates)
 
 
-def reparse_existing(session, source: str) -> dict:
-    """「重新解析」: re-run classify + translate on rows already in the DB,
-    using the current prompts (no provider re-fetch). Returns {reparsed, kept, llm}."""
-    skills = list(session.scalars(
-        select(Skill).where(Skill.source == source, Skill.status == "active")
-    ))
-    if not skills:
-        return {"reparsed": 0, "kept": 0, "llm": False}
+def reparse_existing(session, source_id: int) -> dict:
+    """「重新解析」: 针对已有库中的数据，使用当前修改过的 prompt 重新进行 AI 分类和翻译（不重新抓取）。
+    通过 CrawlJob 将重新解析的执行过程与状态绑定，并让“任务”页面能够实时跟踪该重新解析进度。
+    """
+    source_row = session.get(Source, source_id)
+    if source_row is None:
+        raise ValueError(f"Source not found: {source_id}")
+    
+    source = SITE_TO_SOURCE.get(source_row.site)
+    if source is None:
+        raise ValueError(f"Not a skills source: {source_row.site}")
 
-    classify_prompt = _prompts.get_classify_prompt(session)
-    translate_prompt = _prompts.get_translate_prompt(session)
-    version = _prompts.classify_prompt_version(classify_prompt)
-
-    # Force a fresh AI pass: clear the cached Chinese description so kept skills re-translate.
-    for skill in skills:
-        skill.description_zh = ""
-
-    client = _build_client(session)
-    if client is None:
-        session.commit()
-        log_event(logger, channel="application", category="ai", level=logging.WARNING,
-                  event="skills.reparse.skipped_no_model", source=source, count=len(skills))
-        return {"reparsed": len(skills), "kept": 0, "llm": False}
-
-    batch = settings.github_skills_classify_batch
-    asyncio.run(_run_llm(client, skills, classify_prompt, version, translate_prompt, batch, _now()))
+    # 1. 创建 CrawlJob 并立即提交到数据库以供前端在任务列表里查到 running 状态的进程
+    job = CrawlJob(
+        source_id=source_id,
+        trigger_type="reparse",
+        status="running",
+        started_at=datetime.now(SH_TZ)
+    )
+    session.add(job)
     session.commit()
-    kept = sum(1 for s in skills if s.is_skill)
-    log_event(logger, channel="application", category="ai", event="skills.reparse.completed",
-              source=source, reparsed=len(skills), kept=kept)
-    return {"reparsed": len(skills), "kept": kept, "llm": True}
+
+    try:
+        skills = list(session.scalars(
+            select(Skill).where(Skill.source == source, Skill.status == "active")
+        ))
+        if not skills:
+            # 更新状态为成功，并记录未找到任何已入库的待处理技能数据
+            job.status = "success"
+            job.items_found = 0
+            job.items_saved = 0
+            job.finished_at = datetime.now(SH_TZ)
+            session.commit()
+            return {"reparsed": 0, "kept": 0, "llm": False}
+
+        classify_prompt = _prompts.get_classify_prompt(session)
+        translate_prompt = _prompts.get_translate_prompt(session)
+        version = _prompts.classify_prompt_version(classify_prompt)
+
+        # 强制更新：清空原有缓存的中文描述，使它们进入 LLM 翻译通道
+        for skill in skills:
+            skill.description_zh = ""
+
+        client = _build_client(session)
+        if client is None:
+            # 无可用模型时，默认也是一次成功解析但无法使用大模型归档的运行
+            job.status = "success"
+            job.items_found = len(skills)
+            job.items_saved = 0
+            job.finished_at = datetime.now(SH_TZ)
+            session.commit()
+            log_event(logger, channel="application", category="ai", level=logging.WARNING,
+                      event="skills.reparse.skipped_no_model", source=source, count=len(skills))
+            return {"reparsed": len(skills), "kept": 0, "llm": False}
+
+        batch = settings.github_skills_classify_batch
+        asyncio.run(_run_llm(client, skills, classify_prompt, version, translate_prompt, batch, _now()))
+        
+        # 统计经过大模型过滤后保留的 AI 技能数量
+        kept = sum(1 for s in skills if s.is_skill)
+        
+        # 2. 正常执行完成后更新状态为成功并记录分类结果
+        job.status = "success"
+        job.items_found = len(skills)
+        job.items_saved = kept
+        job.finished_at = datetime.now(SH_TZ)
+        session.commit()
+
+        log_event(logger, channel="application", category="ai", event="skills.reparse.completed",
+                  source=source, reparsed=len(skills), kept=kept)
+        return {"reparsed": len(skills), "kept": kept, "llm": True}
+        
+    except Exception as exc:
+        # 3. 发生异常时，记录错误信息并标记任务状态为 failed
+        job.status = "failed"
+        job.error_message = str(exc)
+        job.log_excerpt = str(exc)[:500]
+        job.finished_at = datetime.now(SH_TZ)
+        session.commit()
+        
+        log_event(logger, channel="application", category="ai", event="skills.reparse.failed",
+                  level=logging.ERROR, source=source, error=str(exc))
+        raise

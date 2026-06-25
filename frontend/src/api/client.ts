@@ -104,8 +104,8 @@ export function deleteSource(sourceId: number): Promise<{ deleted: boolean }> {
   return api.delete(`/api/admin/sources/${sourceId}`).then((r) => r.data);
 }
 
-export function fetchJobs(page = 1, pageSize = 20): Promise<JobListResponse> {
-  return api.get<JobListResponse>("/api/admin/jobs", { params: { page, page_size: pageSize } }).then((r) => r.data);
+export function fetchJobs(page = 1, pageSize = 20, q = ""): Promise<JobListResponse> {
+  return api.get<JobListResponse>("/api/admin/jobs", { params: { page, page_size: pageSize, q } }).then((r) => r.data);
 }
 
 // --- Block APIs ---

@@ -5,6 +5,7 @@ import { fetchJobs } from "../api/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input"; // 导入 Input 搜索框组件
 import { ChevronDown, ChevronUp, ChevronLeft, ChevronRight, AlertCircle, CheckCircle2, Clock, RotateCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
@@ -32,12 +33,36 @@ const PAGE_SIZE = 20;
 export function AdminJobsPage() {
   const [page, setPage] = useState(1);
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
+  const [inputValue, setInputValue] = useState(""); // 存放输入框中的即时查询内容
+  const [search, setSearch] = useState(""); // 触发真正后端检索的搜索词
 
   const { data, isLoading } = useQuery({
-    queryKey: ["jobs", page],
-    queryFn: () => fetchJobs(page, PAGE_SIZE),
+    queryKey: ["jobs", page, search], // 当搜索词变化时，重新获取数据
+    queryFn: () => fetchJobs(page, PAGE_SIZE, search),
     refetchInterval: 10000,
   });
+
+  // 处理输入内容变化，清空搜索时即时刷新
+  const handleInputChange = (val: string) => {
+    setInputValue(val);
+    if (val === "") {
+      setSearch("");
+      setPage(1);
+    }
+  };
+
+  // 执行搜索动作并将页码置为 1
+  const handleSearch = () => {
+    setSearch(inputValue);
+    setPage(1);
+  };
+
+  // 在搜索框中按下回车触发搜索
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") {
+      handleSearch();
+    }
+  };
 
   const jobs = data?.items ?? [];
   const total = data?.total ?? 0;
@@ -92,24 +117,41 @@ export function AdminJobsPage() {
       {/* Job list */}
       <Card>
         <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <CardTitle>爬取任务列表</CardTitle>
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Button
-                variant="outline" size="sm"
-                disabled={page <= 1}
-                onClick={() => setPage((p) => p - 1)}
-              >
-                <ChevronLeft className="w-4 h-4" />
-              </Button>
-              <span>第 {page} / {totalPages} 页</span>
-              <Button
-                variant="outline" size="sm"
-                disabled={page >= totalPages}
-                onClick={() => setPage((p) => p + 1)}
-              >
-                <ChevronRight className="w-4 h-4" />
-              </Button>
+            
+            {/* 搜索与翻页控制区 */}
+            <div className="flex flex-wrap items-center gap-3 flex-1 justify-end">
+              <div className="flex max-w-xs w-full items-center gap-1.5">
+                <Input
+                  placeholder="搜索数据源、状态、类型、日志原因..."
+                  value={inputValue}
+                  onChange={(e) => handleInputChange(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  className="h-8 text-xs bg-background/50 border-border/70"
+                />
+                <Button size="sm" className="h-8 text-xs shrink-0" onClick={handleSearch}>
+                  搜索
+                </Button>
+              </div>
+
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground border border-border/50 rounded-md p-1 bg-muted/20">
+                <Button
+                  variant="ghost" size="icon" className="h-6 w-6"
+                  disabled={page <= 1}
+                  onClick={() => setPage((p) => p - 1)}
+                >
+                  <ChevronLeft className="w-3.5 h-3.5" />
+                </Button>
+                <span className="px-1.5 tabular-nums">第 {page} / {totalPages} 页</span>
+                <Button
+                  variant="ghost" size="icon" className="h-6 w-6"
+                  disabled={page >= totalPages}
+                  onClick={() => setPage((p) => p + 1)}
+                >
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </Button>
+              </div>
             </div>
           </div>
         </CardHeader>

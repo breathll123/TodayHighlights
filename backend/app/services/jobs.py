@@ -82,7 +82,7 @@ def run_crawl_job(session: Session, source_id: int, trigger_type: str) -> CrawlJ
 
     job = CrawlJob(source_id=source_id, trigger_type=trigger_type, status="running", started_at=datetime.now(SH_TZ))
     session.add(job)
-    session.flush()
+    session.commit()  # 立即提交抓取任务记录，让前端“任务”页面的进度轮询能立刻看到 running 状态的实例
 
     topic_name = source.topic.name if source.topic else "-"
     with bind_log_context(
