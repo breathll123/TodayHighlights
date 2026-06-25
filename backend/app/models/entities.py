@@ -74,6 +74,59 @@ class CrawlJob(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
 
     source: Mapped[Source] = relationship(back_populates="jobs")
+    # 关联到此 CrawlJob 的所有结构化日志，采用物理级联删除及 passive_deletes
+    logs: Mapped[list["JobLogEntry"]] = relationship(
+        back_populates="job", cascade="all, delete-orphan", passive_deletes=True
+    )
+
+
+class JobLogEntry(Base):
+    """
+    任务日志条目模型，用于在后台【任务】页展示结构化日志时间线。
+    包含阶段进度、AI 分类/翻译步骤、HTTP 请求详情及失败时的错误堆栈。
+    """
+    __tablename__ = "job_log_entries"
+    __table_args__ = (
+        Index("ix_job_log_entries_job_id", "crawl_job_id", "id"),
+    )
+
+    # 主键，在 SQLite 兼容模式下为 Integer，在 MySQL 下为 BigInteger
+    id: Mapped[int] = mapped_column(BIGINT_PK, primary_key=True, autoincrement=True)
+    
+    # 物理外键关联，级联删除 CrawlJob 时自动清理日志
+    crawl_job_id: Mapped[int] = mapped_column(
+        ForeignKey("crawl_jobs.id", ondelete="CASCADE"), nullable=False
+    )
+    
+    # 日志记录的时间戳
+    ts: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    
+    # 日志级别 (如 INFO, WARNING, ERROR)
+    level: Mapped[str] = mapped_column(String(10), default="INFO", nullable=False)
+    
+    # 日志频道 (默认为 application)
+    channel: Mapped[str] = mapped_column(String(20), default="application", nullable=False)
+    
+    # 事件类型标识，必须在 logging_catalog 中注册
+    event: Mapped[str] = mapped_column(String(80), default="", nullable=False)
+    
+    # 日志类别 (如 ai, crawler 等)
+    category: Mapped[str] = mapped_column(String(20), default="", nullable=False)
+    
+    # 日志关联的阶段名称 (如 fetch, parse, classify 等)
+    stage: Mapped[str] = mapped_column(String(30), default="", nullable=False)
+    
+    # 格式化之后的易读日志消息（不可加数据库端的 server_default，仅在 Python 模型层默认为空字符串）
+    message: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    
+    # 保存该事件上下文结构化数据的 JSON 字段
+    fields_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+    
+    # 记录在数据库中创建的实际物理时间
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
+
+    # 反向关联 CrawlJob 模型
+    job: Mapped["CrawlJob"] = relationship(back_populates="logs")
 
 
 class RawItem(Base):
