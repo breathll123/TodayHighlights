@@ -122,3 +122,4 @@ def set_media_cache(mc):
 - **东方财富指数趋势**：日内数据使用 `push2delay.eastmoney.com`（而非 `push2.eastmoney.com`）——主域名可能返回空结果
 - **Alembic revision ID**：使用短格式（`"0010"`），不使用长格式（`"20260608_0010"`）
 - **`@ttl_cache` key 污染**：不要将每次请求不同的对象（如 `media_cache`）作为参数传给缓存函数——对象的 repr 会成为缓存 key 的一部分，导致缓存几乎无法命中
+- **任务日志落库 `JobLogHandler`**：挂在 `QueueListener` 的 targets 上，只收带 `crawl_job_id` 的事件；用独立会话批量写、终态事件（`*.completed/*.failed`、WARNING+）强制 flush。新增的业务事件码必须同步注册到 `logging_catalog._EVENT_DESCRIPTIONS`，否则 `test_logging_readability` 失败
