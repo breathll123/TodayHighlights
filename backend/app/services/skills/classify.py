@@ -7,9 +7,10 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from datetime import datetime
 
-from app.core.logging import log_event
+from app.core.logging import format_duration, log_event
 from app.models.entities import Skill
 from app.services.ai_client import AIClient
 
@@ -19,10 +20,12 @@ _VALID_LABELS = {"skill", "collection", "tool_or_app", "unrelated"}
 
 
 def has_chinese(text: str) -> bool:
+    # 辅助函数，判断字符串中是否包含中文字符
     return any("一" <= ch <= "鿿" for ch in text)
 
 
 def _chunked(items: list, size: int) -> list[list]:
+    # 辅助函数，将列表分块成指定大小的子列表
     return [items[i:i + size] for i in range(0, len(items), size)]
 
 
@@ -34,8 +37,10 @@ def skill_key(skill: Skill) -> str:
 async def classify_skills(
     client: AIClient, skills: list[Skill], prompt: str, prompt_version: str, batch_size: int, now: datetime,
 ) -> None:
+    # 对技能列表执行批量 LLM 语义分类，判断是否属于技术技能
     model = client.model_name
-    for batch in _chunked(skills, batch_size):
+    for idx, batch in enumerate(_chunked(skills, batch_size), 1):
+        started = time.perf_counter()
         payload = [
             {"full_name": skill_key(s), "description": s.description, "topics": (s.extra_json or {}).get("topics", [])}
             for s in batch
@@ -58,11 +63,16 @@ async def classify_skills(
             s.classify_prompt_version = prompt_version
             s.classified_by_model = model
             s.classified_at = now
+        # 发射单批次分类完成的统计事件，供页面查看耗时和处理进度
+        log_event(logger, channel="application", category="ai", event="skills.classify.batch",
+                  model=model, batch=idx, size=len(batch),
+                  duration=format_duration(time.perf_counter() - started))
 
 
 async def translate_skills(
     client: AIClient, skills: list[Skill], prompt: str, batch_size: int, now: datetime,
 ) -> None:
+    # 对已经被判定为技能的条目进行批量描述翻译（英译中）
     model = client.model_name
     todo = [s for s in skills if s.is_skill and (not s.description_zh or not s.description_zh.strip())]
     pending: list[Skill] = []
@@ -76,7 +86,8 @@ async def translate_skills(
         else:
             pending.append(s)
 
-    for batch in _chunked(pending, batch_size):
+    for idx, batch in enumerate(_chunked(pending, batch_size), 1):
+        started = time.perf_counter()
         payload = [{"full_name": skill_key(s), "description": s.description} for s in batch]
         try:
             result = await client.complete_json(prompt, json.dumps(payload, ensure_ascii=False))
@@ -91,3 +102,7 @@ async def translate_skills(
                 s.description_zh = zh
                 s.translated_by_model = model
                 s.translated_at = now
+        # 发射单批次翻译完成的统计事件，包含模型及处理耗时
+        log_event(logger, channel="application", category="ai", event="skills.translate.batch",
+                  model=model, batch=idx, size=len(batch),
+                  duration=format_duration(time.perf_counter() - started))
