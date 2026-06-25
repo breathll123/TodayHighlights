@@ -10,7 +10,7 @@ from app.core.auth import get_current_user, verify_admin
 from app.core.config import settings
 from app.core.crypto import CryptoService
 from app.core.database import get_session
-from app.models.entities import AIGenerationJob, AIBlockAnalysis, AIPromptTemplate, AITokenUsage, CrawlJob, Highlight, PageBlock, Source, Topic, User
+from app.models.entities import AIGenerationJob, AIBlockAnalysis, AIPromptTemplate, AITokenUsage, CrawlJob, Highlight, JobLogEntry, PageBlock, Source, Topic, User
 from app.schemas.admin import AIJobListResponse, AIJobRead, AIModelConfigWrite, BlockCreate, BlockRead, BlockUpdate, HighlightUpdate, ReorderRequest, SourceCreate, SourceRead, SourceUpdate
 from app.schemas.ai_prompt_template import AIPromptTemplateRead, AIPromptTemplateWrite
 from app.schemas.auth import UserRead
@@ -206,6 +206,7 @@ def list_jobs(
     # 构造核心查询，联合加载数据源对象，并按创建时间降序排序
     stmt = select(CrawlJob).options(joinedload(CrawlJob.source)).order_by(CrawlJob.created_at.desc())
     count_stmt = select(func.count()).select_from(CrawlJob)
+    stats_stmt = select(CrawlJob.status, func.count().label("cnt")).select_from(CrawlJob).group_by(CrawlJob.status)
 
     # 若指定了模糊检索关键字，根据数据源名称、触发方式、任务状态及错误日志进行模糊匹配
     if q and q.strip():
@@ -222,13 +223,27 @@ def list_jobs(
             (CrawlJob.status.like(q_like)) |
             (CrawlJob.error_message.like(q_like))
         )
+        stats_stmt = stats_stmt.join(CrawlJob.source).where(
+            (Source.name.like(q_like)) |
+            (CrawlJob.trigger_type.like(q_like)) |
+            (CrawlJob.status.like(q_like)) |
+            (CrawlJob.error_message.like(q_like))
+        )
 
     total = session.scalar(count_stmt)
+    status_counts = {status: count for status, count in session.execute(stats_stmt).all()}
     jobs = session.scalars(stmt.limit(page_size).offset((page - 1) * page_size)).all()
     return {
         "total": total or 0,
         "page": page,
         "page_size": page_size,
+        "stats": {
+            "total": total or 0,
+            "success": status_counts.get("success", 0),
+            "failed": status_counts.get("failed", 0),
+            "running": status_counts.get("running", 0),
+            "pending": status_counts.get("pending", 0),
+        },
         "items": [
             {
                 "id": job.id,
@@ -245,6 +260,46 @@ def list_jobs(
             }
             for job in jobs
         ],
+    }
+
+
+@router.get("/jobs/{job_id}/logs")
+def get_job_logs(job_id: int, after_id: int = 0, session: Session = Depends(get_session)) -> dict:
+    # 获取任务运行时的增量日志时间线，支持 after_id 增量检索
+    job = session.get(CrawlJob, job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="job not found")
+    rows = session.scalars(
+        select(JobLogEntry)
+        .where(JobLogEntry.crawl_job_id == job_id, JobLogEntry.id > after_id)
+        .order_by(JobLogEntry.id.asc())
+    ).all()
+    latest_id = rows[-1].id if rows else after_id
+    return {
+        "job": {
+            "id": job.id,
+            "status": job.status,
+            "started_at": job.started_at,
+            "finished_at": job.finished_at,
+            "items_found": job.items_found,
+            "items_saved": job.items_saved,
+            "error_message": job.error_message,
+        },
+        "entries": [
+            {
+                "id": e.id,
+                "ts": e.ts,
+                "level": e.level,
+                "event": e.event,
+                "category": e.category,
+                "stage": e.stage,
+                "message": e.message,
+                "fields": e.fields_json,
+            }
+            for e in rows
+        ],
+        "latest_id": latest_id,
+        "done": job.status in ("success", "failed"),
     }
 
 

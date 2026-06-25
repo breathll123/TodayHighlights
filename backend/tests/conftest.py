@@ -37,13 +37,30 @@ def _init_cache_backend() -> Generator[None, None, None]:
 
 
 @pytest.fixture
-def client() -> Generator[TestClient, None, None]:
+def engine():
+    # 创建共享的内存 SQLite engine，供测试客户端与测试用例共用
+    eng = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+    Base.metadata.create_all(eng)
+    yield eng
+
+
+@pytest.fixture
+def db_session(engine) -> Generator:
+    # 创建共享的 SQLAlchemy 会话，便于在测试代码中直接插入和校验数据
+    SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    session = SessionLocal()
+    try:
+        yield session
+    finally:
+        session.close()
+
+
+@pytest.fixture
+def client(engine) -> Generator[TestClient, None, None]:
+    # 创建 FastAPI TestClient 并覆盖数据库依赖，使其指向共享的 engine
     app.dependency_overrides.clear()
 
-    engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
     TestingSessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
-
-    Base.metadata.create_all(engine)
 
     def override_get_session():
         session = TestingSessionLocal()
