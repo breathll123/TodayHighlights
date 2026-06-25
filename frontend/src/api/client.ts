@@ -1,5 +1,5 @@
 import axios from "axios";
-import type { AdminUser, AIJobsStats, AIModelConfig, AIModelConfigWrite, AIOpsStats, AIGenerationJob, AIJobListResponse, AIPromptTemplate, AIPromptTemplateWrite, AITokenUsageDetail, AITokenUsageListResponse, AITopicSummaryResponse, AIUsageStats, AuthResponse, AuthUser, Block, BlockAIAnalysis, BlockAIAnalysisRequest, CrawlJob, Highlight, JobListResponse, MarketIndex, PageBlocksResponse, SetupStatus, Source, Topic } from "./types";
+import type { AdminUser, AIJobsStats, AIModelConfig, AIModelConfigWrite, AIOpsStats, AIGenerationJob, AIJobListResponse, AIPromptTemplate, AIPromptTemplateWrite, AITokenUsageDetail, AITokenUsageListResponse, AITopicSummaryResponse, AIUsageStats, AuthResponse, AuthUser, Block, BlockAIAnalysis, BlockAIAnalysisRequest, CrawlJob, Highlight, JobListResponse, JobLogResponse, MarketIndex, PageBlocksResponse, SetupStatus, Source, Topic } from "./types";
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE ?? "http://localhost:8000",
@@ -106,6 +106,13 @@ export function deleteSource(sourceId: number): Promise<{ deleted: boolean }> {
 
 export function fetchJobs(page = 1, pageSize = 20, q = ""): Promise<JobListResponse> {
   return api.get<JobListResponse>("/api/admin/jobs", { params: { page, page_size: pageSize, q } }).then((r) => r.data);
+}
+
+export function fetchJobLogs(jobId: number, afterId = 0): Promise<JobLogResponse> {
+  // 增量拉取任务执行日志
+  return api
+    .get<JobLogResponse>(`/api/admin/jobs/${jobId}/logs`, { params: { after_id: afterId } })
+    .then((r) => r.data);
 }
 
 // --- Block APIs ---

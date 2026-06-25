@@ -47,7 +47,52 @@ export interface JobListResponse {
   total: number;
   page: number;
   page_size: number;
+  stats?: {
+    total: number;
+    success: number;
+    failed: number;
+    running: number;
+    pending: number;
+  };
   items: CrawlJob[];
+}
+
+export interface JobLogEntry {
+  // 日志记录的唯一递增 ID
+  id: number;
+  // 日志产生的时间戳
+  ts: string;
+  // 日志级别 (如 INFO, WARNING, ERROR)
+  level: string;
+  // 事件标识 (如 crawl.started 等)
+  event: string;
+  // 日志分类 (如 crawler, ai)
+  category: string;
+  // 运行阶段 (如 fetch, parse)
+  stage: string;
+  // 格式化后的日志消息
+  message: string;
+  // 携带的其他上下文结构化字段
+  fields: Record<string, unknown>;
+}
+
+export interface JobLogResponse {
+  // 日志关联的爬虫任务简要状态
+  job: {
+    id: number;
+    status: string;
+    started_at: string | null;
+    finished_at: string | null;
+    items_found: number;
+    items_saved: number;
+    error_message: string;
+  };
+  // 增量拉取到的日志条目列表
+  entries: JobLogEntry[];
+  // 当前拉取到的最大日志 ID
+  latest_id: number;
+  // 任务是否已结束（即不再会有新日志）
+  done: boolean;
 }
 
 export interface Block {
