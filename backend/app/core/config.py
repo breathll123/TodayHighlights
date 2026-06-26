@@ -8,7 +8,7 @@ SH_TZ = timezone(timedelta(hours=8))  # Asia/Shanghai UTC+8
 class Settings(BaseSettings):
     database_url: str = "mysql+pymysql://daily:daily@127.0.0.1:3306/daily_highlights"
     app_secret_key: str
-    cors_origins: str = "http://localhost:5173,http://localhost:5175,http://192.168.1.12:5175"
+    cors_origins: str = ""
     scheduler_enabled: bool = True
     crawl_reconcile_on_startup: bool = True  # 启动时把遗留的 running 任务标记失败，释放运行守卫
     eastmoney_proxy: str | None = None  # e.g. http://127.0.0.1:7890
