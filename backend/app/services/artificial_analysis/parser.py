@@ -371,7 +371,7 @@ def is_chinese_creator(creator_id: str | None, creator_name: str | None) -> bool
     支持包括智谱、阿里通义、百川、深度求索、月之暗面、腾讯混元、百度文心等常见厂商及其变体。
     """
     cn_keywords = {
-        "zhipu", "zhipuai", "zhipu-ai", "qwen", "alibaba", "deepseek", "baichuan", 
+        "zhipu", "zhipuai", "zhipu-ai", "z ai", "qwen", "alibaba", "deepseek", "baichuan", 
         "moonshot", "kimi", "01.ai", "lingyiwanwu", "tencent", "baidu", "sensetime", 
         "minimax", "internlm", "xverse", "shanghai-ai", "shanghai artificial intelligence laboratory",
         "yayi", "xiaomi", "huawei", "spark", "xfyun", "iflytek", "sensenova", "stepfun", "jieyue"

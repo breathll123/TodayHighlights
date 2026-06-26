@@ -6,7 +6,7 @@ from app.models.entities import AACreatorRegion
 from app.services.artificial_analysis.constants import DATASETS
 from app.services.artificial_analysis.parser import (DatasetParseError, ParsedDataset, ParsedRankingEntry,
                                                        derive_china_dataset, normalize_creator_name,
-                                                       parse_dataset)
+                                                       parse_dataset, is_chinese_creator)
 
 
 LANGUAGE_PAGE_1 = {
@@ -278,3 +278,14 @@ def test_normalize_creator_name_folds_case_and_whitespace():
     assert normalize_creator_name("  OpenAI  ") == "openai"
     assert normalize_creator_name("DeepSeek-AI") == "deepseek-ai"
     assert normalize_creator_name("") == ""
+
+
+def test_is_chinese_creator_recognizes_z_ai():
+    # 测试新增的 "Z AI" 及其变体能被成功识别为中国创作者
+    assert is_chinese_creator("creator-z-ai", "Z AI") is True
+    assert is_chinese_creator("z ai", "Zhipu Variant") is True
+    # 测试已有关键字
+    assert is_chinese_creator("deepseek-id", "DeepSeek") is True
+    # 测试国外创作者
+    assert is_chinese_creator("openai-id", "OpenAI") is False
+    assert is_chinese_creator("", "") is False
