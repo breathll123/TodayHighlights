@@ -167,6 +167,10 @@ def parse_dataset(
                 if norm and norm in region_by_name:
                     region = region_by_name[norm]
 
+            # 智能兜底判定：如果数据库未能匹配或标注为 unknown，但符合已知中国创作者关键词，则设为 cn
+            if region == "unknown" and is_chinese_creator(creator_id, creator_name):
+                region = "cn"
+
             # Fallback model ID when upstream ID is missing
             effective_id = model_id
             if not effective_id:
@@ -359,3 +363,24 @@ def canonical_dataset_hash(dataset_key: str, entries: list[ParsedRankingEntry]) 
     }
     serialized = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     return sha256(serialized.encode()).hexdigest()
+
+
+def is_chinese_creator(creator_id: str | None, creator_name: str | None) -> bool:
+    """
+    智能识别中国的大模型厂商（创作者）。
+    支持包括智谱、阿里通义、百川、深度求索、月之暗面、腾讯混元、百度文心等常见厂商及其变体。
+    """
+    cn_keywords = {
+        "zhipu", "zhipuai", "zhipu-ai", "qwen", "alibaba", "deepseek", "baichuan", 
+        "moonshot", "kimi", "01.ai", "lingyiwanwu", "tencent", "baidu", "sensetime", 
+        "minimax", "internlm", "xverse", "shanghai-ai", "shanghai artificial intelligence laboratory",
+        "yayi", "xiaomi", "huawei", "spark", "xfyun", "iflytek", "sensenova", "stepfun", "jieyue"
+    }
+    id_lower = creator_id.lower().strip() if creator_id else ""
+    name_lower = creator_name.lower().strip() if creator_name else ""
+    
+    # 检查 ID 或名称中是否包含任何中国厂商的关键字
+    for kw in cn_keywords:
+        if kw in id_lower or kw in name_lower:
+            return True
+    return False

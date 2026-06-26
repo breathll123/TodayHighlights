@@ -7,13 +7,26 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.models.entities import AACreatorRegion, AARankingDataset, AARankingEntry, AARawSnapshot, AASyncRun
-from app.services.artificial_analysis.parser import ParsedDataset, ParsedRankingEntry
+from app.services.artificial_analysis.parser import ParsedDataset, ParsedRankingEntry, is_chinese_creator
 
 logger = logging.getLogger(__name__)
 
 
 def load_creator_regions(session: Session) -> list[AACreatorRegion]:
-    return list(session.scalars(select(AACreatorRegion)))
+    # 加载创作者地区，并在此过程中启发式自动校正之前已被标记为 unknown 的中国创作者，归类为 cn
+    creators = list(session.scalars(select(AACreatorRegion)))
+    updated = False
+    for cr in creators:
+        if cr.region_code == "unknown":
+            if is_chinese_creator(cr.creator_external_id, cr.canonical_name):
+                cr.region_code = "cn"
+                updated = True
+    if updated:
+        try:
+            session.commit()
+        except Exception:
+            session.rollback()
+    return creators
 
 
 def observe_unknown_creators(
@@ -32,11 +45,13 @@ def observe_unknown_creators(
 
     for entry in entries:
         if entry.creator_external_id and entry.creator_external_id not in known_ids:
+            # 智能检测该新创作者是否为中国的模型厂商
+            region = "cn" if is_chinese_creator(entry.creator_external_id, entry.creator_name) else "unknown"
             cr = AACreatorRegion(
                 creator_external_id=entry.creator_external_id,
                 canonical_name=entry.creator_name,
                 normalized_name=entry.creator_name.lower().strip(),
-                region_code="unknown",
+                region_code=region,
                 source="observed",
             )
             session.add(cr)
@@ -44,11 +59,13 @@ def observe_unknown_creators(
         elif not entry.creator_external_id and entry.creator_name:
             norm = entry.creator_name.lower().strip()
             if norm and norm not in known_names:
+                # 智能检测该新创作者是否为中国的模型厂商
+                region = "cn" if is_chinese_creator("", entry.creator_name) else "unknown"
                 cr = AACreatorRegion(
                     creator_external_id=None,
                     canonical_name=entry.creator_name,
                     normalized_name=norm,
-                    region_code="unknown",
+                    region_code=region,
                     source="observed",
                 )
                 session.add(cr)
