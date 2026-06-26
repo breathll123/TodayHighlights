@@ -55,16 +55,26 @@ def _parse_feed(xml_text: str) -> list[dict]:
 def fetch_news(_config: dict, limit: int) -> list[dict]:
     """Fetch AI news from AI HOT RSS feed."""
     try:
-        resp = observed_http_get(
-            httpx.get,
-            "https://aihot.virxact.com/feed.xml",
-            provider="aihot", operation="news_feed",
-            host="aihot.virxact.com", path="/feed.xml",
-            headers=_headers,
-            timeout=20,
-            follow_redirects=True,
-        )
-        resp.raise_for_status()
+        try:
+            resp = observed_http_get(
+                httpx.get,
+                "https://aihot.virxact.com/feed.xml",
+                provider="aihot", operation="news_feed",
+                host="aihot.virxact.com", path="/feed.xml",
+                headers=_headers,
+                timeout=20,
+                follow_redirects=True,
+            )
+            # 如果响应状态码是 304 (未修改)，直接静默返回空列表，避免后续空文本解析报错
+            if resp.status_code == 304:
+                return []
+            resp.raise_for_status()
+        except httpx.HTTPError as exc:
+            # 捕获部分 httpx 版本将 304 当作重定向异常抛出的情况，返回空列表实现静默降级
+            if "304" in str(exc) or "Not Modified" in str(exc):
+                return []
+            raise
+
         articles = _parse_feed(resp.text)
         result = []
         for i, a in enumerate(articles[:limit]):
@@ -82,5 +92,6 @@ def fetch_news(_config: dict, limit: int) -> list[dict]:
             raise ValueError("empty RSS — don't cache")
         return result
     except Exception as exc:
+        # 对于其它未知解析异常或 4xx/5xx 请求错误，照常记录适配器失败事件
         log_adapter_failure(provider="aihot", operation="news_feed", stage="parse", exc=exc)
         return []

@@ -24,18 +24,28 @@ class AihotAdapter:
         return handler(subtype)
 
     def _fetch_news(self, subtype: str) -> list[RawItemDraft]:
-        resp = observed_http_get(
-            httpx.get,
-            "https://aihot.virxact.com/feed.xml",
-            provider="aihot",
-            operation="news_feed",
-            host="aihot.virxact.com",
-            path="/feed.xml",
-            headers=_headers,
-            timeout=20,
-            follow_redirects=True,
-        )
-        resp.raise_for_status()
+        try:
+            resp = observed_http_get(
+                httpx.get,
+                "https://aihot.virxact.com/feed.xml",
+                provider="aihot",
+                operation="news_feed",
+                host="aihot.virxact.com",
+                path="/feed.xml",
+                headers=_headers,
+                timeout=20,
+                follow_redirects=True,
+            )
+            # 如果 HTTP 响应状态码为 304 (未修改)，说明数据源内容没有更新，直接返回空列表以正常结束任务
+            if resp.status_code == 304:
+                return []
+            resp.raise_for_status()
+        except httpx.HTTPError as exc:
+            # 捕获部分 httpx 版本下当 follow_redirects=True 且返回 304 时误判重定向抛出的异常
+            if "304" in str(exc) or "Not Modified" in str(exc):
+                return []
+            raise
+
         root = ET.fromstring(resp.text)
         drafts = []
 
