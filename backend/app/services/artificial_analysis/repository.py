@@ -145,6 +145,42 @@ def publish_dataset(session: Session, dataset_id: int) -> AARankingDataset:
     return dataset
 
 
+def classify_region(
+    creator_external_id: str | None,
+    creator_name: str | None,
+    overrides: dict[str, str],
+) -> str:
+    """
+    确定创作者的区域：人工手动覆盖（source='manual'）优先，否则使用本地关键字进行实时匹配自动判定。
+    
+    overrides: 字典格式，结构为 {creator_external_id 或 normalized_name -> region_code}
+    """
+    key_id = (creator_external_id or "").strip()
+    key_name = (creator_name or "").lower().strip()
+    # 优先使用外键 ID 进行人工覆盖匹配
+    if key_id and key_id in overrides:
+        return overrides[key_id]
+    # 其次使用规范化的创作者名称进行人工覆盖匹配
+    if key_name and key_name in overrides:
+        return overrides[key_name]
+    # 若均无人工覆盖，则回退到本地关键字的智能识别自动判定
+    return "cn" if is_chinese_creator(creator_external_id, creator_name) else "unknown"
+
+
+def load_manual_overrides(session: Session) -> dict[str, str]:
+    """
+    从数据库中加载所有由人工指定的区域覆盖规则 (source='manual')。
+    支持按创作者外部 ID 和规范化名称双向检索。
+    """
+    out: dict[str, str] = {}
+    for cr in session.scalars(select(AACreatorRegion).where(AACreatorRegion.source == "manual")):
+        if cr.creator_external_id:
+            out[cr.creator_external_id] = cr.region_code
+        if cr.normalized_name:
+            out[cr.normalized_name] = cr.region_code
+    return out
+
+
 def _serialize_entry(entry: AARankingEntry) -> dict:
     return {
         "id": entry.id,
