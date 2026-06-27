@@ -15,7 +15,7 @@ from app.models.entities import AASyncRun
 from app.services.artificial_analysis.collector import (ArtificialAnalysisCollector, QuotaReserveReached,
                                                            UpstreamRateLimited, create_default_client)
 from app.services.artificial_analysis.constants import DATASETS, SYNC_DATASET_ORDER
-from app.services.artificial_analysis.parser import DatasetParseError, derive_china_dataset, parse_dataset
+from app.services.artificial_analysis.parser import parse_dataset
 from app.services.artificial_analysis.repository import (get_published_ranking, load_creator_regions,
                                                             mark_abandoned_runs, observe_unknown_creators,
                                                             publish_dataset, store_parsed_dataset)
@@ -214,32 +214,7 @@ def execute_sync_run(
                         session.commit()
                         publish_dataset(session, dataset.id)
 
-                        # Derive China dataset for language_global
-                        if dataset_key == "language_global":
-                            try:
-                                china = derive_china_dataset(parsed)
-                                observe_unknown_creators(session, china.entries)
-                                china_ds = store_parsed_dataset(
-                                    session,
-                                    run_id=run_id,
-                                    parsed=china,
-                                    snapshot_ids=collected.snapshot_ids,
-                                    captured_at=datetime.utcnow(),
-                                )
-                                session.commit()
-                                publish_dataset(session, china_ds.id)
-                                completed.append("language_china")
-                            except DatasetParseError as exc:
-                                log_event(
-                                    logger,
-                                    channel="application",
-                                    category="ai",
-                                    event="aa.dataset.failed",
-                                    level=logging.WARNING,
-                                    dataset_key="language_china",
-                                    error_type=type(exc).__name__,
-                                    error=str(exc),
-                                )
+
 
                         completed.append(dataset_key)
                         run.heartbeat_at = datetime.utcnow()
