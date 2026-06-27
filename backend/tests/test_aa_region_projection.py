@@ -10,6 +10,7 @@ from app.services.artificial_analysis.repository import (
     classify_region, load_manual_overrides, get_published_ranking,
 )
 from app.services.blocks import _published_aa_dataset_updated_at
+from app.api.artificial_analysis_admin import list_creators
 
 
 def _session():
@@ -161,3 +162,22 @@ def test_china_block_freshness_uses_global_published_at():
         s.add(block)
         s.commit()
         assert _published_aa_dataset_updated_at(s, block) == ds.published_at
+
+
+def test_list_creators_returns_live_region():
+    """
+    测试后台创作者列表中厂商区域属性的实时获取功能。
+    即使 observed 自动检测行在数据库里保存的是旧的 unknown，
+    在列表中通过 classify_region 进行实时重新计算也应当能得到最新的判定结果（例如 cn 或 manual override 后的 real region）。
+    """
+    with _session() as s:
+        # observed 行：数据库里存储的是旧的 unknown，但因其实时匹配规则符合，列表读取时应判为 cn
+        s.add(AACreatorRegion(creator_external_id="c-zai", canonical_name="Z AI",
+                              normalized_name="z ai", region_code="unknown", source="observed"))
+        # manual 行：人工 override 为 other，应以 override 规则为准
+        s.add(AACreatorRegion(creator_external_id="c-x", canonical_name="X Labs",
+                              normalized_name="x labs", region_code="other", source="manual"))
+        s.commit()
+        result = {c.canonical_name: c.region_code for c in list_creators(session=s)}
+        assert result["Z AI"] == "cn"      # 实时判定应正确覆盖旧的存量 unknown
+        assert result["X Labs"] == "other" # 人工 override 应该原样返回

@@ -18,7 +18,9 @@ from app.schemas.artificial_analysis import (
     AACreatorCoverageRead, AACreatorRegionRead, AACreatorRegionUpdate,
     AADatasetStatusRead, AAManualSyncRequest, AASyncRunListRead, AASyncRunRead, AAStatusRead,
 )
-from app.services.artificial_analysis.repository import get_creator_coverage, get_published_ranking
+from app.services.artificial_analysis.repository import (
+    get_creator_coverage, get_published_ranking, classify_region, load_manual_overrides,
+)
 from app.services.artificial_analysis.sync import (ActiveSyncRunError, execute_sync_run,
                                                       request_reparse_run, request_sync_run)
 from app.services.audit_logging import log_admin_change
@@ -143,13 +145,19 @@ def get_run(run_id: int, session: Session = Depends(get_session)) -> AASyncRunRe
 
 @router.get("/creators", response_model=list[AACreatorRegionRead])
 def list_creators(session: Session = Depends(get_session)) -> list[AACreatorRegionRead]:
+    """
+    获取所有创作者的区域划分列表。
+    这里会对区域属性进行实时判定（即以数据库中最新的 manual overrides 为最高优先级，否则使用自动判定）。
+    这样在后台修改 override 后，查询列表能立刻反应出来，而无需重新运行同步任务。
+    """
+    overrides = load_manual_overrides(session)
     creators = session.scalars(select(AACreatorRegion).order_by(AACreatorRegion.canonical_name)).all()
     return [AACreatorRegionRead(
         id=c.id,
         creator_external_id=c.creator_external_id,
         canonical_name=c.canonical_name,
         normalized_name=c.normalized_name,
-        region_code=c.region_code,
+        region_code=classify_region(c.creator_external_id, c.canonical_name, overrides),
         source=c.source,
         notes=c.notes,
     ) for c in creators]
