@@ -7,7 +7,7 @@ from sqlalchemy.orm import sessionmaker
 from app.core.database import Base
 from app.models.entities import AACreatorRegion, AARankingDataset, AARankingEntry
 from app.services.artificial_analysis.repository import (
-    classify_region, load_manual_overrides,
+    classify_region, load_manual_overrides, get_published_ranking,
 )
 
 
@@ -69,3 +69,78 @@ def test_load_manual_overrides_only_manual_rows():
         s.commit()
         overrides = load_manual_overrides(s)
         assert overrides == {"c-a": "cn", "a": "cn"}  # observed 行不计入
+
+
+def _seed_global(s, rows):
+    """
+    向测试数据库中写入已发布的全球大模型数据。
+    rows 格式为：list of (model_name, creator_external_id, creator_name, rank, score)。
+    """
+    ds = AARankingDataset(
+        sync_run_id=1, dataset_key="language_global", scope="global", score_type="elo",
+        status="published", data_sha256="x", captured_at=datetime(2026, 6, 26),
+        published_at=datetime(2026, 6, 26),
+    )
+    s.add(ds)
+    s.flush()
+    for model, cid, cname, rank, score in rows:
+        s.add(AARankingEntry(
+            dataset_id=ds.id, model_external_id=model, model_name=model,
+            creator_external_id=cid, creator_name=cname, rank=rank, score=score,
+            score_type="elo",
+        ))
+    s.commit()
+    return ds
+
+
+def test_china_projection_filters_and_reranks_without_any_sync():
+    """
+    测试中国榜的读时投影映射功能，即使在没有任何中国榜单物化同步的条件下，
+    也能实时过滤全球榜中的中国厂商并完成相对重新排序。
+    """
+    with _session() as s:
+        _seed_global(s, [
+            ("GPT", "c-openai", "OpenAI", 1, 1400),
+            ("GLM", "c-zai", "Z AI", 2, 1380),     # 中国厂商 (关键字 z ai 实时命中)
+            ("Qwen3", "c-qwen", "Qwen", 3, 1370),  # 中国厂商 (关键字 qwen 实时命中)
+        ])
+        items, meta = get_published_ranking(s, "language_china", 50)
+        assert [i["creator"] for i in items] == ["Z AI", "Qwen"]
+        assert [i["rank"] for i in items] == [1, 2]  # 在中国厂商集合内相对重排
+        assert meta["dataset_key"] == "language_china"
+
+
+def test_china_projection_respects_manual_override():
+    """
+    测试中国榜投影在过滤时是否能实时响应人工覆盖：
+    即当人工把原本会被关键字识别为中国厂商 (cn) 的 'Z AI' 手动覆盖为 'other' 时，
+    读取中国榜时该厂商应实时不再出现在列表中。
+    """
+    with _session() as s:
+        _seed_global(s, [("GLM", "c-zai", "Z AI", 1, 1380)])
+        s.add(AACreatorRegion(creator_external_id="c-zai", canonical_name="Z AI",
+                              normalized_name="z ai", region_code="other", source="manual"))
+        s.commit()
+        items, _ = get_published_ranking(s, "language_china", 50)
+        assert items == []  # 人工标 other → 不应出现在中国大模型榜中
+
+
+def test_china_projection_empty_when_no_cn():
+    """
+    测试当最新全球榜中没有任何创作者被标记为中国厂商时，读取中国榜应正常返回空列表。
+    """
+    with _session() as s:
+        _seed_global(s, [("GPT", "c-openai", "OpenAI", 1, 1400)])
+        items, meta = get_published_ranking(s, "language_china", 50)
+        assert items == []
+        assert meta["dataset_key"] == "language_china"
+
+
+def test_china_projection_none_when_no_global_published():
+    """
+    测试当数据库中没有任何已发布的全球榜单时，读取中国榜投影应返回空列表且元数据为 None。
+    """
+    with _session() as s:
+        items, meta = get_published_ranking(s, "language_china", 50)
+        assert items == []
+        assert meta is None

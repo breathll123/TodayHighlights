@@ -197,12 +197,61 @@ def _serialize_entry(entry: AARankingEntry) -> dict:
     }
 
 
+def _china_projection(session: Session, limit: int) -> tuple[list[dict], dict | None]:
+    """
+    中国大模型榜单读时投影函数：
+    读取最新已发布全球榜的快照，依据当前最新的厂商地区标记进行实时归类、筛出 cn 厂商、重新排名，并限制返回的数量。
+    """
+    g = session.scalar(
+        select(AARankingDataset).where(
+            AARankingDataset.dataset_key == "language_global",
+            AARankingDataset.status == "published",
+        ).order_by(AARankingDataset.published_at.desc()).limit(1)
+    )
+    if g is None:
+        return [], None
+
+    overrides = load_manual_overrides(session)
+    entries = list(session.scalars(
+        select(AARankingEntry)
+        .where(AARankingEntry.dataset_id == g.id)
+        .order_by(AARankingEntry.rank.is_(None), AARankingEntry.rank.asc())
+    ))
+
+    out: list[dict] = []
+    rank = 1
+    for e in entries:
+        if classify_region(e.creator_external_id, e.creator_name, overrides) != "cn":
+            continue
+        item = _serialize_entry(e)
+        item["rank"] = rank if e.score is not None else None
+        out.append(item)
+        if e.score is not None:
+            rank += 1
+        if len(out) >= limit:
+            break
+
+    is_stale = g.captured_at < datetime.utcnow() - timedelta(hours=settings.artificial_analysis_stale_hours)
+    meta = {
+        "dataset_key": "language_china",
+        "score_type": g.score_type,
+        "captured_at": g.captured_at.isoformat() if g.captured_at else None,
+        "source_name": "Artificial Analysis",
+        "source_url": "https://artificialanalysis.ai/",
+        "scope_note": "中国模型范围由今日看点根据模型厂商归属整理，原始评分来自 Artificial Analysis。",
+        "is_stale": is_stale,
+    }
+    return out, meta
+
+
 def get_published_ranking(
     session: Session,
     dataset_key: str,
     limit: int,
 ) -> tuple[list[dict], dict | None]:
     """Return ranked items and metadata for a published dataset."""
+    if dataset_key == "language_china":
+        return _china_projection(session, limit)
     dataset = session.scalar(
         select(AARankingDataset).where(
             AARankingDataset.dataset_key == dataset_key,
