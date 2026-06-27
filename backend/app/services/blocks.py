@@ -126,6 +126,9 @@ def _published_aa_dataset_updated_at(session: Session, block: PageBlock) -> date
         single = config.get("dataset_key")
         keys = [single] if single else ["language_global"]
     keys = [str(key) for key in keys if key]
+    # 中国大模型榜单已重构为全球榜单的实时读时投影，自身不再发布物化数据集。
+    # 因此其区块新鲜度统一使用全球榜单（language_global）的发布时间进行判定。
+    keys = ["language_global" if k == "language_china" else k for k in keys]
     if not keys:
         return None
     return session.scalar(

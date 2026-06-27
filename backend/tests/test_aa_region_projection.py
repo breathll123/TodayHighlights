@@ -5,10 +5,11 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from app.core.database import Base
-from app.models.entities import AACreatorRegion, AARankingDataset, AARankingEntry
+from app.models.entities import AACreatorRegion, AARankingDataset, AARankingEntry, PageBlock
 from app.services.artificial_analysis.repository import (
     classify_region, load_manual_overrides, get_published_ranking,
 )
+from app.services.blocks import _published_aa_dataset_updated_at
 
 
 def _session():
@@ -144,3 +145,19 @@ def test_china_projection_none_when_no_global_published():
         items, meta = get_published_ranking(s, "language_china", 50)
         assert items == []
         assert meta is None
+
+
+def test_china_block_freshness_uses_global_published_at():
+    """
+    测试当获取中国榜大模型区块的新鲜度时间戳时，由于中国榜没有物化数据集，
+    系统应能正确路由到使用全球榜数据集的发布时间 published_at 作为新鲜度判定。
+    """
+    with _session() as s:
+        ds = _seed_global(s, [("GPT", "c-openai", "OpenAI", 1, 1400)])
+        block = PageBlock(
+            page_route="/topics/ai", title="中国大模型榜", source_type="artificial_analysis_ranking",
+            source_config={"dataset_keys": ["language_china"]}, display_count=10, status="published",
+        )
+        s.add(block)
+        s.commit()
+        assert _published_aa_dataset_updated_at(s, block) == ds.published_at
