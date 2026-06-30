@@ -1,0 +1,5 @@
+{
+  "success": 1,
+  "results_html": "<a href=\"https://store.steampowered.com/app/999999/Upcoming_Game/\" class=\"search_result_row\" data-ds-appid=\"999999\">\n  <div class=\"search_capsule\"><img src=\"https://shared.fastly.steamstatic.com/upcoming.jpg\"></div>\n  <div class=\"responsive_search_name_combined\">\n    <div class=\"col search_name\"><span class=\"title\">Upcoming Game</span></div>\n    <div class=\"col search_released\">2026年第4季度</div>\n    <div class=\"col search_price_discount_combined\">\n      <div class=\"col search_price\"></div>\n    </div>\n  </div>\n</a>",
+  "total_count": 1
+}

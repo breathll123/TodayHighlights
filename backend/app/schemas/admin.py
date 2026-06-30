@@ -53,6 +53,7 @@ class BlockCreate(BaseModel):
     source_type: str
     source_config: dict[str, Any]
     display_style: str = "card"
+    theme: str = "default"
     display_count: int = 5
     sort_by: str = "created_at"
     enabled: bool = True
@@ -71,6 +72,7 @@ class BlockUpdate(BaseModel):
     source_type: str | None = None
     source_config: dict[str, Any] | None = None
     display_style: str | None = None
+    theme: str | None = None
     display_count: int | None = None
     sort_by: str | None = None
     enabled: bool | None = None
@@ -92,6 +94,7 @@ class BlockRead(BaseModel):
     source_type: str
     source_config: dict[str, Any]
     display_style: str
+    theme: str
     display_count: int
     sort_by: str
     enabled: bool

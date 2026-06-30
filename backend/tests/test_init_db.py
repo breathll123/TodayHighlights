@@ -1,12 +1,12 @@
 from collections.abc import Generator
 
 import pytest
-from sqlalchemy import create_engine, select
+from sqlalchemy import create_engine, func, select
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.core.database import Base
-from app.models.entities import AppSetting, Source, Topic
+from app.models.entities import AppSetting, PageBlock, Source, Topic
 from app.services.admin_bootstrap import (
     BOOTSTRAP_COMPLETED_KEY,
     LEGACY_PASSWORD_KEY,
@@ -90,6 +90,7 @@ def test_reconcile_system_catalog_normalizes_legacy_stock_topic(db_session):
         ("股票", "stocks"),
         ("AI", "ai"),
         ("足球", "football"),
+        ("游戏", "games"),
     ]
 
 
@@ -146,3 +147,31 @@ def test_reconcile_system_catalog_seeds_sources_idempotently(db_session):
     assert ("dongqiudi", "dongqiudi://matches") in source_keys
     assert ("qiumiwu", "qiumiwu://matches") in source_keys
     assert ("aihot", "aihot://news") in source_keys
+
+
+def test_reconcile_system_catalog_seeds_game_page_blocks_idempotently(db_session):
+    reconcile_system_catalog(db_session)
+
+    blocks = db_session.scalars(
+        select(PageBlock).where(PageBlock.page_route == "/topics/games")
+    ).all()
+    assert len(blocks) == 8
+    assert {
+        (block.title, block.source_type, block.status)
+        for block in blocks
+    } == {
+        ("热门游戏榜", "game_top_sellers", "draft"),
+        ("热门游戏榜", "game_top_sellers", "published"),
+        ("在线热玩榜", "game_most_played", "draft"),
+        ("在线热玩榜", "game_most_played", "published"),
+        ("打折促销", "game_specials", "draft"),
+        ("打折促销", "game_specials", "published"),
+        ("新游动态", "game_new_releases", "draft"),
+        ("新游动态", "game_new_releases", "published"),
+    }
+
+    reconcile_system_catalog(db_session)
+
+    assert db_session.scalar(
+        select(func.count()).select_from(PageBlock).where(PageBlock.page_route == "/topics/games")
+    ) == 8

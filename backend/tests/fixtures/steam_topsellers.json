@@ -1,0 +1,5 @@
+{
+  "success": 1,
+  "results_html": "<a href=\"https://store.steampowered.com/app/105600/Terraria/\" class=\"search_result_row\" data-ds-appid=\"105600\">\n  <div class=\"search_capsule\"><img src=\"https://shared.fastly.steamstatic.com/terraria.jpg\"></div>\n  <div class=\"responsive_search_name_combined\">\n    <div class=\"col search_name\"><span class=\"title\">Terraria</span></div>\n    <div class=\"col search_released\">16 May, 2011</div>\n    <div class=\"col search_price_discount_combined\">\n      <div class=\"col search_price\">¥ 36</div>\n    </div>\n  </div>\n</a>\n<a href=\"https://store.steampowered.com/app/570/Dota_2/\" class=\"search_result_row\" data-ds-appid=\"570\">\n  <div class=\"search_capsule\"><img src=\"https://shared.fastly.steamstatic.com/dota2.jpg\"></div>\n  <div class=\"responsive_search_name_combined\">\n    <div class=\"col search_name\"><span class=\"title\">Dota 2</span></div>\n    <div class=\"col search_released\">9 Jul, 2013</div>\n    <div class=\"col search_price_discount_combined\">\n      <div class=\"col search_price\">免费开玩</div>\n    </div>\n  </div>\n</a>",
+  "total_count": 2
+}

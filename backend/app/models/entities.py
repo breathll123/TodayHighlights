@@ -414,6 +414,7 @@ class PageBlock(TimestampMixin, Base):
     source_type: Mapped[str] = mapped_column(String(40), nullable=False)
     source_config: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
     display_style: Mapped[str] = mapped_column(String(40), default="card", nullable=False)
+    theme: Mapped[str] = mapped_column(String(40), default="default", nullable=False)
     display_count: Mapped[int] = mapped_column(Integer, default=5, nullable=False)
     sort_by: Mapped[str] = mapped_column(String(40), default="created_at", nullable=False)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
@@ -601,3 +602,113 @@ class SkillStat(Base):
     skill_id: Mapped[int] = mapped_column(ForeignKey("skills.id"), nullable=False)
     popularity: Mapped[int] = mapped_column(BigInteger, default=0, nullable=False)
     captured_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+
+
+class GameItem(TimestampMixin, Base):
+    """
+    游戏主数据表，存储各个来源的游戏基础信息。
+    通过 provider 和 external_id 联合唯一约束保证数据不会重复。
+    """
+    __tablename__ = "game_items"
+    __table_args__ = (
+        UniqueConstraint("provider", "external_id", name="uq_game_items_provider_external_id"),
+        Index("ix_game_items_provider_last_seen", "provider", "last_seen_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    provider: Mapped[str] = mapped_column(String(50), nullable=False)  # 来源平台，如 'steam'，未来支持 'epic' 等
+    external_id: Mapped[str] = mapped_column(String(100), nullable=False)  # 平台内的唯一标识，如 Steam appid
+    name: Mapped[str] = mapped_column(String(255), nullable=False)  # 游戏中文名称（如果没有则存储抓取到的名称）
+    name_en: Mapped[str] = mapped_column(String(255), default="", nullable=False)  # 英文名称
+    slug: Mapped[str] = mapped_column(String(255), default="", nullable=False)  # 拼音或英文缩写标识，便于路由
+    cover_url: Mapped[str] = mapped_column(Text, default="", nullable=False)  # 外部封面图片 URL
+    cover_local: Mapped[str] = mapped_column(Text, default="", nullable=False)  # 本地缓存封面图片的相对路径/API路径
+    source_url: Mapped[str] = mapped_column(Text, default="", nullable=False)  # 游戏详情页面链接
+    developers_json: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)  # 开发者列表，存储为 JSON 数组
+    publishers_json: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)  # 发行商列表，存储为 JSON 数组
+    platforms_json: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)  # 支持的平台（如 windows, mac, linux）
+    tags_json: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)  # 游戏分类标签列表
+    release_date: Mapped[date | None] = mapped_column(Date, nullable=True)  # 发布日期
+    metadata_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)  # 预留的扩展属性
+    last_seen_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)  # 数据库中最后一次在采集源中发现该游戏的时间
+    status: Mapped[str] = mapped_column(String(20), default="active", nullable=False)  # 状态：active, inactive 等
+
+    rankings: Mapped[list["GameRanking"]] = relationship(back_populates="game_item", cascade="all, delete-orphan")
+    deals: Mapped[list["GameDeal"]] = relationship(back_populates="game_item", cascade="all, delete-orphan")
+
+
+
+class GameRawSnapshot(Base):
+    """
+    原始抓取数据快照表，存储来自 Steam API 或网页响应的原始报文，以便于调试和回溯。
+    """
+    __tablename__ = "game_raw_snapshots"
+    __table_args__ = (
+        Index("ix_game_snapshots_lookup", "provider", "endpoint_key", "captured_at"),
+    )
+
+    id: Mapped[int] = mapped_column(BIGINT_PK, primary_key=True, autoincrement=True)
+    provider: Mapped[str] = mapped_column(String(50), nullable=False)  # 来源平台
+    endpoint_key: Mapped[str] = mapped_column(String(100), nullable=False)  # 接口标识，例如 'top_sellers', 'specials', 'new_releases'
+    request_url: Mapped[str] = mapped_column(Text, nullable=False)  # 抓取的请求 URL
+    status_code: Mapped[int] = mapped_column(Integer, nullable=False)  # HTTP 响应码
+    response_body: Mapped[bytes] = mapped_column(RAW_BODY_TYPE, nullable=False)  # 抓取的原始响应体，支持压缩和长文本
+    response_hash: Mapped[str] = mapped_column(String(64), nullable=False)  # 响应内容 SHA256 哈希，防止重复处理
+    captured_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)  # 抓取发生的时间
+    parse_status: Mapped[str] = mapped_column(String(30), default="pending", nullable=False)  # 解析状态: pending, parsed, failed
+    error_message: Mapped[str] = mapped_column(Text, default="", nullable=False)  # 发生错误时的异常描述
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)  # 记录创建时间
+
+    rankings: Mapped[list["GameRanking"]] = relationship(back_populates="snapshot", cascade="all, delete-orphan")
+    deals: Mapped[list["GameDeal"]] = relationship(back_populates="snapshot", cascade="all, delete-orphan")
+
+
+class GameRanking(Base):
+    """
+    游戏排行榜快照表，记录某次采集时的具体排名信息。
+    """
+    __tablename__ = "game_rankings"
+    __table_args__ = (
+        Index("ix_game_rankings_lookup", "provider", "ranking_type", "captured_at"),
+        Index("ix_game_rankings_item_id", "game_item_id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    provider: Mapped[str] = mapped_column(String(50), nullable=False)  # 来源平台
+    ranking_type: Mapped[str] = mapped_column(String(50), nullable=False)  # 排行榜类型，如 'top_sellers', 'new_releases'
+    game_item_id: Mapped[int] = mapped_column(ForeignKey("game_items.id", ondelete="CASCADE"), nullable=False)  # 关联的游戏项目 ID
+    rank: Mapped[int] = mapped_column(Integer, nullable=False)  # 排行名次
+    score: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), nullable=True)  # 排行得分或权重分（若有）
+    captured_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)  # 排行榜快照对应的采集时间
+    snapshot_id: Mapped[int] = mapped_column(ForeignKey("game_raw_snapshots.id", ondelete="CASCADE"), nullable=False)  # 对应抓取的原始快照 ID
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)  # 记录创建时间
+
+    game_item: Mapped[GameItem] = relationship(back_populates="rankings")
+    snapshot: Mapped[GameRawSnapshot] = relationship(back_populates="rankings")
+
+
+class GameDeal(Base):
+    """
+    游戏价格与打折促销信息快照表。
+    """
+    __tablename__ = "game_deals"
+    __table_args__ = (
+        Index("ix_game_deals_lookup", "provider", "captured_at"),
+        Index("ix_game_deals_item_id", "game_item_id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    provider: Mapped[str] = mapped_column(String(50), nullable=False)  # 来源平台
+    game_item_id: Mapped[int] = mapped_column(ForeignKey("game_items.id", ondelete="CASCADE"), nullable=False)  # 关联的游戏项目 ID
+    currency: Mapped[str] = mapped_column(String(10), default="CNY", nullable=False)  # 币种，默认 CNY (人民币)
+    current_price: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), nullable=True)  # 当前实际销售价格（折后价）
+    original_price: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), nullable=True)  # 游戏原始标价（折前价）
+    discount_percent: Mapped[int] = mapped_column(Integer, default=0, nullable=False)  # 折扣百分比，如 33 代表 33% off
+    discount_label: Mapped[str] = mapped_column(String(50), default="", nullable=False)  # 促销折扣标签，如 '-33%' 或 '新游特惠'
+    deal_url: Mapped[str] = mapped_column(Text, default="", nullable=False)  # 购买链接/促销链接
+    captured_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)  # 数据采集时间
+    snapshot_id: Mapped[int] = mapped_column(ForeignKey("game_raw_snapshots.id", ondelete="CASCADE"), nullable=False)  # 对应抓取的原始快照 ID
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)  # 记录创建时间
+
+    game_item: Mapped[GameItem] = relationship(back_populates="deals")
+    snapshot: Mapped[GameRawSnapshot] = relationship(back_populates="deals")

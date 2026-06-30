@@ -124,6 +124,24 @@ def run_crawl_job(session: Session, source_id: int, trigger_type: str) -> CrawlJ
                 session.commit()
                 return job
 
+            if source.site == "steam":
+                stage = "game_sync"
+                from app.services.game_sync import run_game_source_sync
+                summary = run_game_source_sync(session, source, job)
+                job.status = "success"
+                job.items_found = summary.get("found", 0)
+                job.items_saved = summary.get("saved", 0)
+                job.finished_at = datetime.now(SH_TZ)
+                source.last_crawled_at = job.finished_at
+                source.next_crawl_at = job.finished_at.replace(tzinfo=None) + timedelta(minutes=source.crawl_interval_minutes)
+                log_event(
+                    logger, channel="application", category="crawler", event="crawl.completed",
+                    status="success", found=job.items_found, saved=job.items_saved,
+                    duration=format_duration(time.perf_counter() - started),
+                )
+                session.commit()
+                return job
+
             stage = "decrypt"
             cookie = CryptoService(settings.app_secret_key).decrypt(source.cookie_encrypted)
 

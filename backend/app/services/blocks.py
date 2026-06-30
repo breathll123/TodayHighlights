@@ -1,15 +1,19 @@
 import logging
+import json
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, wait
 from contextvars import copy_context
 from datetime import datetime, timezone
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.logging import bind_log_context, log_event
-from app.models.entities import AARankingDataset, Highlight, PageBlock, RawItem, Skill, Source
+from app.models.entities import (
+    AARankingDataset, Highlight, PageBlock, RawItem, Skill, Source,
+    GameItem, GameRawSnapshot, GameRanking, GameDeal
+)
 from app.services.adapters.xueqiu import (
     fetch_hot_events, fetch_hot_stocks, fetch_hot_stocks_cn,
     fetch_hot_stocks_hk, fetch_hot_stocks_us, fetch_screener, get_cookie,
@@ -18,12 +22,26 @@ from app.services.adapters.eastmoney import (
     fetch_announcements, fetch_capital_flow,
     fetch_indices, fetch_industry, fetch_sectors,
 )
+from app.services.adapters.game_steam import parse_steam_most_played_response
 
 logger = logging.getLogger("today_highlights.blocks")
 
 # Module-level shared executor — avoids per-request creation/destruction overhead
 _BLOCK_EXECUTOR: ThreadPoolExecutor | None = None
 _EXECUTOR_LOCK = threading.Lock()
+
+
+def _decode_raw_snapshot_json(snapshot: GameRawSnapshot) -> dict:
+    try:
+        body = snapshot.response_body
+        if isinstance(body, bytes):
+            text = body.decode("utf-8", errors="replace")
+        else:
+            text = str(body or "")
+        payload = json.loads(text)
+        return payload if isinstance(payload, dict) else {}
+    except Exception:
+        return {}
 
 
 def _get_executor() -> ThreadPoolExecutor:
@@ -190,6 +208,7 @@ def _block_payload(block: PageBlock, data: list[dict], data_updated_at: str | No
         "sort_order": block.sort_order,
         "page_route": block.page_route,
         "display_style": block.display_style,
+        "theme": block.theme,
         "display_count": block.display_count,
         "source_type": block.source_type,
         "source_config": block.source_config or {},
@@ -287,6 +306,229 @@ def resolve_block_data(
                 "source_type": "github_skills",
             }
             for index, skill in enumerate(skills)
+        ]
+
+    if source_type in ["game_top_sellers", "game_new_releases", "game_most_played"]:
+        ranking_type_by_source = {
+            "game_top_sellers": "top_sellers",
+            "game_new_releases": "new_releases",
+            "game_most_played": "most_played",
+        }
+        ranking_type = ranking_type_by_source[source_type]
+        ranking_exists = (
+            select(GameRanking.id)
+            .where(GameRanking.snapshot_id == GameRawSnapshot.id)
+            .exists()
+        )
+        deal_exists = (
+            select(GameDeal.id)
+            .where(GameDeal.snapshot_id == GameRawSnapshot.id)
+            .exists()
+        )
+        detail_exists = or_(ranking_exists, deal_exists) if source_type == "game_top_sellers" else ranking_exists
+
+        # 1. 查找最新一次有明细的抓取快照。只有原始快照但没有明细时，页面无法展示。
+        latest_snap = session.scalar(
+            select(GameRawSnapshot)
+            .where(
+                GameRawSnapshot.provider == "steam",
+                GameRawSnapshot.endpoint_key == ranking_type,
+                GameRawSnapshot.parse_status != "failed",
+                detail_exists,
+            )
+            .order_by(GameRawSnapshot.captured_at.desc())
+            .limit(1)
+        )
+        if latest_snap is None:
+            if source_type == "game_most_played":
+                raw_snap = session.scalar(
+                    select(GameRawSnapshot)
+                    .where(
+                        GameRawSnapshot.provider == "steam",
+                        GameRawSnapshot.endpoint_key == "most_played",
+                        GameRawSnapshot.status_code == 200,
+                    )
+                    .order_by(GameRawSnapshot.captured_at.desc())
+                    .limit(1)
+                )
+                if raw_snap is not None:
+                    raw_items = parse_steam_most_played_response(_decode_raw_snapshot_json(raw_snap), limit=limit)
+                    return [
+                        {
+                            "id": f"most_played_raw_{item['external_id']}",
+                            "title": item["name"],
+                            "subtitle": "Steam",
+                            "rank": item["rank"],
+                            "score": float(item["score"]) if item.get("score") is not None else None,
+                            "provider": "steam",
+                            "source": "Steam",
+                            "external_id": item["external_id"],
+                            "url": item["source_url"],
+                            "cover_url": item["cover_url"],
+                            "cover_local": "",
+                            "current_price": None,
+                            "original_price": None,
+                            "discount_percent": 0,
+                            "discount_label": "",
+                            "release_date": None,
+                            "peak_in_game": item["metadata"].get("peak_in_game"),
+                            "last_week_rank": item["metadata"].get("last_week_rank"),
+                            "captured_at": raw_snap.captured_at.isoformat(),
+                            "created_at": raw_snap.created_at.isoformat(),
+                            "source_type": source_type,
+                        }
+                        for item in raw_items[:limit]
+                    ]
+            return []
+
+        # 2. 查询快照对应的排行数据
+        stmt = (
+            select(GameRanking, GameItem)
+            .join(GameItem, GameRanking.game_item_id == GameItem.id)
+            .where(GameRanking.snapshot_id == latest_snap.id)
+            .order_by(GameRanking.rank.asc())
+            .limit(limit)
+        )
+        results = session.execute(stmt).all()
+        if not results and source_type == "game_top_sellers":
+            deal_stmt = (
+                select(GameDeal, GameItem)
+                .join(GameItem, GameDeal.game_item_id == GameItem.id)
+                .where(GameDeal.snapshot_id == latest_snap.id)
+                .order_by(GameDeal.id.asc())
+                .limit(limit)
+            )
+            deal_results = session.execute(deal_stmt).all()
+            return [
+                {
+                    "id": deal.id,
+                    "title": item.name,
+                    "subtitle": "Steam",
+                    "rank": index + 1,
+                    "score": None,
+                    "provider": item.provider,
+                    "source": "Steam",
+                    "external_id": item.external_id,
+                    "url": item.source_url,
+                    "cover_url": item.cover_url,
+                    "cover_local": item.cover_local,
+                    "current_price": float(deal.current_price) if deal.current_price is not None else None,
+                    "original_price": float(deal.original_price) if deal.original_price is not None else None,
+                    "discount_percent": deal.discount_percent,
+                    "discount_label": deal.discount_label,
+                    "release_date": item.release_date.isoformat() if item.release_date else None,
+                    "peak_in_game": None,
+                    "last_week_rank": None,
+                    "captured_at": deal.captured_at.isoformat(),
+                    "created_at": deal.created_at.isoformat(),
+                    "source_type": source_type,
+                }
+                for index, (deal, item) in enumerate(deal_results)
+            ]
+        if not results:
+            return []
+
+        # 提取 item id 用于批量查价格，避免 N+1 查询
+        item_ids = [item.id for ranking, item in results]
+
+        # 3. 批量拉取这批游戏的最新特惠价格快照
+        deals_map = {}
+        if item_ids:
+            deal_stmt = select(GameDeal).where(GameDeal.snapshot_id == latest_snap.id, GameDeal.game_item_id.in_(item_ids))
+            deals = session.scalars(deal_stmt).all()
+            deals_map = {d.game_item_id: d for d in deals}
+
+            # 兜底查询其他最新价格记录
+            missing_ids = [iid for iid in item_ids if iid not in deals_map]
+            for m_id in missing_ids:
+                latest_deal = session.scalar(
+                    select(GameDeal)
+                    .where(GameDeal.game_item_id == m_id)
+                    .order_by(GameDeal.captured_at.desc())
+                    .limit(1)
+                )
+                if latest_deal:
+                    deals_map[m_id] = latest_deal
+
+        # 4. 组装前端数据
+        data_list = []
+        for ranking, item in results:
+            deal = deals_map.get(item.id)
+            metadata = item.metadata_json or {}
+            data_list.append({
+                "id": ranking.id,
+                "title": item.name,
+                "subtitle": "Steam",
+                "rank": ranking.rank,
+                "score": float(ranking.score) if ranking.score is not None else None,
+                "provider": item.provider,
+                "source": "Steam",
+                "external_id": item.external_id,
+                "url": item.source_url,
+                "cover_url": item.cover_url,
+                "cover_local": item.cover_local,
+                "current_price": float(deal.current_price) if (deal and deal.current_price is not None) else None,
+                "original_price": float(deal.original_price) if (deal and deal.original_price is not None) else None,
+                "discount_percent": deal.discount_percent if deal else 0,
+                "discount_label": deal.discount_label if deal else "",
+                "release_date": item.release_date.isoformat() if item.release_date else None,
+                "peak_in_game": metadata.get("peak_in_game"),
+                "last_week_rank": metadata.get("last_week_rank"),
+                "captured_at": ranking.captured_at.isoformat(),
+                "created_at": ranking.created_at.isoformat(),
+                "source_type": source_type,
+            })
+        return data_list
+
+    if source_type == "game_specials":
+        # 1. 查找最新一次的打折特惠快照
+        latest_snap = session.scalar(
+            select(GameRawSnapshot)
+            .join(GameDeal, GameDeal.snapshot_id == GameRawSnapshot.id)
+            .where(
+                GameRawSnapshot.provider == "steam",
+                GameRawSnapshot.endpoint_key == "specials",
+                GameRawSnapshot.parse_status != "failed",
+            )
+            .order_by(GameRawSnapshot.captured_at.desc())
+            .limit(1)
+        )
+        if latest_snap is None:
+            return []
+
+        # 2. 查询对应的打折特惠详情（依折扣从大到小排序）
+        stmt = (
+            select(GameDeal, GameItem)
+            .join(GameItem, GameDeal.game_item_id == GameItem.id)
+            .where(GameDeal.snapshot_id == latest_snap.id)
+            .order_by(GameDeal.discount_percent.desc(), GameDeal.id.asc())
+            .limit(limit)
+        )
+        results = session.execute(stmt).all()
+
+        # 3. 组装前端数据
+        return [
+            {
+                "id": deal.id,
+                "title": item.name,
+                "subtitle": "Steam",
+                "rank": index + 1,
+                "provider": item.provider,
+                "source": "Steam",
+                "external_id": item.external_id,
+                "url": deal.deal_url,
+                "cover_url": item.cover_url,
+                "cover_local": item.cover_local,
+                "current_price": float(deal.current_price) if deal.current_price is not None else None,
+                "original_price": float(deal.original_price) if deal.original_price is not None else None,
+                "discount_percent": deal.discount_percent,
+                "discount_label": deal.discount_label,
+                "release_date": item.release_date.isoformat() if item.release_date else None,
+                "captured_at": deal.captured_at.isoformat(),
+                "created_at": deal.created_at.isoformat(),
+                "source_type": "game_specials",
+            }
+            for index, (deal, item) in enumerate(results)
         ]
 
     if cookie is None:
@@ -498,7 +740,7 @@ def get_page_blocks(session: Session, route: str) -> list[dict]:
         )
 
     # Separate DB-dependent blocks (topic, raw) from live-API blocks
-    db_types = {"topic", "raw", "eastmoney_longhu", "tonghuashun_news", "artificial_analysis_ranking", "github_skills"}
+    db_types = {"topic", "raw", "eastmoney_longhu", "tonghuashun_news", "artificial_analysis_ranking", "github_skills", "game_top_sellers", "game_specials", "game_new_releases", "game_most_played"}
     db_blocks = [b for b in blocks if b.source_type in db_types]
     live_blocks = [b for b in blocks if b.source_type not in db_types]
 

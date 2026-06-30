@@ -42,3 +42,6 @@ docs/
 
 # Runtime logs
 backend/logs/
+
+# Backend dev scratch (saved Steam HTML, etc.)
+backend/tmp/

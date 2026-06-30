@@ -11,6 +11,7 @@ class TopicRead(BaseModel):
     name: str
     slug: str
     sort_order: int
+    enabled: bool
 
 
 class HighlightRead(BaseModel):

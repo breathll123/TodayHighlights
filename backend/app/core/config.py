@@ -47,6 +47,13 @@ class Settings(BaseSettings):
     log_response_preview_chars: int = 500
     log_url_query_mode: str = "safe"
 
+    # Steam 采集与网络代理配置
+    steam_timeout_seconds: int = 25  # 请求 Steam 接口的超时时间
+    steam_region: str = "CN"  # 采集请求的地区代码，默认为 CN 保证获取国区价格
+    steam_language: str = "schinese"  # 采集请求的语言，默认为简体中文
+    steam_proxy_url: str | None = None  # 可选的网络代理，用于拉取 Steam 数据
+    steam_media_cache_limit: int = 30  # 单次任务最大本地媒体缓存图片数量
+
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
 

@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models.entities import Source, Topic
+from app.models.entities import PageBlock, Source, Topic
 
 
 @dataclass(frozen=True)
@@ -23,10 +23,25 @@ class BuiltinSource:
     enabled: bool = True
 
 
+@dataclass(frozen=True)
+class BuiltinPageBlock:
+    page_route: str
+    title: str
+    source_type: str
+    display_style: str
+    display_count: int
+    sort_order: int
+    col_span: int
+    row_span: int
+    grid_x: int
+    grid_y: int
+
+
 BUILTIN_TOPICS = (
     BuiltinTopic("股票", "stocks", 10),
     BuiltinTopic("AI", "ai", 20),
     BuiltinTopic("足球", "football", 30),
+    BuiltinTopic("游戏", "games", 40),
 )
 
 BUILTIN_SOURCES = (
@@ -48,7 +63,27 @@ BUILTIN_SOURCES = (
     BuiltinSource("football", "qiumiwu", "球迷屋-比赛数据", "qiumiwu://matches", 2),
     BuiltinSource("ai", "aihot", "AI HOT-资讯快讯", "aihot://news", 2),
     BuiltinSource("ai", "github_skills", "GitHub-Skills 排行", "github_skills://ranking", 1440, enabled=False),
+    BuiltinSource("games", "steam", "Steam-热门游戏榜", "steam://top_sellers", 30),
+    BuiltinSource("games", "steam", "Steam-在线热玩榜", "steam://most_played", 30),
+    BuiltinSource("games", "steam", "Steam-打折促销", "steam://specials", 60),
+    BuiltinSource("games", "steam", "Steam-新游动态", "steam://new_releases", 60),
 )
+
+BUILTIN_PAGE_BLOCKS = (
+    BuiltinPageBlock("/topics/games", "热门游戏榜", "game_top_sellers", "game-ranking", 10, 10, 2, 2, 0, 0),
+    BuiltinPageBlock("/topics/games", "在线热玩榜", "game_most_played", "game-ranking", 10, 15, 2, 2, 2, 0),
+    BuiltinPageBlock("/topics/games", "打折促销", "game_specials", "game-deal", 9, 20, 2, 2, 0, 2),
+    BuiltinPageBlock("/topics/games", "新游动态", "game_new_releases", "game-release", 10, 30, 2, 1, 2, 2),
+)
+
+
+def _rects_overlap(a: PageBlock, *, x: int, y: int, width: int, height: int) -> bool:
+    return not (
+        x + width <= a.grid_x
+        or a.grid_x + a.col_span <= x
+        or y + height <= a.grid_y
+        or a.grid_y + a.row_span <= y
+    )
 
 
 def reconcile_system_catalog(session: Session) -> None:
@@ -108,5 +143,55 @@ def reconcile_system_catalog(session: Session) -> None:
     )
     if deprecated_gainers is not None:
         deprecated_gainers.enabled = False
+
+    for definition in BUILTIN_PAGE_BLOCKS:
+        for status in ("draft", "published"):
+            existing = session.scalar(
+                select(PageBlock)
+                .where(
+                    PageBlock.page_route == definition.page_route,
+                    PageBlock.source_type == definition.source_type,
+                    PageBlock.status == status,
+                )
+                .limit(1)
+            )
+            if existing is not None:
+                if (
+                    definition.source_type == "game_most_played"
+                    and existing.title in {"热门游戏榜", "Steam 在线热门榜"}
+                ):
+                    existing.title = definition.title
+                continue
+            grid_x = definition.grid_x
+            grid_y = definition.grid_y
+            existing_blocks = session.scalars(
+                select(PageBlock).where(
+                    PageBlock.page_route == definition.page_route,
+                    PageBlock.status == status,
+                )
+            ).all()
+            while any(
+                _rects_overlap(block, x=grid_x, y=grid_y, width=definition.col_span, height=definition.row_span)
+                for block in existing_blocks
+            ):
+                grid_y += 1
+            session.add(
+                PageBlock(
+                    page_route=definition.page_route,
+                    title=definition.title,
+                    sort_order=definition.sort_order,
+                    source_type=definition.source_type,
+                    source_config={},
+                    display_style=definition.display_style,
+                    display_count=definition.display_count,
+                    sort_by="rank",
+                    enabled=True,
+                    col_span=definition.col_span,
+                    row_span=definition.row_span,
+                    grid_x=grid_x,
+                    grid_y=grid_y,
+                    status=status,
+                )
+            )
 
     session.flush()

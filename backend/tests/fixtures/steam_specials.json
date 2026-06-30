@@ -1,0 +1,5 @@
+{
+  "success": 1,
+  "results_html": "<a href=\"https://store.steampowered.com/app/292030/The_Witcher_3_Wild_Hunt/\" class=\"search_result_row\" data-ds-appid=\"292030\">\n  <div class=\"search_capsule\"><img src=\"https://shared.fastly.steamstatic.com/witcher3.jpg\"></div>\n  <div class=\"responsive_search_name_combined\">\n    <div class=\"col search_name\"><span class=\"title\">The Witcher 3: Wild Hunt</span></div>\n    <div class=\"col search_released\">18 May, 2015</div>\n    <div class=\"col search_price_discount_combined\">\n      <div class=\"col search_discount\"><span>-80%</span></div>\n      <div class=\"col search_price discounted\"><span><strike>¥ 128</strike></span><br>¥ 25.60</div>\n    </div>\n  </div>\n</a>",
+  "total_count": 1
+}
