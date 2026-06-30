@@ -6,7 +6,7 @@ import { DashboardShell } from "@/components/layout/DashboardShell";
 import { GridRenderer } from "@/components/layout/GridRenderer";
 import { AITopicSummary } from "@/components/layout/AITopicSummary";
 import { MarketIndexBar } from "@/components/layout/MarketIndexBar";
-import { fetchAITopicSummary } from "@/api/client";
+import { fetchAITopicSummary, fetchTopics } from "@/api/client";
 import { Button } from "@/components/ui/button";
 
 const TOPIC_META: Record<string, { name: string; description: string }> = {
@@ -39,8 +39,14 @@ function topicSlug(pathname: string): string | null {
 export function TopicPage() {
   const location = useLocation();
   const queryClient = useQueryClient();
-  const meta = topicMeta(location.pathname);
   const slug = topicSlug(location.pathname);
+  const { data: topics = [] } = useQuery({
+    queryKey: ["public-topics"],
+    queryFn: fetchTopics,
+    staleTime: 5 * 60 * 1000,
+  });
+  const topic = topics.find((item) => item.slug === slug);
+  const meta = topic ? { name: topic.name, description: topicMeta(location.pathname).description } : topicMeta(location.pathname);
 
   const { data, isLoading, error, dataUpdatedAt } = usePageBlocks(location.pathname);
 

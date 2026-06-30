@@ -112,9 +112,9 @@ describe("AdminLayoutPage persistence", () => {
     createBlock.mockResolvedValue({});
     deleteBlock.mockResolvedValue({});
     fetchAdminTopics.mockResolvedValue([
-      { id: 10, name: "股票", slug: "stocks", sort_order: 10 },
-      { id: 20, name: "AI", slug: "ai", sort_order: 20 },
-      { id: 30, name: "足球", slug: "football", sort_order: 30 },
+      { id: 10, name: "股票", slug: "stocks", sort_order: 10, enabled: true },
+      { id: 20, name: "AI", slug: "ai", sort_order: 20, enabled: true },
+      { id: 30, name: "足球", slug: "football", sort_order: 30, enabled: true },
     ]);
     publishPage.mockResolvedValue({ published: true, blocks: 0 });
     updateBlock.mockImplementation((id: number, data: Partial<Block>) => (

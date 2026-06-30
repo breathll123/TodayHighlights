@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { motion } from "framer-motion";
-import { ArrowDown, ArrowUp, BrainCircuit, CalendarClock, ChartNoAxesCombined, Newspaper, Star, Trophy } from "lucide-react";
+import { ArrowDown, ArrowUp, BrainCircuit, CalendarClock, ChartNoAxesCombined, Newspaper, Star, Trophy, Gamepad2 } from "lucide-react";
 import { useMutation } from "@tanstack/react-query";
 import { useLocation } from "react-router-dom";
 import { BlockCard } from "./BlockCard";
@@ -18,6 +18,8 @@ import { MarketIndexBar } from "./MarketIndexBar";
 import { SectionHeading } from "./SectionHeading";
 import { BlockAIAnalysisDrawer } from "./BlockAIAnalysisDrawer";
 import { CollapsibleSection } from "./CollapsibleSection";
+import { GameRankingList, GameDealGrid, GameReleaseList } from "./GameBlocks";
+import { getBlockSkin } from "@/lib/block-themes";
 import { FIELD_DEFS, resolveDisplayFieldKeys } from "@/lib/field-defs";
 import { generateBlockAIAnalysis } from "@/api/client";
 import { Button } from "@/components/ui/button";
@@ -38,6 +40,7 @@ const VISIBLE_ANALYSIS_FIELDS = [
   "team", "league", "group", "season", "updated", "gp", "pts", "wdl", "gf", "ga", "gd",
   "status", "minute", "start_time", "team_a", "team_b", "score_a", "score_b",
   "model", "creator", "subtitle", "region", "net_amount", "reason",
+  "current_price", "original_price", "discount_percent", "discount_label", "release_date",
 ] as const;
 
 function compactVisibleAnalysisData(data: any[]): any[] {
@@ -90,6 +93,10 @@ const SOURCE_NAMES: Record<string, string> = {
   artificial_analysis_ranking: "Artificial Analysis",
   market_index_trends: "东方财富",
   github_skills: "GitHub",
+  game_top_sellers: "Steam",
+  game_most_played: "Steam",
+  game_specials: "Steam",
+  game_new_releases: "Steam",
 };
 
 const SOURCE_URLS: Record<string, string> = {
@@ -102,6 +109,7 @@ const SOURCE_URLS: Record<string, string> = {
   aihot: "https://aihot.virxact.com/",
   artificial_analysis: "https://artificialanalysis.ai/",
   github: "https://github.com/",
+  steam: "https://store.steampowered.com/",
 };
 
 function sourceUrlFor(sourceType: string): string | undefined {
@@ -115,6 +123,7 @@ function sourceUrlFor(sourceType: string): string | undefined {
   if (sourceType.startsWith("artificial_analysis")) return SOURCE_URLS.artificial_analysis;
   if (sourceType.startsWith("market_index")) return SOURCE_URLS.eastmoney;
   if (sourceType === "github_skills") return SOURCE_URLS.github;
+  if (sourceType.startsWith("game_")) return SOURCE_URLS.steam;
   return undefined;
 }
 
@@ -135,6 +144,7 @@ function sectionIcon(sourceType: string) {
   if (sourceType.startsWith("datalearner_")) return BrainCircuit;
   if (sourceType === "tonghuashun_news") return Newspaper;
   if (sourceType === "github_skills") return Star;
+  if (sourceType.startsWith("game_")) return Gamepad2;
   return ChartNoAxesCombined;
 }
 
@@ -380,6 +390,7 @@ export function GridRenderer({ blocks, isLoading, dataUpdatedAt }: { blocks: any
     <div className="page-grid">
       {blocks.map((block, blockIdx) => {
         const st = block.source_type as string;
+        const skin = getBlockSkin(block.theme, st);
         const allFields = FIELD_DEFS[st] || [];
         const cfgFields: string[] | undefined = block.source_config?.display_fields;
         const selectedKeys = resolveDisplayFieldKeys(st, cfgFields);
@@ -395,7 +406,12 @@ export function GridRenderer({ blocks, isLoading, dataUpdatedAt }: { blocks: any
               ease: easeOutQuint,
               delay: Math.min(blockIdx, 8) * 0.025,
             }}
-            style={{ gridColumn: `span ${block.col_span || 1}`, gridRow: `span ${block.row_span || 1}` }}
+            style={{
+              gridColumn: `span ${block.col_span || 1}`,
+              gridRow: `span ${block.row_span || 1}`,
+              ...(skin ? ({ ["--block-accent" as any]: skin.accent }) : {}),
+            }}
+            data-theme={block.theme && block.theme !== "default" ? block.theme : undefined}
           >
           <CollapsibleSection
             key={block.id}
@@ -410,6 +426,7 @@ export function GridRenderer({ blocks, isLoading, dataUpdatedAt }: { blocks: any
                 dataUpdatedAt={block.data_updated_at}
                 sourceName={st === "topic" || st === "raw" ? undefined : SOURCE_NAMES[st] ?? undefined}
                 sourceUrl={st === "artificial_analysis_ranking" ? undefined : sourceUrlFor(st)}
+                skin={skin || undefined}
                 action={
                   <Button
                     variant="ghost"
@@ -451,6 +468,14 @@ export function GridRenderer({ blocks, isLoading, dataUpdatedAt }: { blocks: any
               <LeaderboardTable data={block.data} />
             ) : block.source_type === "github_skills" ? (
               <SkillRanking data={block.data} fields={displayFields} />
+            ) : block.source_type === "game_top_sellers" ? (
+              <GameRankingList data={block.data} onAnalysisDataChange={(visible, label) => setBlockAnalysisScope(block.id, visible, label)} />
+            ) : block.source_type === "game_most_played" ? (
+              <GameRankingList data={block.data} mode="most_played" onAnalysisDataChange={(visible, label) => setBlockAnalysisScope(block.id, visible, label)} />
+            ) : block.source_type === "game_specials" ? (
+              <GameDealGrid data={block.data} onAnalysisDataChange={(visible, label) => setBlockAnalysisScope(block.id, visible, label)} />
+            ) : block.source_type === "game_new_releases" ? (
+              <GameReleaseList data={block.data} onAnalysisDataChange={(visible, label) => setBlockAnalysisScope(block.id, visible, label)} />
             ) : block.source_type === "market_index_trends" ? (
               <MarketIndexBar data={block.data} />
             ) : block.source_type === "artificial_analysis_ranking" ? (

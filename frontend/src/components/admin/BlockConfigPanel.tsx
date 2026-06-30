@@ -62,6 +62,18 @@ const SOURCE_TYPE_OPTIONS_AI: { value: Block["source_type"]; label: string }[] =
   { value: "github_skills", label: "GitHub Skills 排行" },
 ];
 
+const SOURCE_TYPE_OPTIONS_GAME: { value: Block["source_type"]; label: string }[] = [
+  { value: "game_top_sellers", label: "Steam 热门游戏榜" },
+  { value: "game_most_played", label: "Steam 在线热玩榜" },
+  { value: "game_specials", label: "Steam 折扣特惠" },
+  { value: "game_new_releases", label: "Steam 新游动态" },
+];
+
+const THEME_OPTIONS = [
+  { value: "default", label: "默认" },
+  { value: "arcade", label: "街机（游戏）" },
+];
+
 const ARTIFICIAL_ANALYSIS_DATASETS = [
   { value: "language_global", label: "全球大语言模型" },
   { value: "language_china", label: "中国大语言模型" },
@@ -147,6 +159,11 @@ export function BlockConfigPanel({ form, onChange, onSave, onCancel }: Props) {
             <SelectGroup>
               <SelectLabel className="text-[10px] text-muted-foreground">DataLearner (AI)</SelectLabel>
               {SOURCE_TYPE_OPTIONS_AI.map((o) => <SelectItem key={o.value} value={o.value} className="text-xs">{o.label}</SelectItem>)}
+            </SelectGroup>
+            <SelectSeparator />
+            <SelectGroup>
+              <SelectLabel className="text-[10px] text-muted-foreground">游戏 (Steam)</SelectLabel>
+              {SOURCE_TYPE_OPTIONS_GAME.map((o) => <SelectItem key={o.value} value={o.value} className="text-xs">{o.label}</SelectItem>)}
             </SelectGroup>
           </SelectContent>
         </Select>
@@ -258,7 +275,7 @@ export function BlockConfigPanel({ form, onChange, onSave, onCancel }: Props) {
       )}
 
       {/* Display Style — hidden for AA index (list only) */}
-      {form.source_type !== "datalearner_aa_index" && form.source_type !== "artificial_analysis_ranking" && form.source_type !== "market_index_trends" && form.source_type !== "github_skills" && (
+      {form.source_type !== "datalearner_aa_index" && form.source_type !== "artificial_analysis_ranking" && form.source_type !== "market_index_trends" && form.source_type !== "github_skills" && form.source_type !== "game_top_sellers" && form.source_type !== "game_most_played" && form.source_type !== "game_specials" && form.source_type !== "game_new_releases" && (
         <div className="space-y-1.5">
           <Label className="text-xs">展示样式</Label>
           <Select value={form.display_style} onValueChange={(v) => update("display_style", v as Block["display_style"])}>
@@ -269,6 +286,17 @@ export function BlockConfigPanel({ form, onChange, onSave, onCancel }: Props) {
           </Select>
         </div>
       )}
+
+      {/* 主题选择 */}
+      <div className="space-y-1.5">
+        <Label className="text-xs">主题</Label>
+        <Select value={form.theme ?? "default"} onValueChange={(v) => update("theme", v)}>
+          <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            {THEME_OPTIONS.map((o) => <SelectItem key={o.value} value={o.value} className="text-xs">{o.label}</SelectItem>)}
+          </SelectContent>
+        </Select>
+      </div>
 
       {/* Display Fields */}
       {allFields.length > 0 && (

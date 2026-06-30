@@ -1,19 +1,25 @@
 import { Link, useLocation } from "react-router-dom";
-import { Activity, BrainCircuit, ChevronDown, Moon, RadioTower, Sun, Trophy } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { Activity, ChevronDown, Moon, RadioTower, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
+import { fetchTopics } from "@/api/client";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-
-const topics = [
-  { href: "/", label: "全局", enabled: true },
-  { href: "/topics/stocks", label: "股票", enabled: true },
-  { href: "/topics/ai", label: "AI", enabled: true },
-  { href: "/topics/football", label: "足球", enabled: true },
-];
 
 export function PublicNavbar() {
   const { theme, setTheme } = useTheme();
   const location = useLocation();
+  const { data: topicItems = [] } = useQuery({ queryKey: ["public-topics"], queryFn: fetchTopics });
+  const topics = [
+    { href: "/", label: "全局" },
+    ...topicItems
+      .filter((topic) => topic.enabled !== false)
+      .sort((a, b) => a.sort_order - b.sort_order)
+      .map((topic) => ({
+        href: `/topics/${topic.slug}`,
+        label: topic.name,
+      })),
+  ];
 
   return (
     <header className="sticky top-0 z-50 border-b border-border/70 bg-background/88 backdrop-blur-xl">
@@ -37,18 +43,7 @@ export function PublicNavbar() {
 
           <nav className="hidden items-center rounded-lg border border-border/70 bg-card/70 p-1 md:flex" aria-label="主题导航">
             {topics.map((topic) => {
-              const active = topic.enabled && location.pathname === topic.href;
-              if (!topic.enabled) {
-                return (
-                  <span
-                    key={topic.label}
-                    className="inline-flex h-9 cursor-not-allowed items-center rounded-md px-3 text-sm font-medium text-muted-foreground/55"
-                    title="即将支持"
-                  >
-                    {topic.label}
-                  </span>
-                );
-              }
+              const active = location.pathname === topic.href;
               return (
                 <Link
                   key={topic.href}
@@ -88,10 +83,18 @@ export function PublicNavbar() {
             <ChevronDown className="h-3 w-3" aria-hidden="true" />
             主题
           </span>
-          <Link to="/" className={cn("rounded-md px-3 py-1.5 text-sm", location.pathname === "/" ? "bg-primary text-primary-foreground" : "bg-card text-muted-foreground")}>全局</Link>
-          <Link to="/topics/stocks" className={cn("rounded-md px-3 py-1.5 text-sm", location.pathname === "/topics/stocks" ? "bg-primary text-primary-foreground" : "bg-card text-muted-foreground")}>股票</Link>
-          <Link to="/topics/ai" className={cn("rounded-md px-3 py-1.5 text-sm", location.pathname === "/topics/ai" ? "bg-primary text-primary-foreground" : "bg-card text-muted-foreground")}>AI</Link>
-          <Link to="/topics/football" className={cn("rounded-md px-3 py-1.5 text-sm", location.pathname === "/topics/football" ? "bg-primary text-primary-foreground" : "bg-card text-muted-foreground")}>足球</Link>
+          {topics.map((topic) => (
+            <Link
+              key={topic.href}
+              to={topic.href}
+              className={cn(
+                "rounded-md px-3 py-1.5 text-sm",
+                location.pathname === topic.href ? "bg-primary text-primary-foreground" : "bg-card text-muted-foreground"
+              )}
+            >
+              {topic.label}
+            </Link>
+          ))}
         </div>
       </div>
     </header>

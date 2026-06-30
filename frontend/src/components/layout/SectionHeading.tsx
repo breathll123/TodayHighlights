@@ -2,6 +2,8 @@ import type { LucideIcon } from "lucide-react";
 import { ExternalLink } from "lucide-react";
 import { useId, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
+import { PixelIcon } from "./PixelIcon";
+import type { BoardSkin } from "@/lib/block-themes";
 
 function pad2(value: number): string {
   return String(value).padStart(2, "0");
@@ -57,6 +59,7 @@ export function SectionHeading({
   sourceName,
   sourceUrl,
   className,
+  skin,
 }: {
   icon: LucideIcon;
   title: string;
@@ -66,16 +69,27 @@ export function SectionHeading({
   sourceName?: string;
   sourceUrl?: string;
   className?: string;
+  skin?: BoardSkin;
 }) {
   const updatedAt = parseUpdatedAt(dataUpdatedAt);
 
   return (
     <div className={cn("space-y-1.5", className)}>
+      {skin ? <div className="arcade-eyebrow mb-1" style={{ color: skin.accent }}>{skin.eyebrow}</div> : null}
       <div className="flex min-w-0 items-center justify-between gap-3">
         <h2 className="flex min-w-0 items-center gap-2.5 text-sm font-semibold text-foreground">
-          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-primary/30 bg-primary/10 text-primary transition-colors duration-200 group-hover:border-primary/50 group-hover:bg-primary/15">
-            <Icon data-testid="section-heading-icon" className="h-3.5 w-3.5" aria-hidden="true" />
-          </span>
+          {skin ? (
+            <span
+              className="arcade-scanline flex h-7 w-7 shrink-0 items-center justify-center rounded-md border"
+              style={{ borderColor: skin.accent, background: skin.accentSoft, boxShadow: `0 0 10px ${skin.accentSoft}` }}
+            >
+              <PixelIcon name={skin.icon} color={skin.accent} size={16} />
+            </span>
+          ) : (
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-primary/30 bg-primary/10 text-primary transition-colors duration-200 group-hover:border-primary/50 group-hover:bg-primary/15">
+              <Icon data-testid="section-heading-icon" className="h-3.5 w-3.5" aria-hidden="true" />
+            </span>
+          )}
           <span className="truncate">{title}</span>
         </h2>
         <div className="flex shrink-0 items-center gap-2">
@@ -87,7 +101,10 @@ export function SectionHeading({
         </div>
       </div>
 
-      <div className="header-rule h-px w-full bg-gradient-to-r from-primary/45 via-primary/10 to-transparent" />
+      <div
+        className={cn("header-rule h-px w-full", !skin && "bg-gradient-to-r from-primary/45 via-primary/10 to-transparent")}
+        style={skin ? { background: `linear-gradient(to right, ${skin.accent}, transparent)` } : undefined}
+      />
 
       {sourceName && (
         <div className="flex items-center gap-1 text-[10px] text-muted-foreground/70">

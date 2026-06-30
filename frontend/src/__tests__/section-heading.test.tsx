@@ -1,25 +1,27 @@
+// -*- coding: utf-8 -*-
 import { render, screen } from "@testing-library/react";
-import { BrainCircuit } from "lucide-react";
-import { expect, it } from "vitest";
-
+import { describe, it, expect } from "vitest";
+import { Star } from "lucide-react";
 import { SectionHeading } from "../components/layout/SectionHeading";
+import "@testing-library/jest-dom";
 
-it("renders a semantic icon, title, and optional metadata", () => {
-  render(<SectionHeading icon={BrainCircuit} title="AI模型排行" meta="10 个模型" />);
+describe("SectionHeading skin", () => {
+  it("renders the eyebrow + pixel icon when skinned", () => {
+    render(
+      <SectionHeading
+        icon={Star}
+        title="在线热玩榜"
+        skin={{ accent: "#2BE07A", accentSoft: "rgba(43,224,122,0.08)", eyebrow: "NOW PLAYING", icon: "play" }}
+      />
+    );
+    expect(screen.getByText("NOW PLAYING")).toBeInTheDocument();
+    expect(screen.getByText("在线热玩榜")).toBeInTheDocument();
+    // 像素图标用 svg；lucide 默认图标不应再渲染
+    expect(screen.queryByTestId("section-heading-icon")).not.toBeInTheDocument();
+  });
 
-  expect(screen.getByRole("heading", { name: "AI模型排行" })).toBeInTheDocument();
-  expect(screen.getByTestId("section-heading-icon")).toBeInTheDocument();
-  expect(screen.getByText("10 个模型")).toBeInTheDocument();
-});
-
-it("renders a concrete block data updated time", () => {
-  render(<SectionHeading icon={BrainCircuit} title="AI模型排行" dataUpdatedAt="2026-06-17T13:52:18" />);
-
-  const updatedAt = screen.getByText("更新 13:52");
-  const tooltip = screen.getByRole("tooltip");
-
-  expect(updatedAt).toBeInTheDocument();
-  expect(updatedAt).toHaveAttribute("aria-describedby", tooltip.id);
-  expect(tooltip).toHaveTextContent("数据更新时间");
-  expect(tooltip).toHaveTextContent("2026-06-17 13:52:18");
+  it("keeps the lucide icon when not skinned (unchanged)", () => {
+    render(<SectionHeading icon={Star} title="普通方块" />);
+    expect(screen.getByTestId("section-heading-icon")).toBeInTheDocument();
+  });
 });

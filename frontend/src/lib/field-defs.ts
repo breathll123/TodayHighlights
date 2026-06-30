@@ -101,6 +101,26 @@ export const FIELD_DEFS: Record<string, FieldDef[]> = {
     { key: "summary", label: "描述", type: "text" },
     { key: "score", label: "Stars", type: "number" },
   ],
+  game_top_sellers: [
+    { key: "title", label: "游戏名称", type: "text" },
+    { key: "rank", label: "排名", type: "number" },
+    { key: "score", label: "价格", type: "number" },
+  ],
+  game_most_played: [
+    { key: "title", label: "游戏名称", type: "text" },
+    { key: "rank", label: "排名", type: "number" },
+    { key: "peak_in_game", label: "峰值在线", type: "number" },
+    { key: "last_week_rank", label: "上周排名", type: "number" },
+  ],
+  game_specials: [
+    { key: "title", label: "游戏名称", type: "text" },
+    { key: "score", label: "现价", type: "number" },
+    { key: "discount_percent", label: "折扣百分比", type: "number" },
+  ],
+  game_new_releases: [
+    { key: "title", label: "游戏名称", type: "text" },
+    { key: "release_date", label: "发售日期", type: "text" },
+  ],
 };
 
 const DEFAULT_STOCK = ["title", "percent", "score"];
@@ -131,6 +151,10 @@ export const DEFAULT_FIELDS: Record<string, string[]> = {
   market_index_trends: ["title", "current", "percent"],
   aihot_news: ["title", "subtitle"],
   github_skills: ["title", "summary", "score"],
+  game_top_sellers: ["title", "rank", "score"],
+  game_most_played: ["title", "rank", "peak_in_game"],
+  game_specials: ["title", "score", "discount_percent"],
+  game_new_releases: ["title", "release_date"],
 };
 
 export function resolveDisplayFieldKeys(sourceType: string, configuredFields?: unknown): string[] {

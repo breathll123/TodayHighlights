@@ -13,13 +13,6 @@ import { fetchAdminTopics, fetchBlocks, createBlock, updateBlock, deleteBlock, p
 import type { Block } from "@/api/types";
 import { toast } from "sonner";
 
-const pages = [
-  { route: "/", label: "摘要页" },
-  { route: "/topics/stocks", label: "股票页" },
-  { route: "/topics/football", label: "足球页" },
-  { route: "/topics/ai", label: "AI页" },
-];
-
 export function AdminLayoutPage() {
   const queryClient = useQueryClient();
   const [activePage, setActivePage] = useState("/");
@@ -31,6 +24,16 @@ export function AdminLayoutPage() {
 
   const { data: allBlocks = [], isLoading } = useQuery({ queryKey: ["blocks"], queryFn: fetchBlocks });
   const { data: topics = [] } = useQuery({ queryKey: ["admin-topics"], queryFn: fetchAdminTopics });
+  const pages = [
+    { route: "/", label: "摘要页" },
+    ...topics
+      .filter((topic) => topic.enabled !== false)
+      .sort((a, b) => a.sort_order - b.sort_order)
+      .map((topic) => ({
+        route: `/topics/${topic.slug}`,
+        label: `${topic.name}页`,
+      })),
+  ];
 
   const draftBlocks = allBlocks
     .filter((b: Block) => b.page_route === activePage && b.status === "draft")

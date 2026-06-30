@@ -69,9 +69,7 @@ export default function App() {
             {/* Public */}
             <Route element={<PublicLayout />}>
               <Route path="/" element={<SummaryPage />} />
-              <Route path="/topics/stocks" element={<TopicPage />} />
-              <Route path="/topics/football" element={<TopicPage />} />
-              <Route path="/topics/ai" element={<TopicPage />} />
+              <Route path="/topics/:slug" element={<TopicPage />} />
             </Route>
 
             {/* Login */}
