@@ -124,7 +124,7 @@ def run_crawl_job(session: Session, source_id: int, trigger_type: str) -> CrawlJ
                 session.commit()
                 return job
 
-            if source.site == "steam":
+            if source.site in {"steam", "wegame"}:
                 stage = "game_sync"
                 from app.services.game_sync import run_game_source_sync
                 summary = run_game_source_sync(session, source, job)

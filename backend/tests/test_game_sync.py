@@ -19,12 +19,29 @@ def _session():
     return sessionmaker(bind=engine)()
 
 
+@pytest.fixture(autouse=True)
+def _disable_media_cache(monkeypatch):
+    """这些测试聚焦采集/解析/入库逻辑；媒体封面缓存有独立测试覆盖。
+
+    在联网环境下，被 mock 的 httpx 会让封面下载在 safe_get 里走成重定向死循环，
+    导致 MediaCacheService 回滚它的 _new_session()。生产环境该会话是独立的 MySQL
+    连接、互不影响，但内存 SQLite 的单连接池会把这次回滚传导到调用方事务，冲掉尚未
+    提交的快照 INSERT，从而在最终 commit 触发 StaleDataError。这里关闭媒体缓存以隔离。
+    """
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "steam_media_cache_limit", 0)
+
+
 def test_map_entry_url_to_endpoint() -> None:
     """测试将伪协议 URL 映射为 Steam 的 endpoint_key"""
     assert map_entry_url_to_endpoint("steam://top_sellers") == "top_sellers"
     assert map_entry_url_to_endpoint("steam://specials") == "specials"
     assert map_entry_url_to_endpoint("steam://new_releases") == "new_releases"
     assert map_entry_url_to_endpoint("steam://most_played") == "most_played"
+    assert map_entry_url_to_endpoint("wegame://popular_this_week") == "popular_this_week"
+    assert map_entry_url_to_endpoint("wegame://this_week_most_purchase") == "this_week_most_purchase"
+    assert map_entry_url_to_endpoint("wegame://discounts") == "discounts"
 
     with pytest.raises(ValueError):
         map_entry_url_to_endpoint("steam://unknown_endpoint")
@@ -54,8 +71,20 @@ def test_run_game_source_sync_topsellers(mock_client_class) -> None:
         )
     }
 
+    mock_detail_response = MagicMock()
+    mock_detail_response.status_code = 200
+    mock_detail_response.json.return_value = {
+        "105600": {
+            "success": True,
+            "data": {
+                "short_description": "Dig, fight, explore, build! Nothing is impossible in this action-packed adventure game.",
+                "header_image": "https://shared.fastly.steamstatic.com/terraria-header.jpg",
+            },
+        }
+    }
+
     mock_client = MagicMock()
-    mock_client.get.return_value = mock_response
+    mock_client.get.side_effect = [mock_response, mock_detail_response]
     mock_client_class.return_value.__enter__.return_value = mock_client
 
     with _session() as session:
@@ -95,6 +124,8 @@ def test_run_game_source_sync_topsellers(mock_client_class) -> None:
         assert game is not None
         assert game.name == "Terraria"
         assert game.cover_url == "https://shared.fastly.steamstatic.com/terraria.jpg"
+        assert game.metadata_json["description_original"].startswith("Dig, fight, explore")
+        assert game.metadata_json["description_source"] == "steam_appdetails.short_description"
 
         # 3. 验证名次信息录入成功
         ranking = session.scalar(select(GameRanking).where(GameRanking.game_item_id == game.id))
@@ -241,3 +272,73 @@ def test_run_game_source_sync_most_played(mock_client_class) -> None:
         assert ranking.ranking_type == "most_played"
         assert ranking.rank == 1
         assert ranking.score == Decimal("1234567.00")
+
+
+@patch("httpx.Client")
+def test_run_game_source_sync_wegame_rank(mock_client_class) -> None:
+    """测试 WeGame 榜单抓取与入库"""
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.content = b'{"result":{"error_code":0,"error_message":""},"total_items":1,"items":[]}'
+    mock_response.json.return_value = {
+        "result": {"error_code": 0, "error_message": ""},
+        "total_items": 1,
+        "items": [
+            {
+                "game_id": "2001918",
+                "game_name": "三角洲行动",
+                "e_game_name": "Delta Force",
+                "comments": "新一代战术射击品质标杆",
+                "poster_url_h": "https://wegame.gtimg.com/poster.jpg",
+                "latest_purchase_rank": "1",
+                "last_purchase_rank": "2",
+            }
+        ],
+    }
+
+    mock_client = MagicMock()
+    mock_client.post.return_value = mock_response
+    mock_client_class.return_value.__enter__.return_value = mock_client
+
+    with _session() as session:
+        topic = Topic(name="游戏", slug="games")
+        session.add(topic)
+        session.flush()
+
+        source = Source(
+            topic_id=topic.id,
+            site="wegame",
+            name="WeGame-最高热度",
+            entry_url="wegame://popular_this_week",
+            crawl_interval_minutes=30,
+        )
+        session.add(source)
+        session.flush()
+
+        job = CrawlJob(source_id=source.id, trigger_type="manual", status="running")
+        session.add(job)
+        session.flush()
+
+        res = run_game_source_sync(session, source, job)
+
+        assert res["found"] == 1
+        assert res["saved"] == 1
+
+        snapshot = session.scalar(select(GameRawSnapshot).where(GameRawSnapshot.provider == "wegame"))
+        assert snapshot is not None
+        assert snapshot.endpoint_key == "popular_this_week"
+        assert snapshot.parse_status == "parsed"
+
+        game = session.scalar(select(GameItem).where(GameItem.provider == "wegame", GameItem.external_id == "2001918"))
+        assert game is not None
+        assert game.name == "三角洲行动"
+        assert game.cover_url == "https://wegame.gtimg.com/poster.jpg"
+        assert game.metadata_json["comments"] == "新一代战术射击品质标杆"
+        assert game.metadata_json["description_original"] == "新一代战术射击品质标杆"
+        assert game.metadata_json["description_zh"] == "新一代战术射击品质标杆"
+        assert game.metadata_json["description_translated_by"] == "zh-native"
+
+        ranking = session.scalar(select(GameRanking).where(GameRanking.provider == "wegame"))
+        assert ranking is not None
+        assert ranking.ranking_type == "popular_this_week"
+        assert ranking.rank == 1

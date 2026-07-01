@@ -18,6 +18,15 @@ const CHART_MUTED = "#A1AAB5";
 const STATUS_COLORS: Record<string, string> = { succeeded: "#10b981", failed: "#ef4444", pending: "#f59e0b", processing: "#3b82f6" };
 type SortKey = "created_at" | "prompt_tokens" | "completion_tokens" | "total_tokens";
 
+const USAGE_TYPE_LABELS: Record<string, string> = {
+  block_analysis: "方块 AI 分析",
+  game_description: "游戏简介翻译",
+};
+
+function usageTypeLabel(type: string): string {
+  return USAGE_TYPE_LABELS[type] ?? type;
+}
+
 function formatTime(ts: string | null): string {
   if (!ts) return "—";
   const d = new Date(ts);
@@ -165,7 +174,7 @@ export function AdminAIOpsPage() {
                     <td className="px-4 py-2.5 text-xs tabular-nums text-muted-foreground whitespace-nowrap">{formatTime(item.created_at)}</td>
                     <td className="px-4 py-2.5 text-xs max-w-[160px] truncate" title={item.block_title}>
                       <span className="font-medium">{item.topic}</span>
-                      <span className="text-muted-foreground/60 ml-1">{item.block_title || item.usage_type}</span>
+                      <span className="text-muted-foreground/60 ml-1">{item.block_title || usageTypeLabel(item.usage_type)}</span>
                     </td>
                     <td className="px-4 py-2.5 text-xs font-mono text-muted-foreground/80 truncate max-w-[100px]" title={item.model_name}>{item.model_name}</td>
                     <td className="px-4 py-2.5 text-center">

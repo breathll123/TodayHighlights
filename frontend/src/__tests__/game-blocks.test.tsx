@@ -33,6 +33,7 @@ const mockGames: GameItem[] = [
     discount_percent: 80,
     discount_label: "-80%",
     release_date: "2015-05-18",
+    summary: "在开放世界中扮演猎魔人，追踪怪物并做出关键选择。",
   },
 ];
 
@@ -51,6 +52,22 @@ const mockMostPlayed: GameItem[] = [
   },
 ];
 
+const mockWeGame: GameItem[] = [
+  {
+    id: "2001918",
+    title: "三角洲行动",
+    rank: 1,
+    provider: "wegame",
+    source: "WeGame",
+    external_id: "2001918",
+    url: "https://www.wegame.com.cn/rail/game_detail.html?game_id=2001918",
+    cover_url: "https://example.com/wegame.jpg",
+    summary: "新一代战术射击品质标杆",
+    e_game_name: "Delta Force",
+    last_purchase_rank: 3,
+  },
+];
+
 describe("GameBlocks Components", () => {
   it("renders GameRankingList correctly and triggers onAnalysisDataChange", () => {
     const mockCallback = vi.fn();
@@ -64,6 +81,11 @@ describe("GameBlocks Components", () => {
     expect(screen.getByText("¥36.00")).toBeInTheDocument();
     expect(screen.getByText("¥25.60")).toBeInTheDocument();
     expect(screen.getByText("-80%")).toBeInTheDocument();
+    expect(screen.queryByText("在开放世界中扮演猎魔人，追踪怪物并做出关键选择。")).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /The Witcher 3/i })).toHaveAttribute(
+      "title",
+      "The Witcher 3\n在开放世界中扮演猎魔人，追踪怪物并做出关键选择。",
+    );
 
     // 验证 AI 数据回传回调成功触发，并且携带完整数据
     expect(mockCallback).toHaveBeenCalledWith(mockGames, "全部热门");
@@ -77,9 +99,28 @@ describe("GameBlocks Components", () => {
     const peakText = screen.getByText("1,234,567");
     expect(peakText).toBeInTheDocument();
     expect(peakText.className).toContain("arcade-score");
+    expect(screen.getByText("峰值在线人数")).toBeInTheDocument();
+    expect(screen.getByRole("tooltip")).toHaveTextContent("此游戏过去 24 小时中同时在线玩家峰值");
     expect(screen.getByText("峰值在线")).toBeInTheDocument();
     expect(screen.getByText("上周 #2")).toBeInTheDocument();
     expect(mockCallback).toHaveBeenCalledWith(mockMostPlayed, "在线热玩");
+  });
+
+  it("renders GameRankingList in WeGame mode", () => {
+    const mockCallback = vi.fn();
+    render(<GameRankingList data={mockWeGame} mode="wegame" onAnalysisDataChange={mockCallback} />);
+
+    expect(screen.getByText("三角洲行动")).toBeInTheDocument();
+    expect(screen.queryByText("新一代战术射击品质标杆")).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /三角洲行动/i })).toHaveAttribute(
+      "title",
+      "三角洲行动\n新一代战术射击品质标杆",
+    );
+    expect(screen.getByText("WeGame")).toBeInTheDocument();
+    expect(screen.getByText("上周 #3")).toBeInTheDocument();
+    expect(screen.queryByText("发布日期未知")).not.toBeInTheDocument();
+    expect(screen.queryByText("未定价")).not.toBeInTheDocument();
+    expect(mockCallback).toHaveBeenCalledWith(mockWeGame, "WeGame榜单");
   });
 
   it("renders GameDealGrid correctly and triggers onAnalysisDataChange", () => {

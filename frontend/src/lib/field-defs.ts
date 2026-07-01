@@ -109,7 +109,7 @@ export const FIELD_DEFS: Record<string, FieldDef[]> = {
   game_most_played: [
     { key: "title", label: "游戏名称", type: "text" },
     { key: "rank", label: "排名", type: "number" },
-    { key: "peak_in_game", label: "峰值在线", type: "number" },
+    { key: "peak_in_game", label: "峰值在线人数", type: "number" },
     { key: "last_week_rank", label: "上周排名", type: "number" },
   ],
   game_specials: [
@@ -120,6 +120,21 @@ export const FIELD_DEFS: Record<string, FieldDef[]> = {
   game_new_releases: [
     { key: "title", label: "游戏名称", type: "text" },
     { key: "release_date", label: "发售日期", type: "text" },
+  ],
+  game_wegame_popular: [
+    { key: "title", label: "游戏名称", type: "text" },
+    { key: "rank", label: "排名", type: "number" },
+    { key: "summary", label: "简介", type: "text" },
+  ],
+  game_wegame_weekly_sales: [
+    { key: "title", label: "游戏名称", type: "text" },
+    { key: "rank", label: "排名", type: "number" },
+    { key: "last_purchase_rank", label: "上周排名", type: "number" },
+  ],
+  game_wegame_discounts: [
+    { key: "title", label: "游戏名称", type: "text" },
+    { key: "rank", label: "排名", type: "number" },
+    { key: "summary", label: "简介", type: "text" },
   ],
 };
 
@@ -155,6 +170,9 @@ export const DEFAULT_FIELDS: Record<string, string[]> = {
   game_most_played: ["title", "rank", "peak_in_game"],
   game_specials: ["title", "score", "discount_percent"],
   game_new_releases: ["title", "release_date"],
+  game_wegame_popular: ["title", "rank", "summary"],
+  game_wegame_weekly_sales: ["title", "rank", "last_purchase_rank"],
+  game_wegame_discounts: ["title", "rank", "summary"],
 };
 
 export function resolveDisplayFieldKeys(sourceType: string, configuredFields?: unknown): string[] {

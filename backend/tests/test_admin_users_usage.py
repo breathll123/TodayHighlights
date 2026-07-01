@@ -40,3 +40,37 @@ def test_admin_lists_token_usage(client):
     response = client.get("/api/admin/ai/token-usages", headers={"Authorization": f"Bearer {token}"})
     assert response.status_code == 200
     assert response.json()["items"][0]["total_tokens"] == 42
+
+
+def test_admin_lists_game_description_token_usage_with_context_and_detail(client):
+    session = next(client.app.dependency_overrides[get_session]())
+    token = _admin_token(session)
+    usage = AITokenUsage(
+        user_id=None,
+        model_name="deepseek-chat",
+        usage_type="game_description",
+        prompt_tokens=120,
+        completion_tokens=40,
+        total_tokens=160,
+        request_status="success",
+        prompt_text="translate game description",
+        completion_text='{"results":[{"external_id":"730","zh":"多人战术射击游戏"}]}',
+    )
+    session.add(usage)
+    session.commit()
+
+    response = client.get("/api/admin/ai/token-usages", headers={"Authorization": f"Bearer {token}"})
+    assert response.status_code == 200
+    item = response.json()["items"][0]
+    assert item["usage_type"] == "game_description"
+    assert item["topic"] == "游戏"
+    assert item["block_title"] == "游戏简介翻译"
+    assert item["job_status"] == "succeeded"
+
+    detail = client.get(f"/api/admin/ai/token-usages/{usage.id}", headers={"Authorization": f"Bearer {token}"})
+    assert detail.status_code == 200
+    body = detail.json()
+    assert body["topic"] == "游戏"
+    assert body["block_title"] == "游戏简介翻译"
+    assert body["prompt_text"] == "translate game description"
+    assert "多人战术射击游戏" in body["completion_text"]

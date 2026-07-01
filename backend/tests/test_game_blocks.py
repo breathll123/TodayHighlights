@@ -25,11 +25,13 @@ def test_resolve_game_blocks_empty() -> None:
         block_specials = PageBlock(source_type="game_specials", display_count=5)
         block_new = PageBlock(source_type="game_new_releases", display_count=5)
         block_played = PageBlock(source_type="game_most_played", display_count=5)
+        block_wegame = PageBlock(source_type="game_wegame_popular", display_count=5)
 
         assert resolve_block_data(session, block_topsellers) == []
         assert resolve_block_data(session, block_specials) == []
         assert resolve_block_data(session, block_new) == []
         assert resolve_block_data(session, block_played) == []
+        assert resolve_block_data(session, block_wegame) == []
 
 
 def test_resolve_game_ranking_blocks_with_data() -> None:
@@ -259,6 +261,65 @@ def test_resolve_game_most_played_falls_back_to_raw_snapshot() -> None:
         assert res[0]["score"] == 1234567.0
         assert res[0]["peak_in_game"] == 1234567
         assert res[0]["last_week_rank"] == 2
+
+
+def test_resolve_wegame_ranking_blocks_with_data() -> None:
+    """WeGame 榜单方块应从对应 provider/ranking_type 的最新快照读取数据"""
+    with _session() as session:
+        item = GameItem(
+            provider="wegame",
+            external_id="2001918",
+            name="三角洲行动",
+            source_url="https://www.wegame.com.cn/rail/game_detail.html?game_id=2001918",
+            cover_url="https://wegame.gtimg.com/g.2001918-r.abc/info.jpg",
+            metadata_json={
+                "comments": "新一代战术射击品质标杆",
+                "description_zh": "战术射击游戏，主打多人协作和高强度对抗。",
+                "e_game_name": "Delta Force",
+                "last_purchase_rank": 3,
+                "week_recommend_ratio": 87,
+            },
+            last_seen_at=datetime.now(),
+        )
+        session.add(item)
+        session.flush()
+
+        snap = GameRawSnapshot(
+            provider="wegame",
+            endpoint_key="popular_this_week",
+            request_url="",
+            status_code=200,
+            response_body=b"",
+            response_hash="wegame",
+            captured_at=datetime.utcnow(),
+            parse_status="parsed",
+        )
+        session.add(snap)
+        session.flush()
+
+        session.add(
+            GameRanking(
+                provider="wegame",
+                ranking_type="popular_this_week",
+                game_item_id=item.id,
+                rank=1,
+                score=Decimal("87"),
+                captured_at=snap.captured_at,
+                snapshot_id=snap.id,
+            )
+        )
+        session.commit()
+
+        block = PageBlock(source_type="game_wegame_popular", display_count=5)
+        res = resolve_block_data(session, block)
+
+        assert len(res) == 1
+        assert res[0]["title"] == "三角洲行动"
+        assert res[0]["source"] == "WeGame"
+        assert res[0]["summary"] == "战术射击游戏，主打多人协作和高强度对抗。"
+        assert res[0]["e_game_name"] == "Delta Force"
+        assert res[0]["last_purchase_rank"] == 3
+        assert res[0]["week_recommend_ratio"] == 87
 
 
 def test_resolve_game_specials_blocks_with_data() -> None:

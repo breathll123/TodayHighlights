@@ -1,7 +1,7 @@
 // -*- coding: utf-8 -*-
-import { useEffect } from "react";
+import { useEffect, useId } from "react";
 import { motion } from "framer-motion";
-import { Star, TrendingUp, Percent, Calendar } from "lucide-react";
+import { Star, TrendingUp, Percent, Calendar, Info } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { PixelIcon } from "./PixelIcon";
 
@@ -25,6 +25,9 @@ export interface GameItem {
   release_date?: string | null;
   peak_in_game?: number | null;
   last_week_rank?: number | null;
+  summary?: string;
+  e_game_name?: string;
+  last_purchase_rank?: number | null;
   captured_at?: string;
 }
 
@@ -53,6 +56,34 @@ function formatInteger(value: number | null | undefined): string {
   return new Intl.NumberFormat("zh-CN").format(value);
 }
 
+function MostPlayedMetricHint() {
+  const tooltipId = useId();
+  return (
+    <div className="flex items-center justify-end">
+      <div className="group relative inline-flex items-center gap-1.5 rounded-md border border-border/40 bg-card/45 px-2 py-1 text-[11px] text-muted-foreground">
+        <TrendingUp className="h-3 w-3" style={{ color: "var(--block-accent, currentColor)" }} />
+        <span className="font-medium text-foreground/85">峰值在线人数</span>
+        <button
+          type="button"
+          aria-label="峰值在线人数说明"
+          aria-describedby={tooltipId}
+          className="inline-flex h-4 w-4 items-center justify-center rounded-full text-muted-foreground transition-colors hover:text-foreground focus:outline-none focus:ring-1 focus:ring-[color:var(--block-accent,hsl(var(--ring)))]"
+          onClick={(event) => event.preventDefault()}
+        >
+          <Info className="h-3 w-3" />
+        </button>
+        <span
+          id={tooltipId}
+          role="tooltip"
+          className="pointer-events-none absolute right-0 top-[calc(100%+6px)] z-20 w-56 rounded-md border border-border/70 bg-popover px-2.5 py-2 text-left text-[11px] leading-relaxed text-popover-foreground opacity-0 shadow-lg transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
+        >
+          此游戏过去 24 小时中同时在线玩家峰值
+        </span>
+      </div>
+    </div>
+  );
+}
+
 /**
  * 1. Steam 热门游戏排行榜 / 在线人数榜组件
  */
@@ -62,28 +93,32 @@ export function GameRankingList({
   onAnalysisDataChange,
 }: {
   data: GameItem[];
-  mode?: "top_sellers" | "most_played";
+  mode?: "top_sellers" | "most_played" | "wegame";
   onAnalysisDataChange?: (data: GameItem[], scopeLabel: string) => void;
 }) {
   useEffect(() => {
-    onAnalysisDataChange?.(data, mode === "most_played" ? "在线热玩" : "全部热门");
+    const scopeLabel = mode === "most_played" ? "在线热玩" : mode === "wegame" ? "WeGame榜单" : "全部热门";
+    onAnalysisDataChange?.(data, scopeLabel);
   }, [data, mode, onAnalysisDataChange]);
 
   if (data.length === 0) {
+    const emptyLabel = mode === "wegame" ? "WeGame 榜单" : "热门 Steam 游戏";
     return (
       <div className="rounded-lg border border-dashed border-border/80 bg-card/60 p-6 text-center text-sm text-muted-foreground">
-        暂无热门 Steam 游戏数据
+        暂无{emptyLabel}数据
       </div>
     );
   }
 
   return (
     <div className="flex flex-col gap-2">
+      {mode === "most_played" ? <MostPlayedMetricHint /> : null}
       {data.map((item, index) => {
         const cover = resolveCoverUrl(item.cover_local, item.cover_url);
         const rank = item.rank ?? index + 1;
         const isTop3 = rank <= 3;
         const isMostPlayed = mode === "most_played";
+        const isWeGame = mode === "wegame";
         
         // 金、银、铜像素硬币的主体色
         const coinColor = rank === 1 ? "#FFC53D" : rank === 2 ? "#A0AEC0" : "#CD7F32";
@@ -94,6 +129,7 @@ export function GameRankingList({
             href={item.url || "#"}
             target="_blank"
             rel="noopener noreferrer"
+            title={item.summary ? `${item.title}\n${item.summary}` : item.title}
             initial={{ opacity: 0, y: 5 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.25, delay: Math.min(index, 6) * 0.03, ease: easeOutQuint }}
@@ -144,12 +180,18 @@ export function GameRankingList({
                     <TrendingUp className="h-3 w-3" style={{ color: "var(--block-accent, currentColor)" }} />
                     {item.last_week_rank ? `上周 #${item.last_week_rank}` : "Steam 在线热玩"}
                   </>
+                ) : isWeGame ? (
+                  <>
+                    <TrendingUp className="h-3 w-3" style={{ color: "var(--block-accent, currentColor)" }} />
+                    <span className="truncate">{item.e_game_name || "WeGame 榜单"}</span>
+                  </>
                 ) : (
                   <>
                     <Calendar className="h-3 w-3" style={{ color: "var(--block-accent, currentColor)" }} />
                     {item.release_date ? `${item.release_date} 发售` : "发布日期未知"}
                   </>
                 )}
+                {item.summary ? <span className="rounded bg-muted/50 px-1 text-[10px] text-muted-foreground/80">简介</span> : null}
               </p>
             </div>
 
@@ -161,6 +203,15 @@ export function GameRankingList({
                     {formatInteger(item.peak_in_game)}
                   </span>
                   <span className="text-[10px] text-muted-foreground">峰值在线</span>
+                </>
+              ) : isWeGame ? (
+                <>
+                  <span className="rounded-md border border-border/50 bg-card/60 px-2 py-0.5 text-[11px] font-semibold text-[color:var(--block-accent,hsl(var(--primary)))]">
+                    WeGame
+                  </span>
+                  <span className="text-[10px] text-muted-foreground">
+                    {item.last_purchase_rank ? `上周 #${item.last_purchase_rank}` : "平台榜单"}
+                  </span>
                 </>
               ) : (
                 <>
@@ -227,6 +278,7 @@ export function GameDealGrid({
             href={item.url || "#"}
             target="_blank"
             rel="noopener noreferrer"
+            title={item.summary ? `${item.title}\n${item.summary}` : item.title}
             initial={{ opacity: 0, scale: 0.98 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.22, delay: Math.min(index, 6) * 0.03, ease: easeOutQuint }}
@@ -337,6 +389,7 @@ export function GameReleaseList({
             href={item.url || "#"}
             target="_blank"
             rel="noopener noreferrer"
+            title={item.summary ? `${item.title}\n${item.summary}` : item.title}
             initial={{ opacity: 0, y: 5 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.25, delay: Math.min(index, 6) * 0.03, ease: easeOutQuint }}
@@ -369,6 +422,7 @@ export function GameReleaseList({
               <p className="mt-0.5 flex items-center gap-1 text-[11px] text-muted-foreground">
                 <Calendar className="h-3 w-3" style={{ color: "var(--block-accent, currentColor)" }} />
                 {item.release_date ? `${item.release_date} 发售` : "暂未确定发布日期"}
+                {item.summary ? <span className="rounded bg-muted/50 px-1 text-[10px] text-muted-foreground/80">简介</span> : null}
               </p>
             </div>
 

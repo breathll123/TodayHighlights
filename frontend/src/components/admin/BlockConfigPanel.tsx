@@ -67,6 +67,9 @@ const SOURCE_TYPE_OPTIONS_GAME: { value: Block["source_type"]; label: string }[]
   { value: "game_most_played", label: "Steam 在线热玩榜" },
   { value: "game_specials", label: "Steam 折扣特惠" },
   { value: "game_new_releases", label: "Steam 新游动态" },
+  { value: "game_wegame_popular", label: "WeGame 最高热度" },
+  { value: "game_wegame_weekly_sales", label: "WeGame 本周热销" },
+  { value: "game_wegame_discounts", label: "WeGame 折扣促销" },
 ];
 
 const THEME_OPTIONS = [
@@ -275,7 +278,7 @@ export function BlockConfigPanel({ form, onChange, onSave, onCancel }: Props) {
       )}
 
       {/* Display Style — hidden for AA index (list only) */}
-      {form.source_type !== "datalearner_aa_index" && form.source_type !== "artificial_analysis_ranking" && form.source_type !== "market_index_trends" && form.source_type !== "github_skills" && form.source_type !== "game_top_sellers" && form.source_type !== "game_most_played" && form.source_type !== "game_specials" && form.source_type !== "game_new_releases" && (
+      {form.source_type !== "datalearner_aa_index" && form.source_type !== "artificial_analysis_ranking" && form.source_type !== "market_index_trends" && form.source_type !== "github_skills" && form.source_type !== "game_top_sellers" && form.source_type !== "game_most_played" && form.source_type !== "game_specials" && form.source_type !== "game_new_releases" && form.source_type !== "game_wegame_popular" && form.source_type !== "game_wegame_weekly_sales" && form.source_type !== "game_wegame_discounts" && (
         <div className="space-y-1.5">
           <Label className="text-xs">展示样式</Label>
           <Select value={form.display_style} onValueChange={(v) => update("display_style", v as Block["display_style"])}>

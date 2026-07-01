@@ -19,6 +19,17 @@ from app.services.adapters.game_steam import (
     parse_steam_most_played_response,
     parse_steam_results_html,
 )
+from app.services.adapters.game_wegame import (
+    WEGAME_API_URL,
+    build_wegame_payload,
+    map_wegame_entry_url,
+    parse_wegame_rank_response,
+)
+from app.services.game_description import (
+    ensure_description_original,
+    merge_steam_details_into_items,
+    translate_game_descriptions,
+)
 from app.services.media_cache import MediaCacheService
 
 logger = logging.getLogger("today_highlights.game_sync")
@@ -44,8 +55,10 @@ def map_entry_url_to_endpoint(entry_url: str) -> str:
         return "new_releases"
     elif entry_url == "steam://most_played":
         return "most_played"
+    elif entry_url.startswith("wegame://"):
+        return map_wegame_entry_url(entry_url)
     else:
-        raise ValueError(f"Unsupported Steam entry_url: {entry_url}")
+        raise ValueError(f"Unsupported game entry_url: {entry_url}")
 
 
 def _fetch_steam_app_details(client: httpx.Client, appids: list[str], headers: dict[str, str]) -> dict[str, dict[str, Any]]:
@@ -80,14 +93,26 @@ def run_game_source_sync(session: Session, source: Source, job: CrawlJob) -> dic
     保存原始响应报文快照，解析游戏基础信息与排行/特惠状态入库，并联动本地媒体封面图缓存。
     """
     endpoint_key = map_entry_url_to_endpoint(source.entry_url)
-    url = build_steam_url(endpoint_key)
-    
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Accept": "application/json, text/javascript, */*; q=0.01",
-        "X-Requested-With": "XMLHttpRequest",
-    }
-    
+    provider = source.site
+    if provider == "steam":
+        url = build_steam_url(endpoint_key)
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Accept": "application/json, text/javascript, */*; q=0.01",
+            "X-Requested-With": "XMLHttpRequest",
+        }
+    elif provider == "wegame":
+        url = WEGAME_API_URL
+        headers = {
+            "User-Agent": "Mozilla/5.0 TodayHighlights/0.1",
+            "Accept": "application/json, text/plain, */*",
+            "Content-Type": "application/json;charset=UTF-8",
+            "Origin": "https://www.wegame.com.cn",
+            "Referer": "https://www.wegame.com.cn/rail/rank_detail.html",
+        }
+    else:
+        raise ValueError(f"Unsupported game provider: {provider}")
+
     proxy = None
     if settings.steam_proxy_url:
         proxy = settings.steam_proxy_url
@@ -109,7 +134,10 @@ def run_game_source_sync(session: Session, source: Source, job: CrawlJob) -> dic
         
         # 发起 HTTP 请求
         with httpx.Client(proxy=proxy, timeout=settings.steam_timeout_seconds, follow_redirects=True) as client:
-            resp = client.get(url, headers=headers)
+            if provider == "wegame":
+                resp = client.post(url, headers=headers, json=build_wegame_payload(endpoint_key, page_size=50))
+            else:
+                resp = client.get(url, headers=headers)
             status_code = resp.status_code
             response_body = _coerce_response_body(getattr(resp, "content", b""))
             resp.raise_for_status()
@@ -118,7 +146,12 @@ def run_game_source_sync(session: Session, source: Source, job: CrawlJob) -> dic
             if not response_body:
                 response_body = json.dumps(resp_json, ensure_ascii=False, default=str).encode("utf-8")
 
-            if endpoint_key == "most_played":
+            if provider == "wegame":
+                result = resp_json.get("result") if isinstance(resp_json, dict) else None
+                if not isinstance(result, dict) or int(result.get("error_code", -1)) != 0:
+                    raise ValueError(f"WeGame API error: {resp_json}")
+                items = parse_wegame_rank_response(resp_json, endpoint_key, limit=50)
+            elif endpoint_key == "most_played":
                 ranks = (resp_json.get("response") or {}).get("ranks") if isinstance(resp_json, dict) else None
                 appids = [
                     str(row.get("appid"))
@@ -127,17 +160,21 @@ def run_game_source_sync(session: Session, source: Source, job: CrawlJob) -> dic
                 ]
                 details_by_appid = _fetch_steam_app_details(client, appids, headers)
                 items = parse_steam_most_played_response(resp_json, details_by_appid=details_by_appid, limit=50)
+                items = merge_steam_details_into_items(items, details_by_appid)
             else:
                 if not resp_json or resp_json.get("success") != 1:
                     raise ValueError(f"Steam API success status not 1: {resp_json}")
                 results_html = resp_json.get("results_html", "")
                 items = parse_steam_results_html(results_html)
+                appids = [str(item.get("external_id")) for item in items[:50] if item.get("external_id")]
+                details_by_appid = _fetch_steam_app_details(client, appids, headers)
+                items = merge_steam_details_into_items(items, details_by_appid)
         
     except Exception as exc:
         # 记录抓取失败快照并抛出异常
         response_hash = hashlib.sha256(response_body).hexdigest() if response_body else "error"
         snapshot = GameRawSnapshot(
-            provider="steam",
+            provider=provider,
             endpoint_key=endpoint_key,
             request_url=url,
             status_code=status_code if status_code else 500,
@@ -166,7 +203,7 @@ def run_game_source_sync(session: Session, source: Source, job: CrawlJob) -> dic
     
     # 2. 创建并保存原始快照记录
     snapshot = GameRawSnapshot(
-        provider="steam",
+        provider=provider,
         endpoint_key=endpoint_key,
         request_url=url,
         status_code=status_code,
@@ -195,6 +232,7 @@ def run_game_source_sync(session: Session, source: Source, job: CrawlJob) -> dic
         
         media_cache = MediaCacheService(session)
         cached_count = 0
+        synced_items: list[GameItem] = []
         
         # 开启内部事务性循环更新
         for parsed in items:
@@ -204,7 +242,7 @@ def run_game_source_sync(session: Session, source: Source, job: CrawlJob) -> dic
             # 使用 select 语句查询已有项目
             item_db = session.scalar(
                 select(GameItem)
-                .where(GameItem.provider == "steam", GameItem.external_id == external_id)
+                .where(GameItem.provider == provider, GameItem.external_id == external_id)
             )
             
             # 拼装基础字段
@@ -212,13 +250,13 @@ def run_game_source_sync(session: Session, source: Source, job: CrawlJob) -> dic
             
             if item_db is None:
                 item_db = GameItem(
-                    provider="steam",
+                    provider=provider,
                     external_id=external_id,
                     name=parsed["name"],
                     cover_url=parsed["cover_url"],
                     source_url=parsed["source_url"],
                     release_date=parsed["release_date"],
-                    metadata_json=parsed.get("metadata") or {},
+                    metadata_json=ensure_description_original(parsed.get("metadata") or {}),
                     last_seen_at=now_dt,
                     status="active"
                 )
@@ -232,18 +270,19 @@ def run_game_source_sync(session: Session, source: Source, job: CrawlJob) -> dic
                 if parsed.get("metadata"):
                     metadata = dict(item_db.metadata_json or {})
                     metadata.update(parsed["metadata"])
-                    item_db.metadata_json = metadata
+                    item_db.metadata_json = ensure_description_original(metadata)
                 item_db.last_seen_at = now_dt
                 item_db.status = "active"
                 
             session.flush() # 获得 item_db.id
+            synced_items.append(item_db)
             
             # B. 按照板块类型插入排行或打折特惠数据
-            if endpoint_key in ["top_sellers", "new_releases", "most_played"]:
+            if endpoint_key in ["top_sellers", "new_releases", "most_played"] or provider == "wegame":
                 # 排行数据入库
                 ranking = GameRanking(
-                    provider="steam",
-                    ranking_type=endpoint_key,
+                    provider=provider,
+                    ranking_type=parsed.get("ranking_type") or endpoint_key,
                     game_item_id=item_db.id,
                     rank=parsed["rank"],
                     score=parsed.get("score"),
@@ -276,7 +315,7 @@ def run_game_source_sync(session: Session, source: Source, job: CrawlJob) -> dic
                         # 尝试缓存图片到本地
                         local_path = media_cache.cache_remote_image(
                             source_url=parsed["cover_url"],
-                            provider="steam",
+                            provider=provider,
                             entity_type="game",
                             entity_name=parsed["name"],
                             source_entity_id=external_id,
@@ -299,7 +338,9 @@ def run_game_source_sync(session: Session, source: Source, job: CrawlJob) -> dic
                         )
             
             items_saved += 1
-            
+
+        translate_game_descriptions(session, synced_items)
+
         # 更新快照为已解析成功
         snapshot.parse_status = "parsed"
         session.commit()

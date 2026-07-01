@@ -102,7 +102,8 @@ export interface Block {
   title: string;
   sort_order: number;
   source_type: "topic" | "raw" | "hot_stocks" | "hot_events" | "xueqiu_hot_cn" | "xueqiu_hot_hk" | "xueqiu_hot_us" | "screener" | "eastmoney_sectors" | "eastmoney_longhu" | "eastmoney_industry" | "eastmoney_indices" | "eastmoney_capital_flow" | "eastmoney_announcements" | "tonghuashun_news" | "qiumiwu_matches" | "qiumiwu_fixtures" | "qiumiwu_standings" | "qiumiwu_schedule" | "datalearner_leaderboard" | "datalearner_aa_index" | "aihot_news" | "artificial_analysis_ranking"
-  | "market_index_trends" | "github_skills" | "game_top_sellers" | "game_most_played" | "game_specials" | "game_new_releases";
+  | "market_index_trends" | "github_skills" | "game_top_sellers" | "game_most_played" | "game_specials" | "game_new_releases"
+  | "game_wegame_popular" | "game_wegame_weekly_sales" | "game_wegame_discounts";
   source_config: Record<string, unknown>;
   display_style: "card" | "list" | "timeline" | "schedule";
   display_count: number;

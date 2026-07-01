@@ -26,6 +26,15 @@ from app.services.adapters.game_steam import parse_steam_most_played_response
 
 logger = logging.getLogger("today_highlights.blocks")
 
+_GAME_RANKING_SOURCES = {
+    "game_top_sellers": ("steam", "top_sellers"),
+    "game_new_releases": ("steam", "new_releases"),
+    "game_most_played": ("steam", "most_played"),
+    "game_wegame_popular": ("wegame", "popular_this_week"),
+    "game_wegame_weekly_sales": ("wegame", "this_week_most_purchase"),
+    "game_wegame_discounts": ("wegame", "discounts"),
+}
+
 # Module-level shared executor — avoids per-request creation/destruction overhead
 _BLOCK_EXECUTOR: ThreadPoolExecutor | None = None
 _EXECUTOR_LOCK = threading.Lock()
@@ -308,13 +317,8 @@ def resolve_block_data(
             for index, skill in enumerate(skills)
         ]
 
-    if source_type in ["game_top_sellers", "game_new_releases", "game_most_played"]:
-        ranking_type_by_source = {
-            "game_top_sellers": "top_sellers",
-            "game_new_releases": "new_releases",
-            "game_most_played": "most_played",
-        }
-        ranking_type = ranking_type_by_source[source_type]
+    if source_type in _GAME_RANKING_SOURCES:
+        provider, ranking_type = _GAME_RANKING_SOURCES[source_type]
         ranking_exists = (
             select(GameRanking.id)
             .where(GameRanking.snapshot_id == GameRawSnapshot.id)
@@ -331,7 +335,7 @@ def resolve_block_data(
         latest_snap = session.scalar(
             select(GameRawSnapshot)
             .where(
-                GameRawSnapshot.provider == "steam",
+                GameRawSnapshot.provider == provider,
                 GameRawSnapshot.endpoint_key == ranking_type,
                 GameRawSnapshot.parse_status != "failed",
                 detail_exists,
@@ -455,14 +459,15 @@ def resolve_block_data(
         for ranking, item in results:
             deal = deals_map.get(item.id)
             metadata = item.metadata_json or {}
+            source_label = "WeGame" if item.provider == "wegame" else "Steam"
             data_list.append({
                 "id": ranking.id,
                 "title": item.name,
-                "subtitle": "Steam",
+                "subtitle": source_label,
                 "rank": ranking.rank,
                 "score": float(ranking.score) if ranking.score is not None else None,
                 "provider": item.provider,
-                "source": "Steam",
+                "source": source_label,
                 "external_id": item.external_id,
                 "url": item.source_url,
                 "cover_url": item.cover_url,
@@ -474,6 +479,12 @@ def resolve_block_data(
                 "release_date": item.release_date.isoformat() if item.release_date else None,
                 "peak_in_game": metadata.get("peak_in_game"),
                 "last_week_rank": metadata.get("last_week_rank"),
+                "summary": metadata.get("description_zh") or metadata.get("comments") or metadata.get("description_original") or "",
+                "e_game_name": metadata.get("e_game_name") or "",
+                "last_purchase_rank": metadata.get("last_purchase_rank"),
+                "week_recommend_ratio": metadata.get("week_recommend_ratio"),
+                "month_recommend_ratio": metadata.get("month_recommend_ratio"),
+                "total_recommend_ratio": metadata.get("total_recommend_ratio"),
                 "captured_at": ranking.captured_at.isoformat(),
                 "created_at": ranking.created_at.isoformat(),
                 "source_type": source_type,
@@ -740,7 +751,11 @@ def get_page_blocks(session: Session, route: str) -> list[dict]:
         )
 
     # Separate DB-dependent blocks (topic, raw) from live-API blocks
-    db_types = {"topic", "raw", "eastmoney_longhu", "tonghuashun_news", "artificial_analysis_ranking", "github_skills", "game_top_sellers", "game_specials", "game_new_releases", "game_most_played"}
+    db_types = {
+        "topic", "raw", "eastmoney_longhu", "tonghuashun_news", "artificial_analysis_ranking",
+        "github_skills", "game_top_sellers", "game_specials", "game_new_releases", "game_most_played",
+        "game_wegame_popular", "game_wegame_weekly_sales", "game_wegame_discounts",
+    }
     db_blocks = [b for b in blocks if b.source_type in db_types]
     live_blocks = [b for b in blocks if b.source_type not in db_types]
 

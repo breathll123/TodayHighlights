@@ -67,6 +67,9 @@ BUILTIN_SOURCES = (
     BuiltinSource("games", "steam", "Steam-在线热玩榜", "steam://most_played", 30),
     BuiltinSource("games", "steam", "Steam-打折促销", "steam://specials", 60),
     BuiltinSource("games", "steam", "Steam-新游动态", "steam://new_releases", 60),
+    BuiltinSource("games", "wegame", "WeGame-最高热度", "wegame://popular_this_week", 30),
+    BuiltinSource("games", "wegame", "WeGame-本周热销", "wegame://this_week_most_purchase", 30),
+    BuiltinSource("games", "wegame", "WeGame-折扣促销", "wegame://discounts", 60),
 )
 
 BUILTIN_PAGE_BLOCKS = (
@@ -74,6 +77,9 @@ BUILTIN_PAGE_BLOCKS = (
     BuiltinPageBlock("/topics/games", "在线热玩榜", "game_most_played", "game-ranking", 10, 15, 2, 2, 2, 0),
     BuiltinPageBlock("/topics/games", "打折促销", "game_specials", "game-deal", 9, 20, 2, 2, 0, 2),
     BuiltinPageBlock("/topics/games", "新游动态", "game_new_releases", "game-release", 10, 30, 2, 1, 2, 2),
+    BuiltinPageBlock("/topics/games", "WeGame 最高热度", "game_wegame_popular", "game-ranking", 10, 40, 2, 2, 0, 4),
+    BuiltinPageBlock("/topics/games", "WeGame 本周热销", "game_wegame_weekly_sales", "game-ranking", 10, 50, 2, 2, 2, 4),
+    BuiltinPageBlock("/topics/games", "WeGame 折扣促销", "game_wegame_discounts", "game-ranking", 10, 60, 2, 2, 0, 6),
 )
 
 

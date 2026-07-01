@@ -147,6 +147,9 @@ def test_reconcile_system_catalog_seeds_sources_idempotently(db_session):
     assert ("dongqiudi", "dongqiudi://matches") in source_keys
     assert ("qiumiwu", "qiumiwu://matches") in source_keys
     assert ("aihot", "aihot://news") in source_keys
+    assert ("wegame", "wegame://popular_this_week") in source_keys
+    assert ("wegame", "wegame://this_week_most_purchase") in source_keys
+    assert ("wegame", "wegame://discounts") in source_keys
 
 
 def test_reconcile_system_catalog_seeds_game_page_blocks_idempotently(db_session):
@@ -155,7 +158,7 @@ def test_reconcile_system_catalog_seeds_game_page_blocks_idempotently(db_session
     blocks = db_session.scalars(
         select(PageBlock).where(PageBlock.page_route == "/topics/games")
     ).all()
-    assert len(blocks) == 8
+    assert len(blocks) == 14
     assert {
         (block.title, block.source_type, block.status)
         for block in blocks
@@ -168,10 +171,16 @@ def test_reconcile_system_catalog_seeds_game_page_blocks_idempotently(db_session
         ("打折促销", "game_specials", "published"),
         ("新游动态", "game_new_releases", "draft"),
         ("新游动态", "game_new_releases", "published"),
+        ("WeGame 最高热度", "game_wegame_popular", "draft"),
+        ("WeGame 最高热度", "game_wegame_popular", "published"),
+        ("WeGame 本周热销", "game_wegame_weekly_sales", "draft"),
+        ("WeGame 本周热销", "game_wegame_weekly_sales", "published"),
+        ("WeGame 折扣促销", "game_wegame_discounts", "draft"),
+        ("WeGame 折扣促销", "game_wegame_discounts", "published"),
     }
 
     reconcile_system_catalog(db_session)
 
     assert db_session.scalar(
         select(func.count()).select_from(PageBlock).where(PageBlock.page_route == "/topics/games")
-    ) == 8
+    ) == 14

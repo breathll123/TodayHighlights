@@ -518,7 +518,12 @@ def update_user_status(user_id: int, payload: dict, request: Request, session: S
 
 
 _TOPIC_LABELS: dict[str, str] = {
-    "stocks": "股票", "football": "足球", "ai": "AI", "summary": "首页",
+    "stocks": "股票", "football": "足球", "ai": "AI", "summary": "首页", "games": "游戏",
+}
+
+_USAGE_TYPE_LABELS: dict[str, str] = {
+    "block_analysis": "方块 AI 分析",
+    "game_description": "游戏简介翻译",
 }
 
 
@@ -554,8 +559,11 @@ def list_token_usages(page: int = 1, page_size: int = 20, session: Session = Dep
         analysis = analysis_map.get(u.related_block_analysis_id) if u.related_block_analysis_id else None
         job = job_map.get(u.related_job_id) if u.related_job_id else None
 
-        block_title = analysis.block_title if analysis else ""
+        block_title = analysis.block_title if analysis else _USAGE_TYPE_LABELS.get(u.usage_type, "")
         topic = _resolve_topic(analysis.page_route if analysis else None)
+        if topic == "—" and u.usage_type == "game_description":
+            topic = "游戏"
+        job_status = job.status if job else ("succeeded" if u.request_status == "success" else u.request_status)
 
         return {
             "id": u.id,
@@ -571,7 +579,7 @@ def list_token_usages(page: int = 1, page_size: int = 20, session: Session = Dep
             "block_title": block_title,
             "topic": topic,
             "finished_at": job.finished_at.isoformat() if (job and job.finished_at) else None,
-            "job_status": job.status if job else None,
+            "job_status": job_status,
             "job_error": job.error_message if job else None,
         }
 
@@ -725,6 +733,10 @@ def get_token_usage_detail(usage_id: int, session: Session = Depends(get_session
         raise HTTPException(status_code=404, detail="Token usage not found")
 
     analysis = session.get(AIBlockAnalysis, usage.related_block_analysis_id) if usage.related_block_analysis_id else None
+    block_title = analysis.block_title if analysis else _USAGE_TYPE_LABELS.get(usage.usage_type, "")
+    topic = _resolve_topic(analysis.page_route if analysis else None)
+    if topic == "—" and usage.usage_type == "game_description":
+        topic = "游戏"
 
     return {
         "id": usage.id,
@@ -737,8 +749,8 @@ def get_token_usage_detail(usage_id: int, session: Session = Depends(get_session
         "estimated": usage.estimated,
         "request_status": usage.request_status,
         "created_at": usage.created_at.isoformat() if usage.created_at else None,
-        "block_title": analysis.block_title if analysis else "",
-        "topic": _resolve_topic(analysis.page_route if analysis else None),
+        "block_title": block_title,
+        "topic": topic,
         "prompt_text": usage.prompt_text,
         "completion_text": usage.completion_text,
     }

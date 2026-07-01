@@ -41,6 +41,15 @@ function CodeBlock({ label, text, variant = "default" }: { label: string; text: 
   );
 }
 
+const USAGE_TYPE_LABELS: Record<string, string> = {
+  block_analysis: "方块 AI 分析",
+  game_description: "游戏简介翻译",
+};
+
+function usageTypeLabel(type: string): string {
+  return USAGE_TYPE_LABELS[type] ?? type;
+}
+
 interface Props {
   open: boolean;
   detail: AITokenUsageDetail | null;
@@ -78,7 +87,7 @@ export function AIUsageDetailDrawer({ open, detail, isLoading, error, onClose }:
                   <h3 className="text-sm font-semibold truncate">AI 请求详情</h3>
                   {detail && (
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      {detail.model_name} · {detail.usage_type}
+                      {detail.model_name} · {usageTypeLabel(detail.usage_type)}
                       {detail.topic ? ` · ${detail.topic}` : ""}
                     </p>
                   )}
@@ -118,8 +127,16 @@ export function AIUsageDetailDrawer({ open, detail, isLoading, error, onClose }:
                     </div>
 
                     {/* Content blocks */}
-                    <CodeBlock label="System Prompt + User Prompt" text={detail.prompt_text} />
-                    <CodeBlock label="AI 返回" text={detail.completion_text} variant="response" />
+                    {detail.prompt_text || detail.completion_text ? (
+                      <>
+                        <CodeBlock label="System Prompt + User Prompt" text={detail.prompt_text} />
+                        <CodeBlock label="AI 返回" text={detail.completion_text} variant="response" />
+                      </>
+                    ) : (
+                      <p className="rounded-lg border border-dashed bg-muted/30 p-3 text-xs text-muted-foreground">
+                        这条历史记录只保存了 Token 统计，没有保存请求与返回正文。重新触发对应任务后，新记录会显示完整详情。
+                      </p>
+                    )}
                   </>
                 ) : null}
               </div>

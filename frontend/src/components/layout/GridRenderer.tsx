@@ -41,6 +41,7 @@ const VISIBLE_ANALYSIS_FIELDS = [
   "status", "minute", "start_time", "team_a", "team_b", "score_a", "score_b",
   "model", "creator", "subtitle", "region", "net_amount", "reason",
   "current_price", "original_price", "discount_percent", "discount_label", "release_date",
+  "e_game_name", "last_purchase_rank", "week_recommend_ratio", "month_recommend_ratio", "total_recommend_ratio",
 ] as const;
 
 function compactVisibleAnalysisData(data: any[]): any[] {
@@ -93,10 +94,15 @@ const SOURCE_NAMES: Record<string, string> = {
   artificial_analysis_ranking: "Artificial Analysis",
   market_index_trends: "东方财富",
   github_skills: "GitHub",
+  Steam: "Steam",
+  WeGame: "WeGame",
   game_top_sellers: "Steam",
   game_most_played: "Steam",
   game_specials: "Steam",
   game_new_releases: "Steam",
+  game_wegame_popular: "WeGame",
+  game_wegame_weekly_sales: "WeGame",
+  game_wegame_discounts: "WeGame",
 };
 
 const SOURCE_URLS: Record<string, string> = {
@@ -110,6 +116,7 @@ const SOURCE_URLS: Record<string, string> = {
   artificial_analysis: "https://artificialanalysis.ai/",
   github: "https://github.com/",
   steam: "https://store.steampowered.com/",
+  wegame: "https://www.wegame.com.cn/",
 };
 
 function sourceUrlFor(sourceType: string): string | undefined {
@@ -123,12 +130,13 @@ function sourceUrlFor(sourceType: string): string | undefined {
   if (sourceType.startsWith("artificial_analysis")) return SOURCE_URLS.artificial_analysis;
   if (sourceType.startsWith("market_index")) return SOURCE_URLS.eastmoney;
   if (sourceType === "github_skills") return SOURCE_URLS.github;
+  if (sourceType.startsWith("game_wegame")) return SOURCE_URLS.wegame;
   if (sourceType.startsWith("game_")) return SOURCE_URLS.steam;
   return undefined;
 }
 
 export function sourceNameFor(item: any, sourceType: string): string {
-  return SOURCE_NAMES[item.source ?? sourceType] ?? "今日看点";
+  return SOURCE_NAMES[item.source] ?? SOURCE_NAMES[sourceType] ?? "今日看点";
 }
 
 function fmtTitle(item: any): string {
@@ -472,6 +480,8 @@ export function GridRenderer({ blocks, isLoading, dataUpdatedAt }: { blocks: any
               <GameRankingList data={block.data} onAnalysisDataChange={(visible, label) => setBlockAnalysisScope(block.id, visible, label)} />
             ) : block.source_type === "game_most_played" ? (
               <GameRankingList data={block.data} mode="most_played" onAnalysisDataChange={(visible, label) => setBlockAnalysisScope(block.id, visible, label)} />
+            ) : block.source_type === "game_wegame_popular" || block.source_type === "game_wegame_weekly_sales" || block.source_type === "game_wegame_discounts" ? (
+              <GameRankingList data={block.data} mode="wegame" onAnalysisDataChange={(visible, label) => setBlockAnalysisScope(block.id, visible, label)} />
             ) : block.source_type === "game_specials" ? (
               <GameDealGrid data={block.data} onAnalysisDataChange={(visible, label) => setBlockAnalysisScope(block.id, visible, label)} />
             ) : block.source_type === "game_new_releases" ? (
