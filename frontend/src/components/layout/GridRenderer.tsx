@@ -4,7 +4,7 @@ import { ArrowDown, ArrowUp, BrainCircuit, CalendarClock, ChartNoAxesCombined, N
 import { useMutation } from "@tanstack/react-query";
 import { useLocation } from "react-router-dom";
 import { BlockCard } from "./BlockCard";
-import { BlockSkeleton } from "./BlockSkeleton";
+import { ThemedLoading } from "./ThemedLoading";
 import { CompactTable } from "./CompactTable";
 import { MatchCards } from "./MatchCards";
 import { MatchList } from "./MatchList";
@@ -376,13 +376,7 @@ export function GridRenderer({ blocks, isLoading, dataUpdatedAt }: { blocks: any
   };
 
   if (isLoading) {
-    return (
-      <div className="page-grid">
-        {[1, 2, 3, 4].map((i) => (
-          <BlockSkeleton key={i} colSpan={i % 2 === 0 ? 1 : 2} />
-        ))}
-      </div>
-    );
+    return <ThemedLoading />;
   }
 
   if (blocks.length === 0) {
