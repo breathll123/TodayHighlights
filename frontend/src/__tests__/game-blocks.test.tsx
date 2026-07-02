@@ -135,6 +135,17 @@ describe("GameBlocks Components", () => {
     expect(mockCallback).toHaveBeenCalledWith(mockGames, "全部优惠");
   });
 
+  it("GameDealGrid 使用横向滚动货架布局，卡片定宽不压缩", () => {
+    const { container } = render(<GameDealGrid data={mockGames} />);
+    const shelf = screen.getByTestId("deal-shelf");
+    expect(shelf.className).toContain("overflow-x-auto");
+    expect(shelf.className).toContain("snap-x");
+    // 卡片必须 shrink-0 定宽，否则在横向容器里会被压扁
+    const card = container.querySelector("a");
+    expect(card?.className).toContain("shrink-0");
+    expect(container.querySelector(".grid")).toBeNull();
+  });
+
   it("renders GameReleaseList correctly and triggers onAnalysisDataChange", () => {
     const mockCallback = vi.fn();
     render(<GameReleaseList data={mockGames} onAnalysisDataChange={mockCallback} />);

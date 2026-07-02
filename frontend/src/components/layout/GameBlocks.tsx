@@ -267,11 +267,11 @@ export function GameDealGrid({
   }
 
   return (
-    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+    <div data-testid="deal-shelf" className="deal-shelf flex snap-x gap-2 overflow-x-auto pb-2">
       {data.map((item, index) => {
         const cover = resolveCoverUrl(item.cover_local, item.cover_url);
         const discount = formatDiscount(item);
-        
+
         return (
           <motion.a
             key={item.id ?? index}
@@ -279,10 +279,10 @@ export function GameDealGrid({
             target="_blank"
             rel="noopener noreferrer"
             title={item.summary ? `${item.title}\n${item.summary}` : item.title}
-            initial={{ opacity: 0, scale: 0.98 }}
-            animate={{ opacity: 1, scale: 1 }}
+            initial={{ opacity: 0, x: 12 }}
+            animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.22, delay: Math.min(index, 6) * 0.03, ease: easeOutQuint }}
-            className="group flex flex-col overflow-hidden rounded-lg border border-border/40 bg-card/45 transition-all hover:-translate-y-0.5 hover:border-[color:var(--block-accent,theme(colors.border))] hover:bg-card/75 hover:shadow-md"
+            className="group flex w-[188px] shrink-0 snap-start flex-col overflow-hidden rounded-lg border border-border/40 bg-card/45 transition-all hover:-translate-y-0.5 hover:border-[color:var(--block-accent,theme(colors.border))] hover:bg-card/75 hover:shadow-md"
             style={{
               boxShadow: "0 0 0 1px var(--block-accent-soft, transparent)"
             }}
