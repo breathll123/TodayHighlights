@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { act, render, screen, fireEvent } from "@testing-library/react";
 import { MemoryRouter, useNavigate } from "react-router-dom";
 import { TopicTransitionOverlay } from "../components/layout/TopicTransitionOverlay";
+import { getTopicTheme } from "../lib/topic-themes";
 import "@testing-library/jest-dom";
 
 let reducedMotion = false;
@@ -44,8 +45,12 @@ const flushAsync = async () => {
   });
 };
 
-beforeEach(() => {
+beforeEach(async () => {
   reducedMotion = false;
+  // 预热 Lottie JSON 的模块缓存：首次动态 import 走真实 I/O（宏任务），
+  // fake timers 下冲不出来；预热后组件内的 import() 只剩微任务，flushAsync 即可冲平。
+  await getTopicTheme("/topics/football")!.loadAnimation();
+  await getTopicTheme("/topics/ai")!.loadAnimation();
   vi.useFakeTimers();
 });
 
