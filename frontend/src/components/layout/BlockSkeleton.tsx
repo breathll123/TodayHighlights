@@ -1,7 +1,8 @@
 export function BlockSkeleton({ colSpan = 1, rowSpan = 1 }: { colSpan?: number; rowSpan?: number }) {
   return (
     <div
-      className="min-h-[138px] animate-pulse rounded-xl border border-border/70 bg-card/75 p-5 shadow-sm"
+      data-testid="block-skeleton"
+      className="min-h-[138px] rounded-xl border border-border/70 bg-card/75 p-5 shadow-sm"
       style={{ gridColumn: `span ${colSpan}`, gridRow: `span ${rowSpan}` }}
     >
       <div className="mb-4 flex items-center justify-between">
