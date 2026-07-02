@@ -40,11 +40,11 @@ describe("ThemedLoading", () => {
     expect(screen.getByText("看板数据加载中…")).toBeInTheDocument();
   });
 
-  it("保留静态骨架屏打底，骨架框自身不闪烁", () => {
+  it("加载态不渲染骨架框，只有主题动画与文案", () => {
     const { container } = renderAt("/topics/football");
-    expect(screen.getAllByTestId("block-skeleton").length).toBeGreaterThanOrEqual(4);
-    // 加载动效只保留中央主题动画，背景骨架框不再 pulse，避免两套动画叠加
+    expect(container.querySelectorAll("[data-testid=block-skeleton]").length).toBe(0);
     expect(container.querySelectorAll(".animate-pulse").length).toBe(0);
+    expect(screen.getByRole("status")).toBeInTheDocument();
   });
 
   it("reduced motion 时不渲染动画，仅骨架屏与文案", async () => {
