@@ -47,8 +47,8 @@ const THEMES: Record<string, TopicTheme> = {
     openingDuration: OPENING_DURATION,
     loadAnimation: load(() => import("@/assets/lottie/robot.json")),
   },
-  game: {
-    key: "game",
+  games: {
+    key: "games",
     accent: "#9A7BFF",
     loadingText: "游戏数据加载中…",
     openingDuration: OPENING_DURATION,

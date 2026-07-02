@@ -7,7 +7,7 @@ describe("getTopicTheme", () => {
     expect(getTopicTheme("/topics/football")?.key).toBe("football");
     expect(getTopicTheme("/topics/football")?.loadingText).toBe("足球数据加载中…");
     expect(getTopicTheme("/topics/ai")?.accent).toBe("#4DD0FF");
-    expect(getTopicTheme("/topics/game")?.key).toBe("game");
+    expect(getTopicTheme("/topics/games")?.key).toBe("games");
     expect(getTopicTheme("/topics/stocks")?.loadingText).toBe("行情数据加载中…");
   });
 
