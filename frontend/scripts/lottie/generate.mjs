@@ -64,8 +64,9 @@ const football = doc("football", [
     "ball",
     1,
     [
-      group("shell", [ellipse(64), stroke(INK, 4)]),
-      group("patch", [path([[0, -11], [10.5, -3.4], [6.5, 8.9], [-6.5, 8.9], [-10.5, -3.4]], true), fill(INK)]),
+      // 用主题绿而非亮前景色：亮色模式下遮罩底为近白，INK 描边会隐形
+      group("shell", [ellipse(64), stroke(GREEN, 4)]),
+      group("patch", [path([[0, -11], [10.5, -3.4], [6.5, 8.9], [-6.5, 8.9], [-10.5, -3.4]], true), fill(GREEN)]),
     ],
     {
       p: kfs([
