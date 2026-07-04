@@ -36,7 +36,11 @@ def list_sources(type: str | None = None, session: Session = Depends(get_session
         ).all()
         return [{"id": s.id, "name": f"[{s.site}] {s.name}"} for s in sources]
 
-    sources = session.scalars(select(Source).order_by(Source.id.desc())).all()
+    sources = session.scalars(
+        select(Source)
+        .where(Source.entry_url != "steam://most_played")
+        .order_by(Source.id.desc())
+    ).all()
     return [
         {
             "id": source.id,

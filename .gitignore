@@ -48,3 +48,6 @@ backend/logs/
 
 # Backend dev scratch (saved Steam HTML, etc.)
 backend/tmp/
+
+# 推广素材（不入库）
+小红书/

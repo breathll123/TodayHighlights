@@ -12,7 +12,7 @@ describe("block-themes", () => {
   });
 
   it("maps arcade game boards to per-board skins", () => {
-    expect(getBlockSkin("arcade", "game_most_played")?.eyebrow).toBe("NOW PLAYING");
+    expect(getBlockSkin("arcade", "game_charts_concurrent")?.eyebrow).toBe("NOW PLAYING");
     expect(getBlockSkin("arcade", "game_top_sellers")?.icon).toBe("coin");
     expect(getBlockSkin("arcade", "game_specials")?.accent).toBe("#FF4D8D");
   });

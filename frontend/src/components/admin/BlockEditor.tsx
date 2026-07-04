@@ -106,6 +106,19 @@ export function BlockEditor({ open, block, onSave, onClose }: Props) {
     onClose();
   };
 
+  const updateSourceType = (sourceType: Block["source_type"]) => {
+    setForm((current) => {
+      const next = { ...current, source_type: sourceType };
+      if (sourceType === "game_specials") {
+        next.col_span = 4;
+        next.row_span = 2;
+        next.display_style = "game-deal";
+        next.display_count = Math.max(current.display_count, 10);
+      }
+      return next;
+    });
+  };
+
   return (
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-lg">
@@ -130,7 +143,7 @@ export function BlockEditor({ open, block, onSave, onClose }: Props) {
             </div>
             <div className="space-y-2">
               <Label>数据来源</Label>
-              <Select value={form.source_type} onValueChange={(v) => setForm({ ...form, source_type: v as Block["source_type"] })}>
+              <Select value={form.source_type} onValueChange={(v) => updateSourceType(v as Block["source_type"])}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectGroup>
@@ -238,6 +251,9 @@ export function BlockEditor({ open, block, onSave, onClose }: Props) {
                   <SelectItem value="card">卡片</SelectItem>
                   <SelectItem value="list">列表</SelectItem>
                   <SelectItem value="timeline">时间线</SelectItem>
+                  <SelectItem value="game-ranking">游戏榜单</SelectItem>
+                  <SelectItem value="game-release">新游卡片</SelectItem>
+                  <SelectItem value="game-deal">折扣轮播</SelectItem>
                 </SelectContent>
               </Select>
             </div>

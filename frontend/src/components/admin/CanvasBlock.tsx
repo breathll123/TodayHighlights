@@ -8,6 +8,19 @@ interface Props {
   onDelete: () => void;
 }
 
+function displayStyleLabel(style: string): string {
+  const labels: Record<string, string> = {
+    card: "卡片",
+    list: "列表",
+    timeline: "时间线",
+    schedule: "赛程表",
+    "game-ranking": "游戏榜单",
+    "game-release": "新游卡片",
+    "game-deal": "折扣轮播",
+  };
+  return labels[style] ?? style;
+}
+
 export function CanvasBlock({ block, onEdit, onDelete }: Props) {
   return (
     <div className="h-full bg-card border rounded-xl shadow-sm overflow-hidden flex flex-col">
@@ -29,7 +42,7 @@ export function CanvasBlock({ block, onEdit, onDelete }: Props) {
         </div>
       </div>
       <div className="flex-1 p-3 text-xs text-muted-foreground flex items-center justify-center">
-        {block.display_count}条 · {block.display_style === "list" ? "列表" : "卡片"}
+        {block.display_count}条 · {displayStyleLabel(block.display_style)}
       </div>
     </div>
   );

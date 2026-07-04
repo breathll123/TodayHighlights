@@ -60,6 +60,22 @@ function cell(key: string, item: Row) {
       );
     case "score":
       return <span className="text-xs text-muted-foreground tabular-nums">{fmtNum(item.score)}</span>;
+    case "current_price": {
+      const value = Number(item.current_price);
+      return (
+        <span className="text-xs font-semibold tabular-nums text-foreground">
+          {Number.isFinite(value) ? `¥${value.toFixed(2)}` : "—"}
+        </span>
+      );
+    }
+    case "discount_percent": {
+      const value = Number(item.discount_percent);
+      return (
+        <span className="text-xs font-semibold tabular-nums text-amber-500">
+          {Number.isFinite(value) && value > 0 ? `-${value}%` : "—"}
+        </span>
+      );
+    }
     case "net_amount": {
       const value = Number(item.net_amount ?? 0);
       const tone = value > 0 ? "text-red-500" : value < 0 ? "text-green-500" : "text-muted-foreground";

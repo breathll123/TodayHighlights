@@ -1,5 +1,5 @@
 // -*- coding: utf-8 -*-
-import { render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { vi } from "vitest";
 import { GameRankingList, GameDealGrid, GameReleaseList, GameItem } from "../components/layout/GameBlocks";
 import "@testing-library/jest-dom";
@@ -37,21 +37,6 @@ const mockGames: GameItem[] = [
   },
 ];
 
-const mockMostPlayed: GameItem[] = [
-  {
-    id: "730",
-    title: "Counter-Strike 2",
-    rank: 1,
-    provider: "steam",
-    source: "Steam",
-    external_id: "730",
-    url: "https://store.steampowered.com/app/730/",
-    cover_url: "https://example.com/cs2.jpg",
-    peak_in_game: 1234567,
-    last_week_rank: 2,
-  },
-];
-
 const mockWeGame: GameItem[] = [
   {
     id: "2001918",
@@ -65,6 +50,114 @@ const mockWeGame: GameItem[] = [
     summary: "新一代战术射击品质标杆",
     e_game_name: "Delta Force",
     last_purchase_rank: 3,
+  },
+];
+
+const mockDealOrbitGames: GameItem[] = [
+  ...mockGames,
+  {
+    id: "3",
+    title: "Hades",
+    rank: 3,
+    provider: "steam",
+    source: "Steam",
+    external_id: "1145360",
+    url: "https://store.steampowered.com/app/1145360/",
+    current_price: 40,
+    original_price: 80,
+    discount_percent: 50,
+    discount_label: "-50%",
+  },
+  {
+    id: "4",
+    title: "Dead Cells",
+    rank: 4,
+    provider: "steam",
+    source: "Steam",
+    external_id: "588650",
+    url: "https://store.steampowered.com/app/588650/",
+    current_price: 32,
+    original_price: 80,
+    discount_percent: 60,
+    discount_label: "-60%",
+  },
+  {
+    id: "5",
+    title: "Stardew Valley",
+    rank: 5,
+    provider: "steam",
+    source: "Steam",
+    external_id: "413150",
+    url: "https://store.steampowered.com/app/413150/",
+    current_price: 24,
+    original_price: 48,
+    discount_percent: 50,
+    discount_label: "-50%",
+  },
+  {
+    id: "6",
+    title: "Celeste",
+    rank: 6,
+    provider: "wegame",
+    source: "WeGame",
+    external_id: "504230",
+    url: "https://store.steampowered.com/app/504230/",
+    current_price: 12,
+    original_price: 60,
+    discount_percent: 80,
+    discount_label: "-80%",
+  },
+  {
+    id: "7",
+    title: "Balatro",
+    rank: 7,
+    provider: "wegame",
+    source: "WeGame",
+    external_id: "2379780",
+    url: "https://store.steampowered.com/app/2379780/",
+    current_price: 28,
+    original_price: 42,
+    discount_percent: 33,
+    discount_label: "-33%",
+  },
+  {
+    id: "8",
+    title: "Slay the Spire",
+    rank: 8,
+    provider: "wegame",
+    source: "WeGame",
+    external_id: "646570",
+    url: "https://store.steampowered.com/app/646570/",
+    current_price: 20,
+    original_price: 80,
+    discount_percent: 75,
+    discount_label: "-75%",
+  },
+  {
+    id: "9",
+    title: "Disco Elysium",
+    rank: 9,
+    provider: "wegame",
+    source: "WeGame",
+    external_id: "632470",
+    url: "https://store.steampowered.com/app/632470/",
+    current_price: 23.2,
+    original_price: 116,
+    discount_percent: 80,
+    discount_label: "-80%",
+  },
+  {
+    id: "10",
+    title: "Hollow Knight",
+    rank: 10,
+    provider: "wegame",
+    source: "WeGame",
+    external_id: "367520",
+    url: "https://store.steampowered.com/app/367520/",
+    current_price: 24,
+    original_price: 48,
+    discount_percent: 50,
+    discount_label: "-50%",
   },
 ];
 
@@ -91,21 +184,6 @@ describe("GameBlocks Components", () => {
     expect(mockCallback).toHaveBeenCalledWith(mockGames, "全部热门");
   });
 
-  it("renders GameRankingList in most played mode", () => {
-    const mockCallback = vi.fn();
-    render(<GameRankingList data={mockMostPlayed} mode="most_played" onAnalysisDataChange={mockCallback} />);
-
-    expect(screen.getByText("Counter-Strike 2")).toBeInTheDocument();
-    const peakText = screen.getByText("1,234,567");
-    expect(peakText).toBeInTheDocument();
-    expect(peakText.className).toContain("arcade-score");
-    expect(screen.getByText("峰值在线人数")).toBeInTheDocument();
-    expect(screen.getByRole("tooltip")).toHaveTextContent("此游戏过去 24 小时中同时在线玩家峰值");
-    expect(screen.getByText("峰值在线")).toBeInTheDocument();
-    expect(screen.getByText("上周 #2")).toBeInTheDocument();
-    expect(mockCallback).toHaveBeenCalledWith(mockMostPlayed, "在线热玩");
-  });
-
   it("renders GameRankingList in WeGame mode", () => {
     const mockCallback = vi.fn();
     render(<GameRankingList data={mockWeGame} mode="wegame" onAnalysisDataChange={mockCallback} />);
@@ -127,23 +205,116 @@ describe("GameBlocks Components", () => {
     const mockCallback = vi.fn();
     render(<GameDealGrid data={mockGames} onAnalysisDataChange={mockCallback} />);
 
+    // n=2 时占据前两个旅程槽位：谢幕位（下）+ hero（左一），两者都承载完整信息
     expect(screen.getByText("Terraria")).toBeInTheDocument();
     expect(screen.getByText("The Witcher 3")).toBeInTheDocument();
+    expect(screen.getByText("¥36.00")).toBeInTheDocument();
     expect(screen.getByText("¥25.60")).toBeInTheDocument();
-    expect(screen.getAllByText("-80%").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("-80%").length).toBeGreaterThan(0);       // 封面折扣角标（所有卡片保留）
 
     expect(mockCallback).toHaveBeenCalledWith(mockGames, "全部优惠");
   });
 
-  it("GameDealGrid 使用横向滚动货架布局，卡片定宽不压缩", () => {
-    const { container } = render(<GameDealGrid data={mockGames} />);
-    const shelf = screen.getByTestId("deal-shelf");
-    expect(shelf.className).toContain("overflow-x-auto");
-    expect(shelf.className).toContain("snap-x");
-    // 卡片必须 shrink-0 定宽，否则在横向容器里会被压扁
-    const card = container.querySelector("a");
-    expect(card?.className).toContain("shrink-0");
-    expect(container.querySelector(".grid")).toBeNull();
+  it("GameDealGrid 菱形轮播：外侧进场、向内推进、上下谢幕后归一到中心", () => {
+    render(<GameDealGrid data={mockDealOrbitGames} />);
+    const orbit = screen.getByTestId("deal-orbit");
+    expect(orbit.className).toContain("overflow-hidden");
+    // 旅程槽位：下/上（谢幕）→ 左一/右一（hero）→ 左二三四（预告，越靠外越淡）
+    expect(screen.getByLabelText("Steam 下侧折扣：Terraria")).toBeInTheDocument();
+    expect(screen.getByLabelText("Steam 左一侧折扣：The Witcher 3")).toBeInTheDocument();
+    expect(screen.getByLabelText("Steam 左四侧折扣：Stardew Valley")).toBeInTheDocument();
+    expect(screen.getByLabelText("上侧折扣：Celeste")).toBeInTheDocument();
+    expect(screen.getByLabelText("右四侧折扣：Hollow Knight")).toBeInTheDocument();
+    expect(screen.getAllByText("Steam").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("WeGame").length).toBeGreaterThan(0);
+    expect(screen.getByTestId("deal-orbit-progress-line")).toBeInTheDocument();
+    expect(screen.queryByText("折扣轮播")).not.toBeInTheDocument();
+    expect(screen.queryByText("下一组")).not.toBeInTheDocument();
+    expect(screen.queryByText("上一组")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "前进切换折扣游戏" }));
+
+    // 前进一步：hero 移入谢幕位，后排各进一站，新卡从最外侧（左四/右四）进场
+    expect(screen.getByLabelText("Steam 下侧折扣：The Witcher 3")).toBeInTheDocument();
+    expect(screen.getByLabelText("Steam 左一侧折扣：Hades")).toBeInTheDocument();
+    expect(screen.getByLabelText("Steam 左四侧折扣：Terraria")).toBeInTheDocument();
+    expect(screen.getByLabelText("上侧折扣：Balatro")).toBeInTheDocument();
+  });
+
+  it("悬停空白区域不暂停自动轮播，悬停游戏卡片才暂停", () => {
+    vi.useFakeTimers();
+    try {
+      render(<GameDealGrid data={mockDealOrbitGames} />);
+      expect(screen.getByLabelText("Steam 下侧折扣：Terraria")).toBeInTheDocument();
+
+      // 悬停外层大框（空白处）：不应暂停，10s 后照常前进一站
+      fireEvent.mouseEnter(screen.getByTestId("deal-orbit"));
+      act(() => {
+        vi.advanceTimersByTime(10000);
+      });
+      expect(screen.getByLabelText("Steam 下侧折扣：The Witcher 3")).toBeInTheDocument();
+
+      // 悬停一张游戏卡片：暂停，再过 10s 也不前进
+      fireEvent.mouseEnter(screen.getByLabelText("Steam 下侧折扣：The Witcher 3"));
+      act(() => {
+        vi.advanceTimersByTime(10000);
+      });
+      expect(screen.getByLabelText("Steam 下侧折扣：The Witcher 3")).toBeInTheDocument();
+      expect(screen.queryByLabelText("Steam 下侧折扣：Hades")).not.toBeInTheDocument();
+
+      // 移开鼠标：恢复轮播
+      fireEvent.mouseLeave(screen.getByLabelText("Steam 下侧折扣：The Witcher 3"));
+      act(() => {
+        vi.advanceTimersByTime(10000);
+      });
+      expect(screen.getByLabelText("Steam 下侧折扣：Hades")).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("GameRankingList realtime 模式默认按当前在线排序，可切换今日峰值", () => {
+    const realtimeData: GameItem[] = [
+      {
+        id: "r1",
+        title: "Concurrent King",
+        rank: 1,
+        provider: "steam",
+        source: "Steam",
+        external_id: "730",
+        url: "https://store.steampowered.com/app/730/",
+        concurrent_in_game: 1000,
+        peak_in_game: 1500,
+      },
+      {
+        id: "r2",
+        title: "Peak Master",
+        rank: 2,
+        provider: "steam",
+        source: "Steam",
+        external_id: "570",
+        url: "https://store.steampowered.com/app/570/",
+        concurrent_in_game: 900,
+        peak_in_game: 2000,
+      },
+    ];
+    const mockCallback = vi.fn();
+    const { container } = render(
+      <GameRankingList data={realtimeData} mode="realtime" onAnalysisDataChange={mockCallback} />,
+    );
+
+    // 默认按当前在线：Concurrent King 在前，主指标显示当前在线人数
+    let titles = Array.from(container.querySelectorAll("h4")).map((el) => el.textContent);
+    expect(titles[0]).toBe("Concurrent King");
+    expect(screen.getByText("1,000")).toBeInTheDocument();
+    expect(mockCallback).toHaveBeenLastCalledWith(expect.anything(), "实时热玩·当前在线");
+
+    // 切到今日峰值：Peak Master 升到第一，回调范围标签同步
+    fireEvent.click(screen.getByRole("button", { name: "今日峰值" }));
+    titles = Array.from(container.querySelectorAll("h4")).map((el) => el.textContent);
+    expect(titles[0]).toBe("Peak Master");
+    expect(screen.getByText("2,000")).toBeInTheDocument();
+    expect(mockCallback).toHaveBeenLastCalledWith(expect.anything(), "实时热玩·今日峰值");
   });
 
   it("renders GameReleaseList correctly and triggers onAnalysisDataChange", () => {

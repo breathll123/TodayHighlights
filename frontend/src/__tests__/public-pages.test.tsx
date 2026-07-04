@@ -176,6 +176,73 @@ describe("TopicPage", () => {
     expect(screen.getAllByText("-8.2亿")).not.toHaveLength(0);
     expect(screen.getAllByText("日涨幅达到15%的前5只证券")).not.toHaveLength(0);
   });
+
+  it("renders a game specials block with multiple configured sources as one discount carousel", async () => {
+    vi.mocked(fetchPageBlocks).mockResolvedValueOnce({
+      blocks: [
+        {
+          id: 9,
+          page_route: "/topics/games",
+          title: "打折促销",
+          sort_order: 0,
+          source_type: "game_specials",
+          source_config: {
+            sources: [
+              { source_type: "game_specials" },
+              { source_type: "game_wegame_discounts" },
+            ],
+          },
+          display_style: "game-deal",
+          display_count: 10,
+          sort_by: "rank",
+          enabled: true,
+          created_at: "2026-07-03T10:00:00",
+          updated_at: "2026-07-03T10:00:00",
+          block_key: "game-deals",
+          col_span: 4,
+          row_span: 2,
+          grid_x: 0,
+          grid_y: 0,
+          status: "published",
+          data: [
+            {
+              id: "steam:1",
+              title: "Steam Promo",
+              provider: "steam",
+              source: "Steam",
+              external_id: "10",
+              url: "https://store.steampowered.com/app/10/",
+              current_price: 45,
+              original_price: 90,
+              discount_percent: 50,
+              discount_label: "-50%",
+            },
+            {
+              id: "wegame:1",
+              title: "WeGame Promo",
+              provider: "wegame",
+              source: "WeGame",
+              external_id: "20",
+              url: "https://www.wegame.com.cn/rail/game_detail.html?game_id=20",
+              current_price: 30,
+              original_price: 100,
+              discount_percent: 70,
+              discount_label: "-70%",
+            },
+          ],
+        },
+      ],
+    });
+
+    render(<TopicPage />, { wrapper: Wrapper });
+
+    expect(await screen.findByText("打折促销")).toBeInTheDocument();
+    expect(screen.getByTestId("deal-orbit")).toBeInTheDocument();
+    expect(screen.getByText("Steam Promo")).toBeInTheDocument();
+    expect(screen.getByText("WeGame Promo")).toBeInTheDocument();
+    expect(screen.getAllByText("Steam").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("WeGame").length).toBeGreaterThan(0);
+  });
 });
 
 describe("FootballTopicPage", () => {

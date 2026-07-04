@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 from decimal import Decimal
+import re
 from typing import Any
 
 
@@ -107,9 +108,104 @@ def _to_decimal(value: Any) -> Decimal | None:
     try:
         if value in (None, ""):
             return None
+        if isinstance(value, str):
+            cleaned = re.sub(r"[^\d.\-]", "", value)
+            if cleaned in ("", "-", "."):
+                return None
+            return Decimal(cleaned)
         return Decimal(str(value))
     except (ArithmeticError, ValueError):
         return None
+
+
+def _price_from_value(value: Any) -> Decimal | None:
+    price = _to_decimal(value)
+    if price is None:
+        return None
+    # WeGame 接口常用分作为价格单位；大额整数按分转元，小数价格原样保留。
+    if price == price.to_integral_value() and abs(price) >= Decimal("1000"):
+        return price / Decimal("100")
+    return price
+
+
+def _first_nested_value(payload: Any, keys: list[str]) -> Any:
+    if isinstance(payload, dict):
+        for key in keys:
+            value = payload.get(key)
+            if value not in (None, ""):
+                return value
+        for value in payload.values():
+            nested = _first_nested_value(value, keys)
+            if nested not in (None, ""):
+                return nested
+    elif isinstance(payload, list):
+        for value in payload:
+            nested = _first_nested_value(value, keys)
+            if nested not in (None, ""):
+                return nested
+    return None
+
+
+def _parse_discount_percent(value: Any) -> int:
+    if value in (None, ""):
+        return 0
+    text = str(value).strip()
+    if not text:
+        return 0
+
+    number_match = re.search(r"(\d+(?:\.\d+)?)", text)
+    if not number_match:
+        return 0
+    number = Decimal(number_match.group(1))
+    if "折" in text:
+        return max(0, min(100, int(round(100 - float(number * Decimal("10"))))))
+    if "%" in text:
+        return max(0, min(100, int(round(float(number)))))
+    if Decimal("0") < number <= Decimal("1"):
+        return max(0, min(100, int(round(100 - float(number * Decimal("100"))))))
+    if Decimal("1") < number <= Decimal("10"):
+        return max(0, min(100, int(round(100 - float(number * Decimal("10"))))))
+    return max(0, min(100, int(round(float(number)))))
+
+
+def _parse_discount_label(value: Any, discount_percent: int) -> str:
+    text = str(value or "").strip()
+    if text:
+        if "折" in text:
+            return text
+        if text.startswith("-") or "%" in text:
+            return text
+    return f"-{discount_percent}%" if discount_percent > 0 else ""
+
+
+def _extract_wegame_prices(row: dict[str, Any]) -> tuple[Decimal | None, Decimal | None, int, str]:
+    release_config = row.get("release_config")
+    current_raw = _first_nested_value(
+        release_config,
+        ["current_price", "discount_price", "sale_price", "final_price", "real_price", "pay_price", "price"],
+    )
+    original_raw = _first_nested_value(
+        release_config,
+        ["original_price", "origin_price", "market_price", "list_price", "raw_price", "price"],
+    )
+    discount_raw = (
+        _first_nested_value(release_config, ["discount_percent", "discount", "discount_rate", "prate"])
+        or row.get("show_prate")
+    )
+
+    current_price = _price_from_value(current_raw)
+    original_price = _price_from_value(original_raw)
+    discount_percent = _parse_discount_percent(discount_raw)
+    discount_label = _parse_discount_label(discount_raw, discount_percent)
+
+    if current_price is not None and original_price is None and discount_percent > 0:
+        denominator = Decimal(100 - discount_percent)
+        if denominator > 0:
+            original_price = (current_price * Decimal("100") / denominator).quantize(Decimal("0.01"))
+    if original_price is not None and current_price is None and discount_percent > 0:
+        current_price = (original_price * Decimal(100 - discount_percent) / Decimal("100")).quantize(Decimal("0.01"))
+
+    return current_price, original_price, discount_percent, discount_label
 
 
 def parse_wegame_rank_response(payload: dict[str, Any], endpoint_key: str, *, limit: int = 50) -> list[dict[str, Any]]:
@@ -129,6 +225,7 @@ def parse_wegame_rank_response(payload: dict[str, Any], endpoint_key: str, *, li
         latest_purchase_rank = _to_int(row.get("latest_purchase_rank"))
         score = _to_decimal(row.get("week_recommend_ratio") or row.get("total_recommend_ratio"))
         cover_url = str(row.get("poster_url_h") or row.get("banner_icon_url") or row.get("logo_url") or "").strip()
+        current_price, original_price, discount_percent, discount_label = _extract_wegame_prices(row)
 
         parsed.append(
             {
@@ -137,10 +234,10 @@ def parse_wegame_rank_response(payload: dict[str, Any], endpoint_key: str, *, li
                 "source_url": build_wegame_detail_url(game_id),
                 "cover_url": cover_url,
                 "rank": latest_purchase_rank or index,
-                "current_price": None,
-                "original_price": None,
-                "discount_percent": 0,
-                "discount_label": "",
+                "current_price": current_price,
+                "original_price": original_price,
+                "discount_percent": discount_percent,
+                "discount_label": discount_label,
                 "release_date": None,
                 "score": score,
                 "ranking_type": endpoint_key,

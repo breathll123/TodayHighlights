@@ -42,6 +42,7 @@ const VISIBLE_ANALYSIS_FIELDS = [
   "model", "creator", "subtitle", "region", "net_amount", "reason",
   "current_price", "original_price", "discount_percent", "discount_label", "release_date",
   "e_game_name", "last_purchase_rank", "week_recommend_ratio", "month_recommend_ratio", "total_recommend_ratio",
+  "concurrent_in_game", "peak_in_game", "last_week_rank",
 ] as const;
 
 function compactVisibleAnalysisData(data: any[]): any[] {
@@ -66,6 +67,14 @@ function buildAIEnrichment(item: any): AIItemEnhancement | undefined {
     tags: item.tags_json ?? [],
     importance_score: item.score ?? 0,
   };
+}
+
+function hasWeGameDeal(data: any[] | undefined): boolean {
+  return Array.isArray(data) && data.some((item) => item?.provider === "wegame" || item?.source === "WeGame");
+}
+
+function isGameSource(sourceType: string): boolean {
+  return sourceType.startsWith("game_");
 }
 
 const SOURCE_NAMES: Record<string, string> = {
@@ -97,7 +106,7 @@ const SOURCE_NAMES: Record<string, string> = {
   Steam: "Steam",
   WeGame: "WeGame",
   game_top_sellers: "Steam",
-  game_most_played: "Steam",
+  game_charts_concurrent: "Steam",
   game_specials: "Steam",
   game_new_releases: "Steam",
   game_wegame_popular: "WeGame",
@@ -255,7 +264,12 @@ function mapItem(item: any, sourceType: string) {
     title: fmtTitle(item),
     subtitle,
     percent: item.percent,
-    score: item.score ?? item.value,
+    score: item.score ?? item.value ?? item.current_price,
+    source: item.source,
+    current_price: item.current_price,
+    original_price: item.original_price,
+    discount_percent: item.discount_percent,
+    discount_label: item.discount_label,
     net_amount: item.net_amount,
     reason: item.reason,
     url: item.url,
@@ -375,11 +389,13 @@ export function GridRenderer({ blocks, isLoading, dataUpdatedAt }: { blocks: any
     };
   };
 
+  const displayBlocks = blocks;
+
   if (isLoading) {
     return <ThemedLoading />;
   }
 
-  if (blocks.length === 0) {
+  if (displayBlocks.length === 0) {
     return (
       <div className="text-center py-16 text-muted-foreground">
         <p className="text-lg mb-2">暂无内容</p>
@@ -390,7 +406,7 @@ export function GridRenderer({ blocks, isLoading, dataUpdatedAt }: { blocks: any
 
   return (
     <div className="page-grid">
-      {blocks.map((block, blockIdx) => {
+      {displayBlocks.map((block, blockIdx) => {
         const st = block.source_type as string;
         const skin = getBlockSkin(block.theme, st);
         const allFields = FIELD_DEFS[st] || [];
@@ -426,7 +442,7 @@ export function GridRenderer({ blocks, isLoading, dataUpdatedAt }: { blocks: any
                 title={block.title}
                 meta={renderBlockStat(st, block.data)}
                 dataUpdatedAt={block.data_updated_at}
-                sourceName={st === "topic" || st === "raw" ? undefined : SOURCE_NAMES[st] ?? undefined}
+                sourceName={(st === "game_specials" && hasWeGameDeal(block.data)) ? "Steam / WeGame" : st === "topic" || st === "raw" ? undefined : SOURCE_NAMES[st] ?? undefined}
                 sourceUrl={st === "artificial_analysis_ranking" ? undefined : sourceUrlFor(st)}
                 skin={skin || undefined}
                 action={
@@ -454,6 +470,31 @@ export function GridRenderer({ blocks, isLoading, dataUpdatedAt }: { blocks: any
           >
             {block.data?.length === 0 ? (
               <div className="bg-card border rounded-xl p-6 text-center text-sm text-muted-foreground">暂无数据</div>
+            ) : isGameSource(st) && block.display_style === "list" ? (
+              <div className="border rounded-lg bg-card">
+                <CompactTable
+                  showRank
+                  data={block.data.map((item: any, index: number) => ({
+                    ...mapItem(item, st),
+                    rank: item.rank ?? index + 1,
+                  }))}
+                  fields={displayFields}
+                />
+              </div>
+            ) : isGameSource(st) && block.display_style === "card" ? (
+              <div className="space-y-2">
+                {block.data.map((item: any, i: number) => (
+                  <BlockCard
+                    key={item.id ?? i}
+                    title={fmtTitle(item)}
+                    summary={item.summary ?? item.content ?? item.subtitle ?? ""}
+                    tags={item.tags_json ?? item.tags}
+                    sourceName={sourceNameFor(item, st)}
+                    url={item.url}
+                    aiEnrichment={buildAIEnrichment(item)}
+                  />
+                ))}
+              </div>
             ) : block.source_type === "qiumiwu_matches" && block.display_style === "schedule" ? (
               <MatchCards data={block.data} />
             ) : block.source_type === "qiumiwu_matches" ? (
@@ -472,11 +513,13 @@ export function GridRenderer({ blocks, isLoading, dataUpdatedAt }: { blocks: any
               <SkillRanking data={block.data} fields={displayFields} />
             ) : block.source_type === "game_top_sellers" ? (
               <GameRankingList data={block.data} onAnalysisDataChange={(visible, label) => setBlockAnalysisScope(block.id, visible, label)} />
-            ) : block.source_type === "game_most_played" ? (
-              <GameRankingList data={block.data} mode="most_played" onAnalysisDataChange={(visible, label) => setBlockAnalysisScope(block.id, visible, label)} />
+            ) : block.source_type === "game_charts_concurrent" ? (
+              <GameRankingList data={block.data} mode="realtime" onAnalysisDataChange={(visible, label) => setBlockAnalysisScope(block.id, visible, label)} />
+            ) : block.source_type === "game_wegame_discounts" && block.display_style === "game-deal" ? (
+              <GameDealGrid data={block.data} onAnalysisDataChange={(visible, label) => setBlockAnalysisScope(block.id, visible, label)} />
             ) : block.source_type === "game_wegame_popular" || block.source_type === "game_wegame_weekly_sales" || block.source_type === "game_wegame_discounts" ? (
               <GameRankingList data={block.data} mode="wegame" onAnalysisDataChange={(visible, label) => setBlockAnalysisScope(block.id, visible, label)} />
-            ) : block.source_type === "game_specials" ? (
+            ) : block.source_type === "game_specials" && block.display_style === "game-deal" ? (
               <GameDealGrid data={block.data} onAnalysisDataChange={(visible, label) => setBlockAnalysisScope(block.id, visible, label)} />
             ) : block.source_type === "game_new_releases" ? (
               <GameReleaseList data={block.data} onAnalysisDataChange={(visible, label) => setBlockAnalysisScope(block.id, visible, label)} />

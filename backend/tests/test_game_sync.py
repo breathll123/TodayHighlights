@@ -38,7 +38,7 @@ def test_map_entry_url_to_endpoint() -> None:
     assert map_entry_url_to_endpoint("steam://top_sellers") == "top_sellers"
     assert map_entry_url_to_endpoint("steam://specials") == "specials"
     assert map_entry_url_to_endpoint("steam://new_releases") == "new_releases"
-    assert map_entry_url_to_endpoint("steam://most_played") == "most_played"
+    assert map_entry_url_to_endpoint("steam://charts_concurrent") == "charts_concurrent"
     assert map_entry_url_to_endpoint("wegame://popular_this_week") == "popular_this_week"
     assert map_entry_url_to_endpoint("wegame://this_week_most_purchase") == "this_week_most_purchase"
     assert map_entry_url_to_endpoint("wegame://discounts") == "discounts"
@@ -199,19 +199,19 @@ def test_run_game_source_sync_specials(mock_client_class) -> None:
 
 
 @patch("httpx.Client")
-def test_run_game_source_sync_most_played(mock_client_class) -> None:
-    """测试 Steam 在线热玩榜抓取与入库"""
+def test_run_game_source_sync_charts_concurrent(mock_client_class) -> None:
+    """测试 Steam 实时热玩榜（并发在线）抓取与入库"""
     charts_response = MagicMock()
     charts_response.status_code = 200
     charts_response.content = (
-        b'{"response":{"rollup_date":1778457600,"ranks":[{"rank":1,"appid":730,'
-        b'"last_week_rank":2,"peak_in_game":1234567}]}}'
+        b'{"response":{"last_update":1783093824,"ranks":[{"rank":1,"appid":730,'
+        b'"concurrent_in_game":1229028,"peak_in_game":1336231}]}}'
     )
     charts_response.json.return_value = {
         "response": {
-            "rollup_date": 1778457600,
+            "last_update": 1783093824,
             "ranks": [
-                {"rank": 1, "appid": 730, "last_week_rank": 2, "peak_in_game": 1234567},
+                {"rank": 1, "appid": 730, "concurrent_in_game": 1229028, "peak_in_game": 1336231},
             ],
         }
     }
@@ -240,8 +240,8 @@ def test_run_game_source_sync_most_played(mock_client_class) -> None:
         source = Source(
             topic_id=topic.id,
             site="steam",
-            name="Steam-在线热玩榜",
-            entry_url="steam://most_played",
+            name="Steam-实时热玩榜",
+            entry_url="steam://charts_concurrent",
             crawl_interval_minutes=30,
         )
         session.add(source)
@@ -256,22 +256,22 @@ def test_run_game_source_sync_most_played(mock_client_class) -> None:
         assert res["found"] == 1
         assert res["saved"] == 1
 
-        snapshot = session.scalar(select(GameRawSnapshot).where(GameRawSnapshot.endpoint_key == "most_played"))
+        snapshot = session.scalar(select(GameRawSnapshot).where(GameRawSnapshot.endpoint_key == "charts_concurrent"))
         assert snapshot is not None
         assert snapshot.parse_status == "parsed"
 
         game = session.scalar(select(GameItem).where(GameItem.external_id == "730"))
         assert game is not None
         assert game.name == "Counter-Strike 2"
-        assert game.cover_url == "https://shared.fastly.steamstatic.com/cs2.jpg"
-        assert game.metadata_json["last_week_rank"] == 2
-        assert game.metadata_json["peak_in_game"] == 1234567
+        assert game.metadata_json["concurrent_in_game"] == 1229028
+        assert game.metadata_json["peak_in_game"] == 1336231
 
         ranking = session.scalar(select(GameRanking).where(GameRanking.game_item_id == game.id))
         assert ranking is not None
-        assert ranking.ranking_type == "most_played"
+        assert ranking.ranking_type == "charts_concurrent"
         assert ranking.rank == 1
-        assert ranking.score == Decimal("1234567.00")
+        # score 记当前在线人数
+        assert ranking.score == Decimal("1229028.00")
 
 
 @patch("httpx.Client")
@@ -292,6 +292,8 @@ def test_run_game_source_sync_wegame_rank(mock_client_class) -> None:
                 "poster_url_h": "https://wegame.gtimg.com/poster.jpg",
                 "latest_purchase_rank": "1",
                 "last_purchase_rank": "2",
+                "show_prate": "5折",
+                "release_config": {"price": 8800, "discount_price": 4400},
             }
         ],
     }
@@ -342,3 +344,10 @@ def test_run_game_source_sync_wegame_rank(mock_client_class) -> None:
         assert ranking is not None
         assert ranking.ranking_type == "popular_this_week"
         assert ranking.rank == 1
+
+        deal = session.scalar(select(GameDeal).where(GameDeal.provider == "wegame"))
+        assert deal is not None
+        assert deal.current_price == Decimal("44.00")
+        assert deal.original_price == Decimal("88.00")
+        assert deal.discount_percent == 50
+        assert deal.discount_label == "5折"

@@ -21,13 +21,15 @@ from html import escape
 from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlencode
+from urllib.parse import quote, urlencode
 
 import httpx
 
 
 Headers = dict[str, str]
 Params = dict[str, Any]
+STEAM_REGION = "CN"
+STEAM_LANGUAGE = "schinese"
 
 
 @dataclass(frozen=True)
@@ -106,8 +108,43 @@ def browser_headers(referer: str) -> Headers:
     }
 
 
+def steam_api_headers(referer: str) -> Headers:
+    return {
+        "User-Agent": "Mozilla/5.0 TodayHighlights/0.1",
+        "Accept": "application/json,text/plain,*/*",
+        "Accept-Language": "zh-CN,zh;q=0.9",
+        "Referer": referer,
+    }
+
+
+def build_steam_appdetails_probe_url(appid: str) -> str:
+    safe_appid = quote(str(appid), safe="")
+    return (
+        "https://store.steampowered.com/api/appdetails"
+        f"?appids={safe_appid}&cc={STEAM_REGION}&l={STEAM_LANGUAGE}&filters=basic"
+    )
+
+
 def build_probe_plan() -> list[ProbeRequest]:
     return [
+        ProbeRequest(
+            key="steam_charts_mostplayed_page",
+            title="Steam Charts 在线热玩页面",
+            purpose="页面探测。用于确认 Steam Charts 页面是否服务端直出榜单，或是否需要进一步定位页面调用的接口。",
+            method="GET",
+            url="https://store.steampowered.com/charts/mostplayed",
+            params={"cc": "CN", "l": "schinese"},
+            headers=browser_headers("https://store.steampowered.com/"),
+        ),
+        ProbeRequest(
+            key="steam_charts_concurrent_api",
+            title="Steam Charts 当前在线人数接口",
+            purpose="实时热玩榜候选。返回 rank、appid、concurrent_in_game、peak_in_game，可复现页面按当前玩家数排序的数据。",
+            method="GET",
+            url="https://api.steampowered.com/ISteamChartsService/GetGamesByConcurrentPlayers/v1/",
+            params={"format": "json"},
+            headers=steam_api_headers("https://store.steampowered.com/charts/mostplayed"),
+        ),
         ProbeRequest(
             key="taptap_top",
             title="TapTap 热门榜",
@@ -181,12 +218,93 @@ def printable_url(request: ProbeRequest) -> str:
     return f"{request.url}?{urlencode(request.params)}"
 
 
+def summarize_steam_charts(payload: Any) -> dict[str, Any] | None:
+    if not isinstance(payload, dict):
+        return None
+    response = payload.get("response")
+    if not isinstance(response, dict):
+        return None
+    ranks = response.get("ranks")
+    if not isinstance(ranks, list):
+        return None
+
+    sample_ranks = [row for row in ranks[:5] if isinstance(row, dict)]
+    return {
+        "rank_count": len(ranks),
+        "last_update": response.get("last_update"),
+        "rollup_date": response.get("rollup_date"),
+        "first_rank_keys": sorted(str(key) for key in sample_ranks[0].keys()) if sample_ranks else [],
+        "has_current_players": any("concurrent_in_game" in row for row in sample_ranks),
+        "has_peak_players": any("peak_in_game" in row for row in sample_ranks),
+        "sample_ranks": sample_ranks,
+    }
+
+
+def extract_steam_chart_rows(payload: Any, limit: int) -> list[dict[str, Any]]:
+    if not isinstance(payload, dict):
+        return []
+    response = payload.get("response")
+    if not isinstance(response, dict):
+        return []
+    ranks = response.get("ranks")
+    if not isinstance(ranks, list):
+        return []
+    return [row for row in ranks[:limit] if isinstance(row, dict) and row.get("appid") is not None]
+
+
+def hydrate_steam_chart_games(payload: Any, *, timeout: float, limit: int) -> list[dict[str, Any]]:
+    rows = extract_steam_chart_rows(payload, limit)
+    if not rows:
+        return []
+
+    games: list[dict[str, Any]] = []
+    headers = steam_api_headers("https://store.steampowered.com/charts/mostplayed")
+    with httpx.Client(follow_redirects=True, timeout=timeout) as client:
+        for row in rows:
+            appid = str(row.get("appid"))
+            detail_summary: dict[str, Any] = {
+                "rank": row.get("rank"),
+                "appid": appid,
+                "source_url": f"https://store.steampowered.com/app/{quote(appid, safe='')}/",
+                "concurrent_in_game": row.get("concurrent_in_game"),
+                "peak_in_game": row.get("peak_in_game"),
+                "last_week_rank": row.get("last_week_rank"),
+            }
+            try:
+                response = client.get(build_steam_appdetails_probe_url(appid), headers=headers)
+                detail_summary["detail_status_code"] = response.status_code
+                response.raise_for_status()
+                payload = response.json()
+                app_payload = payload.get(appid) if isinstance(payload, dict) else None
+                data = app_payload.get("data") if isinstance(app_payload, dict) and app_payload.get("success") else None
+                if isinstance(data, dict):
+                    detail_summary.update(
+                        {
+                            "name": data.get("name"),
+                            "type": data.get("type"),
+                            "header_image": data.get("header_image"),
+                            "capsule_image": data.get("capsule_image"),
+                            "short_description": data.get("short_description"),
+                        }
+                    )
+                else:
+                    detail_summary["detail_error"] = "appdetails response missing data"
+            except Exception as exc:
+                detail_summary["detail_error"] = f"{type(exc).__name__}: {exc}"
+            games.append(detail_summary)
+    return games
+
+
 def summarize_json(payload: Any) -> dict[str, Any]:
     if isinstance(payload, dict):
-        return {
+        summary: dict[str, Any] = {
             "json_type": "object",
             "top_level_keys": sorted(str(k) for k in payload.keys())[:30],
         }
+        steam_charts = summarize_steam_charts(payload)
+        if steam_charts is not None:
+            summary["steam_charts"] = steam_charts
+        return summary
     if isinstance(payload, list):
         summary: dict[str, Any] = {"json_type": "array", "item_count": len(payload)}
         if payload and isinstance(payload[0], dict):
@@ -356,7 +474,14 @@ def save_body(request_key: str, response: httpx.Response, save_body_dir: Path | 
     return paths
 
 
-def run_probe(request: ProbeRequest, *, timeout: float, save_body_dir: Path | None = None) -> dict[str, Any]:
+def run_probe(
+    request: ProbeRequest,
+    *,
+    timeout: float,
+    save_body_dir: Path | None = None,
+    hydrate_steam_details: bool = False,
+    steam_detail_limit: int = 5,
+) -> dict[str, Any]:
     base_result = {
         "key": request.key,
         "title": request.title,
@@ -375,11 +500,22 @@ def run_probe(request: ProbeRequest, *, timeout: float, save_body_dir: Path | No
                 timeout=timeout,
             )
         duration_ms = round((time.perf_counter() - started) * 1000, 2)
+        response_summary = summarize_response(response)
+        if hydrate_steam_details and request.key == "steam_charts_concurrent_api":
+            try:
+                payload = response.json()
+                response_summary.setdefault("json", {})["steam_chart_games"] = hydrate_steam_chart_games(
+                    payload,
+                    timeout=timeout,
+                    limit=steam_detail_limit,
+                )
+            except ValueError:
+                response_summary.setdefault("json", {})["steam_chart_games_error"] = "response is not valid json"
         return {
             **base_result,
             "status": "ok" if response.is_success else "http_error",
             "duration_ms": duration_ms,
-            "response": summarize_response(response),
+            "response": response_summary,
             "saved_body": save_body(request.key, response, save_body_dir),
         }
     except Exception as exc:
@@ -408,6 +544,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--timeout", type=float, default=20, help="请求超时秒数，默认 20")
     parser.add_argument("--output", type=Path, help="可选：保存完整探测结果 JSON")
     parser.add_argument("--save-body-dir", type=Path, help="可选：保存 raw 原文和禁脚本 preview，便于后续写解析器")
+    parser.add_argument("--hydrate-steam-details", action="store_true", help="对 Steam Charts 榜单额外请求 appdetails，补游戏名、封面和简介")
+    parser.add_argument("--steam-detail-limit", type=int, default=5, help="补齐 Steam 游戏详情的条数，默认 5")
     parser.add_argument("--plan-only", action="store_true", help="只打印请求计划，不实际联网")
     return parser.parse_args()
 
@@ -425,7 +563,13 @@ def main() -> None:
     print("\n探测结果:")
     results = []
     for request in plan:
-        result = run_probe(request, timeout=args.timeout, save_body_dir=args.save_body_dir)
+        result = run_probe(
+            request,
+            timeout=args.timeout,
+            save_body_dir=args.save_body_dir,
+            hydrate_steam_details=args.hydrate_steam_details,
+            steam_detail_limit=args.steam_detail_limit,
+        )
         results.append(result)
         print(f"\n[{result['key']}] {result['title']}")
         print(json.dumps(result, ensure_ascii=False, indent=2, default=str))
@@ -440,6 +584,8 @@ def test_build_probe_plan_contains_mainland_friendly_sources() -> None:
     keys = [request.key for request in build_probe_plan()]
 
     assert keys == [
+        "steam_charts_mostplayed_page",
+        "steam_charts_concurrent_api",
         "taptap_top",
         "taptap_new",
         "wegame_store",
@@ -465,6 +611,58 @@ def test_first_batch_covers_rank_deals_and_new_releases() -> None:
     assert "热门" in text
     assert "打折" in text
     assert "新游" in text
+
+
+def test_summarize_json_reports_steam_charts_fields() -> None:
+    payload = {
+        "response": {
+            "last_update": 1783092924,
+            "ranks": [
+                {"rank": 1, "appid": 730, "concurrent_in_game": 1260857, "peak_in_game": 1336231},
+                {"rank": 2, "appid": 570, "concurrent_in_game": 767491, "peak_in_game": 767491},
+            ],
+        }
+    }
+
+    summary = summarize_json(payload)
+
+    assert summary["steam_charts"]["rank_count"] == 2
+    assert summary["steam_charts"]["has_current_players"] is True
+    assert summary["steam_charts"]["has_peak_players"] is True
+    assert summary["steam_charts"]["first_rank_keys"] == [
+        "appid",
+        "concurrent_in_game",
+        "peak_in_game",
+        "rank",
+    ]
+    assert summary["steam_charts"]["sample_ranks"][0]["appid"] == 730
+
+
+def test_extract_steam_chart_rows_filters_invalid_rows() -> None:
+    payload = {
+        "response": {
+            "ranks": [
+                {"rank": 1, "appid": 730, "peak_in_game": 100},
+                {"rank": 2, "peak_in_game": 50},
+                "bad",
+                {"rank": 3, "appid": 570, "peak_in_game": 80},
+            ]
+        }
+    }
+
+    rows = extract_steam_chart_rows(payload, 10)
+
+    assert [row["appid"] for row in rows] == [730, 570]
+
+
+def test_build_steam_appdetails_probe_url() -> None:
+    url = build_steam_appdetails_probe_url("730")
+
+    assert "store.steampowered.com/api/appdetails" in url
+    assert "appids=730" in url
+    assert "cc=CN" in url
+    assert "l=schinese" in url
+    assert "filters=basic" in url
 
 
 def test_summarize_html_reports_parse_signals() -> None:

@@ -33,6 +33,7 @@ def crawl_enabled_sources() -> None:
         sources = session.scalars(
             select(Source).where(
                 Source.enabled.is_(True),
+                Source.entry_url != "steam://most_played",
                 (Source.next_crawl_at.is_(None)) | (Source.next_crawl_at <= now),
             )
         ).all()

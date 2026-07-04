@@ -9,7 +9,7 @@ export interface BoardSkin {
 }
 
 const ARCADE: Record<string, BoardSkin> = {
-  game_most_played: { accent: "#2BE07A", accentSoft: "rgba(43,224,122,0.08)", eyebrow: "NOW PLAYING", icon: "play" },
+  game_charts_concurrent: { accent: "#2BE07A", accentSoft: "rgba(43,224,122,0.08)", eyebrow: "NOW PLAYING", icon: "play" },
   game_top_sellers: { accent: "#FFC53D", accentSoft: "rgba(255,197,61,0.08)", eyebrow: "TOP SELLERS", icon: "coin" },
   game_new_releases: { accent: "#4DD0FF", accentSoft: "rgba(77,208,255,0.08)", eyebrow: "NEW DROPS", icon: "sparkle" },
   game_specials: { accent: "#FF4D8D", accentSoft: "rgba(255,77,141,0.08)", eyebrow: "ON SALE", icon: "tag" },

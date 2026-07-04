@@ -9,7 +9,7 @@ import pytest
 from app.services.adapters.game_steam import (
     build_steam_appdetails_url,
     build_steam_url,
-    parse_steam_most_played_response,
+    parse_steam_charts_concurrent_response,
     parse_steam_date,
     parse_steam_price,
     parse_steam_results_html,
@@ -30,8 +30,8 @@ def test_build_steam_url() -> None:
     assert "sort_by=Released_DESC" in url_new
     assert "filter=popularnew" not in url_new
 
-    url_played = build_steam_url("most_played")
-    assert "ISteamChartsService/GetMostPlayedGames" in url_played
+    url_concurrent = build_steam_url("charts_concurrent")
+    assert "ISteamChartsService/GetGamesByConcurrentPlayers" in url_concurrent
 
     detail_url = build_steam_appdetails_url("730")
     assert "appdetails" in detail_url
@@ -182,16 +182,25 @@ def test_parse_new_releases_html() -> None:
     assert u["rank"] == 1
 
 
-def test_parse_most_played_response() -> None:
+def test_build_steam_url_charts_concurrent() -> None:
+    url = build_steam_url("charts_concurrent")
+    assert url == (
+        "https://api.steampowered.com/ISteamChartsService/"
+        "GetGamesByConcurrentPlayers/v1/?format=json"
+    )
+
+
+def test_parse_charts_concurrent_response() -> None:
     payload = {
         "response": {
-            "rollup_date": 1778457600,
+            "last_update": 1783093824,
             "ranks": [
-                {"rank": 1, "appid": 730, "last_week_rank": 2, "peak_in_game": 1234567},
+                {"rank": 1, "appid": 730, "concurrent_in_game": 1229028, "peak_in_game": 1336231},
+                {"rank": 2, "appid": 570, "concurrent_in_game": 766074, "peak_in_game": 767491},
             ],
         }
     }
-    items = parse_steam_most_played_response(
+    items = parse_steam_charts_concurrent_response(
         payload,
         details_by_appid={
             "730": {
@@ -201,14 +210,38 @@ def test_parse_most_played_response() -> None:
         },
     )
 
+    assert len(items) == 2
+    first = items[0]
+    assert first["external_id"] == "730"
+    assert first["name"] == "Counter-Strike 2"
+    assert first["cover_url"] == "https://cdn.example/cs2.jpg"
+    assert first["rank"] == 1
+    # score 用当前在线人数，保证默认排序与 Steam 页面一致
+    assert first["score"] == Decimal("1229028")
+    assert first["metadata"]["concurrent_in_game"] == 1229028
+    assert first["metadata"]["peak_in_game"] == 1336231
+    assert first["metadata"]["last_update"] == 1783093824
+    # 无 appdetails 命中时回退到占位名与商店链接
+    second = items[1]
+    assert second["name"] == "Steam App 570"
+    assert second["source_url"] == "https://store.steampowered.com/app/570/"
+
+
+def test_parse_charts_concurrent_skips_bad_rows() -> None:
+    payload = {
+        "response": {
+            "ranks": [
+                {"rank": 1, "appid": None},
+                "not-a-dict",
+                {"rank": "x", "appid": 570, "concurrent_in_game": 5, "peak_in_game": 9},
+            ]
+        }
+    }
+    items = parse_steam_charts_concurrent_response(payload)
     assert len(items) == 1
-    assert items[0]["external_id"] == "730"
-    assert items[0]["name"] == "Counter-Strike 2"
-    assert items[0]["cover_url"] == "https://cdn.example/cs2.jpg"
-    assert items[0]["rank"] == 1
-    assert items[0]["score"] == Decimal("1234567")
-    assert items[0]["metadata"]["last_week_rank"] == 2
-    assert items[0]["metadata"]["peak_in_game"] == 1234567
+    # rank 非法时按遍历序号兜底
+    assert items[0]["rank"] == 3
+    assert items[0]["score"] == Decimal("5")
 
 
 def test_parser_tolerates_corrupted_rows() -> None:

@@ -106,11 +106,11 @@ export const FIELD_DEFS: Record<string, FieldDef[]> = {
     { key: "rank", label: "排名", type: "number" },
     { key: "score", label: "价格", type: "number" },
   ],
-  game_most_played: [
+  game_charts_concurrent: [
     { key: "title", label: "游戏名称", type: "text" },
     { key: "rank", label: "排名", type: "number" },
-    { key: "peak_in_game", label: "峰值在线人数", type: "number" },
-    { key: "last_week_rank", label: "上周排名", type: "number" },
+    { key: "concurrent_in_game", label: "当前玩家人数", type: "number" },
+    { key: "peak_in_game", label: "今日峰值", type: "number" },
   ],
   game_specials: [
     { key: "title", label: "游戏名称", type: "text" },
@@ -167,7 +167,7 @@ export const DEFAULT_FIELDS: Record<string, string[]> = {
   aihot_news: ["title", "subtitle"],
   github_skills: ["title", "summary", "score"],
   game_top_sellers: ["title", "rank", "score"],
-  game_most_played: ["title", "rank", "peak_in_game"],
+  game_charts_concurrent: ["title", "rank", "concurrent_in_game", "peak_in_game"],
   game_specials: ["title", "score", "discount_percent"],
   game_new_releases: ["title", "release_date"],
   game_wegame_popular: ["title", "rank", "summary"],

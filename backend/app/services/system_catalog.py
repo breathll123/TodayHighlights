@@ -35,6 +35,7 @@ class BuiltinPageBlock:
     row_span: int
     grid_x: int
     grid_y: int
+    source_config: dict | None = None
 
 
 BUILTIN_TOPICS = (
@@ -64,7 +65,7 @@ BUILTIN_SOURCES = (
     BuiltinSource("ai", "aihot", "AI HOT-资讯快讯", "aihot://news", 2),
     BuiltinSource("ai", "github_skills", "GitHub-Skills 排行", "github_skills://ranking", 1440, enabled=False),
     BuiltinSource("games", "steam", "Steam-热门游戏榜", "steam://top_sellers", 30),
-    BuiltinSource("games", "steam", "Steam-在线热玩榜", "steam://most_played", 30),
+    BuiltinSource("games", "steam", "Steam-实时热玩榜", "steam://charts_concurrent", 30),
     BuiltinSource("games", "steam", "Steam-打折促销", "steam://specials", 60),
     BuiltinSource("games", "steam", "Steam-新游动态", "steam://new_releases", 60),
     BuiltinSource("games", "wegame", "WeGame-最高热度", "wegame://popular_this_week", 30),
@@ -72,14 +73,21 @@ BUILTIN_SOURCES = (
     BuiltinSource("games", "wegame", "WeGame-折扣促销", "wegame://discounts", 60),
 )
 
+GAME_DEALS_SOURCE_CONFIG = {
+    "sources": [
+        {"source_type": "game_specials", "label": "Steam"},
+        {"source_type": "game_wegame_discounts", "label": "WeGame"},
+    ]
+}
+
 BUILTIN_PAGE_BLOCKS = (
     BuiltinPageBlock("/topics/games", "热门游戏榜", "game_top_sellers", "game-ranking", 10, 10, 2, 2, 0, 0),
-    BuiltinPageBlock("/topics/games", "在线热玩榜", "game_most_played", "game-ranking", 10, 15, 2, 2, 2, 0),
-    BuiltinPageBlock("/topics/games", "打折促销", "game_specials", "game-deal", 9, 20, 2, 2, 0, 2),
+    BuiltinPageBlock("/topics/games", "打折促销", "game_specials", "game-deal", 10, 20, 4, 2, 0, 2, GAME_DEALS_SOURCE_CONFIG),
     BuiltinPageBlock("/topics/games", "新游动态", "game_new_releases", "game-release", 10, 30, 2, 1, 2, 2),
     BuiltinPageBlock("/topics/games", "WeGame 最高热度", "game_wegame_popular", "game-ranking", 10, 40, 2, 2, 0, 4),
     BuiltinPageBlock("/topics/games", "WeGame 本周热销", "game_wegame_weekly_sales", "game-ranking", 10, 50, 2, 2, 2, 4),
-    BuiltinPageBlock("/topics/games", "WeGame 折扣促销", "game_wegame_discounts", "game-ranking", 10, 60, 2, 2, 0, 6),
+    # 实时热玩榜排在两个 Steam 榜之后（sort 17），网格放到 WeGame 行下方空位
+    BuiltinPageBlock("/topics/games", "实时热玩榜", "game_charts_concurrent", "game-ranking", 10, 17, 2, 2, 0, 6),
 )
 
 
@@ -150,6 +158,75 @@ def reconcile_system_catalog(session: Session) -> None:
     if deprecated_gainers is not None:
         deprecated_gainers.enabled = False
 
+    deprecated_steam_most_played = session.scalar(
+        select(Source).where(
+            Source.site == "steam",
+            Source.entry_url == "steam://most_played",
+        )
+    )
+    if deprecated_steam_most_played is not None:
+        deprecated_steam_most_played.enabled = False
+
+    for status in ("draft", "published"):
+        for legacy_most_played in session.scalars(
+            select(PageBlock).where(
+                PageBlock.page_route == "/topics/games",
+                PageBlock.source_type == "game_most_played",
+                PageBlock.status == status,
+            )
+        ).all():
+            session.delete(legacy_most_played)
+
+        generated_deals = session.scalar(
+            select(PageBlock)
+            .where(
+                PageBlock.page_route == "/topics/games",
+                PageBlock.source_type == "game_deals",
+                PageBlock.status == status,
+                PageBlock.title == "打折促销",
+            )
+            .limit(1)
+        )
+        if generated_deals is not None:
+            generated_deals.source_type = "game_specials"
+            generated_deals.source_config = GAME_DEALS_SOURCE_CONFIG
+            generated_deals.display_style = "game-deal"
+            generated_deals.display_count = max(generated_deals.display_count or 0, 10)
+            generated_deals.col_span = max(generated_deals.col_span or 0, 4)
+            generated_deals.row_span = max(generated_deals.row_span or 0, 2)
+            generated_deals.theme = "arcade"
+
+        legacy_deals = session.scalar(
+            select(PageBlock)
+            .where(
+                PageBlock.page_route == "/topics/games",
+                PageBlock.source_type == "game_specials",
+                PageBlock.status == status,
+                PageBlock.title == "打折促销",
+            )
+            .limit(1)
+        )
+        if legacy_deals is not None:
+            legacy_deals.source_config = GAME_DEALS_SOURCE_CONFIG
+            legacy_deals.display_style = "game-deal"
+            legacy_deals.display_count = max(legacy_deals.display_count or 0, 10)
+            legacy_deals.col_span = max(legacy_deals.col_span or 0, 4)
+            legacy_deals.row_span = max(legacy_deals.row_span or 0, 2)
+            legacy_deals.theme = "arcade"
+
+        legacy_wegame_deals = session.scalar(
+            select(PageBlock)
+            .where(
+                PageBlock.page_route == "/topics/games",
+                PageBlock.source_type == "game_wegame_discounts",
+                PageBlock.status == status,
+                PageBlock.title == "WeGame 折扣促销",
+            )
+            .limit(1)
+        )
+        if legacy_wegame_deals is not None:
+            session.delete(legacy_wegame_deals)
+
     for definition in BUILTIN_PAGE_BLOCKS:
         for status in ("draft", "published"):
             existing = session.scalar(
@@ -162,11 +239,6 @@ def reconcile_system_catalog(session: Session) -> None:
                 .limit(1)
             )
             if existing is not None:
-                if (
-                    definition.source_type == "game_most_played"
-                    and existing.title in {"热门游戏榜", "Steam 在线热门榜"}
-                ):
-                    existing.title = definition.title
                 continue
             grid_x = definition.grid_x
             grid_y = definition.grid_y
@@ -187,7 +259,7 @@ def reconcile_system_catalog(session: Session) -> None:
                     title=definition.title,
                     sort_order=definition.sort_order,
                     source_type=definition.source_type,
-                    source_config={},
+                    source_config=definition.source_config or {},
                     display_style=definition.display_style,
                     display_count=definition.display_count,
                     sort_by="rank",

@@ -64,7 +64,7 @@ const SOURCE_TYPE_OPTIONS_AI: { value: Block["source_type"]; label: string }[] =
 
 const SOURCE_TYPE_OPTIONS_GAME: { value: Block["source_type"]; label: string }[] = [
   { value: "game_top_sellers", label: "Steam 热门游戏榜" },
-  { value: "game_most_played", label: "Steam 在线热玩榜" },
+  { value: "game_charts_concurrent", label: "Steam 实时热玩榜" },
   { value: "game_specials", label: "Steam 折扣特惠" },
   { value: "game_new_releases", label: "Steam 新游动态" },
   { value: "game_wegame_popular", label: "WeGame 最高热度" },
@@ -94,9 +94,29 @@ const DISPLAY_STYLE_OPTIONS = [
   { value: "schedule", label: "赛程表" },
 ] as const;
 
+const GAME_DEAL_SOURCE_OPTIONS = [
+  { value: "game_specials", label: "Steam 打折促销" },
+  { value: "game_wegame_discounts", label: "WeGame 折扣促销" },
+] as const;
+
+const DEFAULT_GAME_DEAL_SOURCES = [{ source_type: "game_specials" }];
+
 export function BlockConfigPanel({ form, onChange, onSave, onCancel }: Props) {
   const update = <K extends keyof BlockForm>(key: K, value: BlockForm[K]) => {
     onChange({ ...form, [key]: value });
+  };
+
+  const updateSourceType = (sourceType: Block["source_type"]) => {
+    const next: BlockForm = { ...form, source_type: sourceType };
+    if (sourceType === "game_specials") {
+      next.col_span = 4;
+      next.row_span = 2;
+      next.display_style = "game-deal";
+      next.display_count = Math.max(form.display_count, 10);
+      next.source_config = { sources: DEFAULT_GAME_DEAL_SOURCES };
+      next.theme = form.theme === "default" || !form.theme ? "arcade" : form.theme;
+    }
+    onChange(next);
   };
 
   const [rawSources, setRawSources] = useState<RawSourceOption[]>([]);
@@ -110,12 +130,31 @@ export function BlockConfigPanel({ form, onChange, onSave, onCancel }: Props) {
   const configuredFields = form.source_config?.display_fields;
   const selectedFields = resolveDisplayFieldKeys(form.source_type, configuredFields);
   const numericFields = allFields.filter((f) => f.type === "number");
+  const selectedGameDealSources = Array.isArray(form.source_config?.sources)
+    ? (form.source_config.sources as Array<Record<string, unknown>>)
+      .map((source) => String(source?.source_type || ""))
+      .filter(Boolean)
+    : DEFAULT_GAME_DEAL_SOURCES.map((source) => source.source_type);
 
   const toggleField = (key: string) => {
     const next = selectedFields.includes(key)
       ? selectedFields.filter((k) => k !== key)
       : [...selectedFields, key];
     onChange({ ...form, source_config: { ...form.source_config, display_fields: next } });
+  };
+
+  const toggleGameDealSource = (sourceType: string) => {
+    const selected = selectedGameDealSources.includes(sourceType)
+      ? selectedGameDealSources.filter((value) => value !== sourceType)
+      : [...selectedGameDealSources, sourceType];
+    const safeSelected = selected.length > 0 ? selected : [sourceType];
+    onChange({
+      ...form,
+      source_config: {
+        ...form.source_config,
+        sources: safeSelected.map((value) => ({ source_type: value })),
+      },
+    });
   };
 
   return (
@@ -131,7 +170,7 @@ export function BlockConfigPanel({ form, onChange, onSave, onCancel }: Props) {
       {/* Source Type */}
       <div className="space-y-1.5">
         <Label className="text-xs">数据来源</Label>
-        <Select value={form.source_type} onValueChange={(v) => update("source_type", v as Block["source_type"])}>
+        <Select value={form.source_type} onValueChange={(v) => updateSourceType(v as Block["source_type"])}>
           <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectGroup>
@@ -165,7 +204,7 @@ export function BlockConfigPanel({ form, onChange, onSave, onCancel }: Props) {
             </SelectGroup>
             <SelectSeparator />
             <SelectGroup>
-              <SelectLabel className="text-[10px] text-muted-foreground">游戏 (Steam)</SelectLabel>
+              <SelectLabel className="text-[10px] text-muted-foreground">游戏 (Steam / WeGame)</SelectLabel>
               {SOURCE_TYPE_OPTIONS_GAME.map((o) => <SelectItem key={o.value} value={o.value} className="text-xs">{o.label}</SelectItem>)}
             </SelectGroup>
           </SelectContent>
@@ -237,6 +276,28 @@ export function BlockConfigPanel({ form, onChange, onSave, onCancel }: Props) {
         </div>
       )}
 
+      {form.source_type === "game_specials" && (
+        <div className="space-y-2 rounded-lg border border-border/70 bg-muted/20 p-3">
+          <Label className="text-xs">折扣数据源</Label>
+          <div className="space-y-1">
+            {GAME_DEAL_SOURCE_OPTIONS.map((option) => (
+              <label key={option.value} className="flex cursor-pointer items-center gap-2 rounded-md px-1 py-1 text-xs hover:bg-muted/50">
+                <input
+                  type="checkbox"
+                  checked={selectedGameDealSources.includes(option.value)}
+                  onChange={() => toggleGameDealSource(option.value)}
+                  className="h-3.5 w-3.5 rounded border-border accent-primary"
+                />
+                <span>{option.label}</span>
+              </label>
+            ))}
+          </div>
+          <p className="text-[11px] leading-relaxed text-muted-foreground">
+            只允许选择同为“折扣促销”类的数据源；单源和双源会使用不同的前台展示结构。
+          </p>
+        </div>
+      )}
+
       {form.source_type === "qiumiwu_schedule" && (
         <div className="space-y-1.5">
           <Label className="text-xs">选择赛事</Label>
@@ -277,14 +338,23 @@ export function BlockConfigPanel({ form, onChange, onSave, onCancel }: Props) {
         </div>
       )}
 
-      {/* Display Style — hidden for AA index (list only) */}
-      {form.source_type !== "datalearner_aa_index" && form.source_type !== "artificial_analysis_ranking" && form.source_type !== "market_index_trends" && form.source_type !== "github_skills" && form.source_type !== "game_top_sellers" && form.source_type !== "game_most_played" && form.source_type !== "game_specials" && form.source_type !== "game_new_releases" && form.source_type !== "game_wegame_popular" && form.source_type !== "game_wegame_weekly_sales" && form.source_type !== "game_wegame_discounts" && (
+      {/* Display Style — hidden only for fixed renderer blocks */}
+      {form.source_type !== "datalearner_aa_index" && form.source_type !== "artificial_analysis_ranking" && form.source_type !== "market_index_trends" && form.source_type !== "github_skills" && (
         <div className="space-y-1.5">
           <Label className="text-xs">展示样式</Label>
           <Select value={form.display_style} onValueChange={(v) => update("display_style", v as Block["display_style"])}>
             <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
             <SelectContent>
               {DISPLAY_STYLE_OPTIONS.map((o) => <SelectItem key={o.value} value={o.value} className="text-xs">{o.label}</SelectItem>)}
+              {(form.source_type === "game_top_sellers" || form.source_type === "game_charts_concurrent" || form.source_type === "game_wegame_popular" || form.source_type === "game_wegame_weekly_sales" || form.source_type === "game_wegame_discounts") && (
+                <SelectItem value="game-ranking" className="text-xs">游戏榜单</SelectItem>
+              )}
+              {form.source_type === "game_new_releases" && (
+                <SelectItem value="game-release" className="text-xs">新游卡片</SelectItem>
+              )}
+              {(form.source_type === "game_specials" || form.source_type === "game_wegame_discounts") && (
+                <SelectItem value="game-deal" className="text-xs">折扣轮播</SelectItem>
+              )}
             </SelectContent>
           </Select>
         </div>

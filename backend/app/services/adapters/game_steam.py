@@ -28,8 +28,11 @@ def build_steam_url(endpoint_key: str) -> str:
             f"{base}?query=&start=0&count=50&dynamic_data=&sort_by=Released_DESC"
             f"&infinite=1&cc={settings.steam_region}&l={settings.steam_language}"
         )
-    elif endpoint_key == "most_played":
-        return "https://api.steampowered.com/ISteamChartsService/GetMostPlayedGames/v1/?format=json"
+    elif endpoint_key == "charts_concurrent":
+        return (
+            "https://api.steampowered.com/ISteamChartsService/"
+            "GetGamesByConcurrentPlayers/v1/?format=json"
+        )
     else:
         raise ValueError(f"Unknown Steam endpoint key: {endpoint_key}")
 
@@ -275,21 +278,22 @@ def parse_steam_results_html(results_html: str) -> list[dict[str, Any]]:
     return parsed_items
 
 
-def parse_steam_most_played_response(
+def parse_steam_charts_concurrent_response(
     payload: dict[str, Any],
     *,
     details_by_appid: dict[str, dict[str, Any]] | None = None,
     limit: int = 50,
 ) -> list[dict[str, Any]]:
     """
-    解析 Steam Charts 在线热玩榜。
-    主接口只返回 appid、排名和峰值在线人数；名称和封面由 appdetails 补齐。
+    解析 Steam Charts 实时并发在线榜（GetGamesByConcurrentPlayers）。
+    每行同时携带当前在线人数与今日峰值；score 取当前在线人数，
+    与 Steam 页面默认排序一致，峰值放 metadata 供前端二次排序。
     """
     response = payload.get("response")
     if not isinstance(response, dict):
         return []
 
-    rollup_date = response.get("rollup_date")
+    last_update = response.get("last_update")
     ranks = response.get("ranks")
     if not isinstance(ranks, list):
         return []
@@ -308,18 +312,18 @@ def parse_steam_most_played_response(
         name = str(detail.get("name") or f"Steam App {external_id}").strip()
         cover_url = str(detail.get("header_image") or detail.get("capsule_image") or detail.get("capsule_imagev5") or "").strip()
         source_url = str(detail.get("source_url") or f"https://store.steampowered.com/app/{external_id}/").strip()
-        rank = row.get("rank")
+        concurrent_in_game = row.get("concurrent_in_game")
         peak_in_game = row.get("peak_in_game")
 
         try:
-            rank_int = int(rank)
+            rank_int = int(row.get("rank"))
         except (TypeError, ValueError):
             rank_int = index
 
         try:
-            peak_score = Decimal(str(peak_in_game)) if peak_in_game is not None else None
+            concurrent_score = Decimal(str(concurrent_in_game)) if concurrent_in_game is not None else None
         except (ArithmeticError, ValueError):
-            peak_score = None
+            concurrent_score = None
 
         parsed_items.append(
             {
@@ -333,11 +337,11 @@ def parse_steam_most_played_response(
                 "discount_percent": 0,
                 "discount_label": "",
                 "release_date": None,
-                "score": peak_score,
+                "score": concurrent_score,
                 "metadata": {
-                    "rollup_date": rollup_date,
-                    "last_week_rank": row.get("last_week_rank"),
+                    "concurrent_in_game": concurrent_in_game,
                     "peak_in_game": peak_in_game,
+                    "last_update": last_update,
                 },
             }
         )

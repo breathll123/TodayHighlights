@@ -67,6 +67,25 @@
   display: none;
 }
 
+@keyframes deal-progress-line-sweep {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+
+.deal-orbit-progress-line {
+  background:
+    repeating-linear-gradient(
+      90deg,
+      #ffd166 0 10px,
+      #ffb703 10px 14px,
+      #fff1a8 14px 18px
+    );
+  box-shadow:
+    0 0 10px rgba(255, 209, 102, 0.42),
+    0 0 2px rgba(255, 241, 168, 0.9) inset;
+  animation: deal-progress-line-sweep 10s linear forwards;
+}
+
 /* Page Grid Layout */
 .page-grid {
   display: grid;

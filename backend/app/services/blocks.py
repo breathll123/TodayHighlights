@@ -22,17 +22,24 @@ from app.services.adapters.eastmoney import (
     fetch_announcements, fetch_capital_flow,
     fetch_indices, fetch_industry, fetch_sectors,
 )
-from app.services.adapters.game_steam import parse_steam_most_played_response
+from app.services.adapters.game_steam import (
+    parse_steam_charts_concurrent_response,
+)
 
 logger = logging.getLogger("today_highlights.blocks")
 
 _GAME_RANKING_SOURCES = {
     "game_top_sellers": ("steam", "top_sellers"),
     "game_new_releases": ("steam", "new_releases"),
-    "game_most_played": ("steam", "most_played"),
+    "game_charts_concurrent": ("steam", "charts_concurrent"),
     "game_wegame_popular": ("wegame", "popular_this_week"),
     "game_wegame_weekly_sales": ("wegame", "this_week_most_purchase"),
     "game_wegame_discounts": ("wegame", "discounts"),
+}
+
+_GAME_DEAL_SOURCES = {
+    "game_specials": ("steam", "specials", "Steam"),
+    "game_wegame_discounts": ("wegame", "discounts", "WeGame"),
 }
 
 # Module-level shared executor — avoids per-request creation/destruction overhead
@@ -188,6 +195,16 @@ def _source_last_crawled_at(session: Session, block: PageBlock) -> datetime | No
     if block.source_type == "github_skills":
         return session.scalar(select(func.max(Skill.last_synced_at)).where(Skill.source == "github"))
 
+    if block.source_type == "game_specials" and isinstance(config.get("sources"), list):
+        sources = _normalise_game_deal_sources(block.source_config or {})
+        if not sources:
+            return None
+        clauses = [
+            (Source.site == provider) & (Source.entry_url == f"{provider}://{endpoint_key}")
+            for provider, endpoint_key, _label, _source_type in sources
+        ]
+        return session.scalar(select(func.max(Source.last_crawled_at)).where(or_(*clauses)))
+
     entry_url = _SOURCE_ENTRY_URLS_BY_BLOCK_TYPE.get(block.source_type)
     if entry_url:
         return session.scalar(
@@ -228,6 +245,177 @@ def _block_payload(block: PageBlock, data: list[dict], data_updated_at: str | No
         "data_updated_at": data_updated_at,
         "data": data,
     }
+
+
+def _normalise_game_deal_sources(config: dict) -> list[tuple[str, str, str, str]]:
+    raw_sources = config.get("sources")
+    if not isinstance(raw_sources, list) or not raw_sources:
+        raw_sources = [{"source_type": "game_specials"}]
+
+    sources: list[tuple[str, str, str, str]] = []
+    for source in raw_sources:
+        if isinstance(source, str):
+            source_type = source
+            raw = {"source_type": source}
+        elif isinstance(source, dict):
+            raw = source
+            source_type = str(raw.get("source_type") or "").strip()
+        else:
+            continue
+
+        if source_type in _GAME_DEAL_SOURCES:
+            provider, endpoint_key, label = _GAME_DEAL_SOURCES[source_type]
+        else:
+            provider = str(raw.get("provider") or "").strip()
+            endpoint_key = str(raw.get("endpoint_key") or raw.get("endpoint") or "").strip()
+            if not provider or not endpoint_key:
+                continue
+            label = str(raw.get("label") or ("WeGame" if provider == "wegame" else provider.title())).strip()
+            source_type = f"game_{provider}_{endpoint_key}"
+
+        sources.append((provider, endpoint_key, label, source_type))
+
+    return sources
+
+
+def _resolve_game_deals(session: Session, config: dict, limit: int) -> list[dict]:
+    sources = _normalise_game_deal_sources(config)
+    if not sources:
+        return []
+    per_source_limit = max(1, (max(limit, 1) + len(sources) - 1) // len(sources))
+    all_items: list[dict] = []
+
+    for provider, endpoint_key, label, source_type in sources:
+        deal_exists = (
+            select(GameDeal.id)
+            .where(GameDeal.snapshot_id == GameRawSnapshot.id)
+            .exists()
+        )
+        latest_snap = session.scalar(
+            select(GameRawSnapshot)
+            .where(
+                GameRawSnapshot.provider == provider,
+                GameRawSnapshot.endpoint_key == endpoint_key,
+                GameRawSnapshot.parse_status != "failed",
+                deal_exists,
+            )
+            .order_by(GameRawSnapshot.captured_at.desc())
+            .limit(1)
+        )
+        if latest_snap is None:
+            all_items.extend(
+                _resolve_game_deal_ranking_fallback(
+                    session,
+                    provider=provider,
+                    endpoint_key=endpoint_key,
+                    label=label,
+                    source_type=source_type,
+                    limit=per_source_limit,
+                )
+            )
+            continue
+
+        stmt = (
+            select(GameDeal, GameItem)
+            .join(GameItem, GameDeal.game_item_id == GameItem.id)
+            .where(GameDeal.snapshot_id == latest_snap.id)
+            .order_by(GameDeal.discount_percent.desc(), GameDeal.id.asc())
+            .limit(per_source_limit)
+        )
+
+        for index, (deal, item) in enumerate(session.execute(stmt).all()):
+            metadata = item.metadata_json or {}
+            all_items.append({
+                "id": f"{provider}:{deal.id}",
+                "title": item.name,
+                "subtitle": label,
+                "rank": index + 1,
+                "provider": item.provider,
+                "source": label,
+                "external_id": item.external_id,
+                "url": deal.deal_url or item.source_url,
+                "cover_url": item.cover_url,
+                "cover_local": item.cover_local,
+                "current_price": float(deal.current_price) if deal.current_price is not None else None,
+                "original_price": float(deal.original_price) if deal.original_price is not None else None,
+                "discount_percent": deal.discount_percent,
+                "discount_label": deal.discount_label,
+                "release_date": item.release_date.isoformat() if item.release_date else None,
+                "summary": metadata.get("description_zh") or metadata.get("comments") or metadata.get("description_original") or "",
+                "captured_at": deal.captured_at.isoformat(),
+                "created_at": deal.created_at.isoformat(),
+                "source_type": source_type,
+            })
+
+    return all_items
+
+
+def _resolve_game_deal_ranking_fallback(
+    session: Session,
+    *,
+    provider: str,
+    endpoint_key: str,
+    label: str,
+    source_type: str,
+    limit: int,
+) -> list[dict]:
+    ranking_exists = (
+        select(GameRanking.id)
+        .where(GameRanking.snapshot_id == GameRawSnapshot.id)
+        .exists()
+    )
+    latest_snap = session.scalar(
+        select(GameRawSnapshot)
+        .where(
+            GameRawSnapshot.provider == provider,
+            GameRawSnapshot.endpoint_key == endpoint_key,
+            GameRawSnapshot.parse_status != "failed",
+            ranking_exists,
+        )
+        .order_by(GameRawSnapshot.captured_at.desc())
+        .limit(1)
+    )
+    if latest_snap is None:
+        return []
+
+    stmt = (
+        select(GameRanking, GameItem)
+        .join(GameItem, GameRanking.game_item_id == GameItem.id)
+        .where(GameRanking.snapshot_id == latest_snap.id)
+        .order_by(GameRanking.rank.asc(), GameRanking.id.asc())
+        .limit(limit)
+    )
+
+    items: list[dict] = []
+    for index, (ranking, item) in enumerate(session.execute(stmt).all()):
+        metadata = item.metadata_json or {}
+        discount_label = str(metadata.get("show_prate") or "").strip()
+        if discount_label in {"0", "1"}:
+            discount_label = ""
+        if not discount_label and endpoint_key == "discounts":
+            discount_label = "促销"
+        items.append({
+            "id": f"{provider}:ranking:{ranking.id}",
+            "title": item.name,
+            "subtitle": label,
+            "rank": ranking.rank or index + 1,
+            "provider": item.provider,
+            "source": label,
+            "external_id": item.external_id,
+            "url": item.source_url,
+            "cover_url": item.cover_url,
+            "cover_local": item.cover_local,
+            "current_price": None,
+            "original_price": None,
+            "discount_percent": 0,
+            "discount_label": discount_label,
+            "release_date": item.release_date.isoformat() if item.release_date else None,
+            "summary": metadata.get("description_zh") or metadata.get("comments") or metadata.get("description_original") or "",
+            "captured_at": ranking.captured_at.isoformat(),
+            "created_at": ranking.created_at.isoformat(),
+            "source_type": source_type,
+        })
+    return items
 
 
 def resolve_block_data(
@@ -343,23 +531,28 @@ def resolve_block_data(
             .order_by(GameRawSnapshot.captured_at.desc())
             .limit(1)
         )
+        # Steam Charts 类榜单的原始 JSON 快照可直接解析兜底（HTML 类快照不行）
+        _raw_fallback_parsers = {
+            "game_charts_concurrent": parse_steam_charts_concurrent_response,
+        }
         if latest_snap is None:
-            if source_type == "game_most_played":
+            raw_parser = _raw_fallback_parsers.get(source_type)
+            if raw_parser is not None:
                 raw_snap = session.scalar(
                     select(GameRawSnapshot)
                     .where(
                         GameRawSnapshot.provider == "steam",
-                        GameRawSnapshot.endpoint_key == "most_played",
+                        GameRawSnapshot.endpoint_key == ranking_type,
                         GameRawSnapshot.status_code == 200,
                     )
                     .order_by(GameRawSnapshot.captured_at.desc())
                     .limit(1)
                 )
                 if raw_snap is not None:
-                    raw_items = parse_steam_most_played_response(_decode_raw_snapshot_json(raw_snap), limit=limit)
+                    raw_items = raw_parser(_decode_raw_snapshot_json(raw_snap), limit=limit)
                     return [
                         {
-                            "id": f"most_played_raw_{item['external_id']}",
+                            "id": f"{ranking_type}_raw_{item['external_id']}",
                             "title": item["name"],
                             "subtitle": "Steam",
                             "rank": item["rank"],
@@ -375,6 +568,7 @@ def resolve_block_data(
                             "discount_percent": 0,
                             "discount_label": "",
                             "release_date": None,
+                            "concurrent_in_game": item["metadata"].get("concurrent_in_game"),
                             "peak_in_game": item["metadata"].get("peak_in_game"),
                             "last_week_rank": item["metadata"].get("last_week_rank"),
                             "captured_at": raw_snap.captured_at.isoformat(),
@@ -477,6 +671,7 @@ def resolve_block_data(
                 "discount_percent": deal.discount_percent if deal else 0,
                 "discount_label": deal.discount_label if deal else "",
                 "release_date": item.release_date.isoformat() if item.release_date else None,
+                "concurrent_in_game": metadata.get("concurrent_in_game"),
                 "peak_in_game": metadata.get("peak_in_game"),
                 "last_week_rank": metadata.get("last_week_rank"),
                 "summary": metadata.get("description_zh") or metadata.get("comments") or metadata.get("description_original") or "",
@@ -492,55 +687,7 @@ def resolve_block_data(
         return data_list
 
     if source_type == "game_specials":
-        # 1. 查找最新一次的打折特惠快照
-        latest_snap = session.scalar(
-            select(GameRawSnapshot)
-            .join(GameDeal, GameDeal.snapshot_id == GameRawSnapshot.id)
-            .where(
-                GameRawSnapshot.provider == "steam",
-                GameRawSnapshot.endpoint_key == "specials",
-                GameRawSnapshot.parse_status != "failed",
-            )
-            .order_by(GameRawSnapshot.captured_at.desc())
-            .limit(1)
-        )
-        if latest_snap is None:
-            return []
-
-        # 2. 查询对应的打折特惠详情（依折扣从大到小排序）
-        stmt = (
-            select(GameDeal, GameItem)
-            .join(GameItem, GameDeal.game_item_id == GameItem.id)
-            .where(GameDeal.snapshot_id == latest_snap.id)
-            .order_by(GameDeal.discount_percent.desc(), GameDeal.id.asc())
-            .limit(limit)
-        )
-        results = session.execute(stmt).all()
-
-        # 3. 组装前端数据
-        return [
-            {
-                "id": deal.id,
-                "title": item.name,
-                "subtitle": "Steam",
-                "rank": index + 1,
-                "provider": item.provider,
-                "source": "Steam",
-                "external_id": item.external_id,
-                "url": deal.deal_url,
-                "cover_url": item.cover_url,
-                "cover_local": item.cover_local,
-                "current_price": float(deal.current_price) if deal.current_price is not None else None,
-                "original_price": float(deal.original_price) if deal.original_price is not None else None,
-                "discount_percent": deal.discount_percent,
-                "discount_label": deal.discount_label,
-                "release_date": item.release_date.isoformat() if item.release_date else None,
-                "captured_at": deal.captured_at.isoformat(),
-                "created_at": deal.created_at.isoformat(),
-                "source_type": "game_specials",
-            }
-            for index, (deal, item) in enumerate(results)
-        ]
+        return _resolve_game_deals(session, config, limit)
 
     if cookie is None:
         cookie = get_cookie(session)
@@ -753,8 +900,8 @@ def get_page_blocks(session: Session, route: str) -> list[dict]:
     # Separate DB-dependent blocks (topic, raw) from live-API blocks
     db_types = {
         "topic", "raw", "eastmoney_longhu", "tonghuashun_news", "artificial_analysis_ranking",
-        "github_skills", "game_top_sellers", "game_specials", "game_new_releases", "game_most_played",
-        "game_wegame_popular", "game_wegame_weekly_sales", "game_wegame_discounts",
+        "github_skills", "game_top_sellers", "game_specials", "game_new_releases",
+        "game_charts_concurrent", "game_wegame_popular", "game_wegame_weekly_sales", "game_wegame_discounts",
     }
     db_blocks = [b for b in blocks if b.source_type in db_types]
     live_blocks = [b for b in blocks if b.source_type not in db_types]

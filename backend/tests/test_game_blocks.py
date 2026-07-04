@@ -24,13 +24,11 @@ def test_resolve_game_blocks_empty() -> None:
         block_topsellers = PageBlock(source_type="game_top_sellers", display_count=5)
         block_specials = PageBlock(source_type="game_specials", display_count=5)
         block_new = PageBlock(source_type="game_new_releases", display_count=5)
-        block_played = PageBlock(source_type="game_most_played", display_count=5)
         block_wegame = PageBlock(source_type="game_wegame_popular", display_count=5)
 
         assert resolve_block_data(session, block_topsellers) == []
         assert resolve_block_data(session, block_specials) == []
         assert resolve_block_data(session, block_new) == []
-        assert resolve_block_data(session, block_played) == []
         assert resolve_block_data(session, block_wegame) == []
 
 
@@ -194,73 +192,73 @@ def test_resolve_game_top_sellers_skips_empty_latest_snapshot() -> None:
         assert res[0]["captured_at"] == data_snap.captured_at.isoformat()
 
 
-def test_resolve_game_most_played_blocks_with_data() -> None:
-    """测试 Steam 在线热玩榜方块解析"""
+def test_resolve_game_charts_concurrent_blocks_with_data() -> None:
+    """测试 Steam 实时热玩榜方块解析：同时透出当前在线与今日峰值"""
     with _session() as session:
         item = GameItem(
             provider="steam",
             external_id="730",
             name="Counter-Strike 2",
             cover_url="https://shared.fastly.steamstatic.com/cs2.jpg",
-            metadata_json={"last_week_rank": 2, "peak_in_game": 1234567},
+            metadata_json={"concurrent_in_game": 1229028, "peak_in_game": 1336231},
             last_seen_at=datetime.now(),
         )
         session.add(item)
         session.flush()
 
         snap = GameRawSnapshot(
-            provider="steam", endpoint_key="most_played", request_url="", status_code=200,
-            response_body=b"", response_hash="played", captured_at=datetime.utcnow(), parse_status="parsed"
+            provider="steam", endpoint_key="charts_concurrent", request_url="", status_code=200,
+            response_body=b"", response_hash="concurrent", captured_at=datetime.utcnow(), parse_status="parsed"
         )
         session.add(snap)
         session.flush()
 
         ranking = GameRanking(
-            provider="steam", ranking_type="most_played", game_item_id=item.id, rank=1,
-            score=Decimal("1234567"), captured_at=snap.captured_at, snapshot_id=snap.id
+            provider="steam", ranking_type="charts_concurrent", game_item_id=item.id, rank=1,
+            score=Decimal("1229028"), captured_at=snap.captured_at, snapshot_id=snap.id
         )
         session.add(ranking)
         session.commit()
 
-        block = PageBlock(source_type="game_most_played", display_count=5)
+        block = PageBlock(source_type="game_charts_concurrent", display_count=5)
         res = resolve_block_data(session, block)
 
         assert len(res) == 1
         assert res[0]["title"] == "Counter-Strike 2"
         assert res[0]["rank"] == 1
-        assert res[0]["score"] == 1234567.0
-        assert res[0]["peak_in_game"] == 1234567
-        assert res[0]["last_week_rank"] == 2
+        assert res[0]["score"] == 1229028.0
+        assert res[0]["concurrent_in_game"] == 1229028
+        assert res[0]["peak_in_game"] == 1336231
 
 
-def test_resolve_game_most_played_falls_back_to_raw_snapshot() -> None:
-    """在线热玩榜若 ranking 明细缺失，也可从原始 JSON 快照兜底展示"""
+def test_resolve_game_charts_concurrent_falls_back_to_raw_snapshot() -> None:
+    """实时热玩榜若 ranking 明细缺失，也可从原始 JSON 快照兜底展示"""
     with _session() as session:
         snap = GameRawSnapshot(
             provider="steam",
-            endpoint_key="most_played",
+            endpoint_key="charts_concurrent",
             request_url="",
             status_code=200,
             response_body=(
-                b'{"response":{"rollup_date":1778457600,"ranks":[{"rank":1,"appid":730,'
-                b'"last_week_rank":2,"peak_in_game":1234567}]}}'
+                b'{"response":{"last_update":1783093824,"ranks":[{"rank":1,"appid":730,'
+                b'"concurrent_in_game":1229028,"peak_in_game":1336231}]}}'
             ),
-            response_hash="played-raw",
+            response_hash="concurrent-raw",
             captured_at=datetime.utcnow(),
             parse_status="pending",
         )
         session.add(snap)
         session.commit()
 
-        block = PageBlock(source_type="game_most_played", display_count=5)
+        block = PageBlock(source_type="game_charts_concurrent", display_count=5)
         res = resolve_block_data(session, block)
 
         assert len(res) == 1
         assert res[0]["title"] == "Steam App 730"
         assert res[0]["rank"] == 1
-        assert res[0]["score"] == 1234567.0
-        assert res[0]["peak_in_game"] == 1234567
-        assert res[0]["last_week_rank"] == 2
+        assert res[0]["score"] == 1229028.0
+        assert res[0]["concurrent_in_game"] == 1229028
+        assert res[0]["peak_in_game"] == 1336231
 
 
 def test_resolve_wegame_ranking_blocks_with_data() -> None:
@@ -354,3 +352,110 @@ def test_resolve_game_specials_blocks_with_data() -> None:
         assert res[0]["discount_percent"] == 50
         assert res[0]["discount_label"] == "-50%"
         assert res[0]["rank"] == 1  # 自动计算的排行序号
+
+
+def test_resolve_game_specials_aggregates_configured_discount_sources() -> None:
+    """多源折扣方块应按配置同时读取 Steam 与 WeGame 折扣数据"""
+    with _session() as session:
+        steam_item = GameItem(provider="steam", external_id="10", name="Steam Promo", last_seen_at=datetime.now())
+        wegame_item = GameItem(provider="wegame", external_id="20", name="WeGame Promo", last_seen_at=datetime.now())
+        session.add_all([steam_item, wegame_item])
+        session.flush()
+
+        steam_snap = GameRawSnapshot(
+            provider="steam", endpoint_key="specials", request_url="", status_code=200,
+            response_body=b"", response_hash="steam-special", captured_at=datetime.utcnow(), parse_status="parsed"
+        )
+        wegame_snap = GameRawSnapshot(
+            provider="wegame", endpoint_key="discounts", request_url="", status_code=200,
+            response_body=b"", response_hash="wegame-discounts", captured_at=datetime.utcnow(), parse_status="parsed"
+        )
+        session.add_all([steam_snap, wegame_snap])
+        session.flush()
+
+        session.add_all([
+            GameDeal(
+                provider="steam", game_item_id=steam_item.id, currency="CNY", current_price=Decimal("45.00"),
+                original_price=Decimal("90.00"), discount_percent=50, discount_label="-50%",
+                captured_at=steam_snap.captured_at, snapshot_id=steam_snap.id
+            ),
+            GameDeal(
+                provider="wegame", game_item_id=wegame_item.id, currency="CNY", current_price=Decimal("30.00"),
+                original_price=Decimal("100.00"), discount_percent=70, discount_label="-70%",
+                captured_at=wegame_snap.captured_at, snapshot_id=wegame_snap.id
+            ),
+        ])
+        session.commit()
+
+        block = PageBlock(
+            source_type="game_specials",
+            display_count=4,
+            source_config={
+                "sources": [
+                    {"source_type": "game_specials"},
+                    {"source_type": "game_wegame_discounts"},
+                ]
+            },
+        )
+        res = resolve_block_data(session, block)
+
+        assert [item["title"] for item in res] == ["Steam Promo", "WeGame Promo"]
+        assert [item["source"] for item in res] == ["Steam", "WeGame"]
+        assert res[0]["source_type"] == "game_specials"
+        assert res[1]["source_type"] == "game_wegame_discounts"
+
+
+def test_resolve_game_specials_falls_back_to_wegame_discount_ranking_without_price() -> None:
+    """WeGame 折扣接口没有价格字段时，仍应作为促销候选显示在多源折扣方块中"""
+    with _session() as session:
+        item = GameItem(
+            provider="wegame",
+            external_id="2000902",
+            name="Muse Dash 喵斯快跑",
+            source_url="https://www.wegame.com.cn/rail/game_detail.html?game_id=2000902",
+            cover_url="https://wegame.gtimg.com/poster.jpg",
+            metadata_json={"comments": "节奏动作游戏", "show_prate": ""},
+            last_seen_at=datetime.now(),
+        )
+        session.add(item)
+        session.flush()
+
+        snap = GameRawSnapshot(
+            provider="wegame",
+            endpoint_key="discounts",
+            request_url="",
+            status_code=200,
+            response_body=b"",
+            response_hash="wegame-discounts-ranking",
+            captured_at=datetime.utcnow(),
+            parse_status="parsed",
+        )
+        session.add(snap)
+        session.flush()
+
+        session.add(
+            GameRanking(
+                provider="wegame",
+                ranking_type="discounts",
+                game_item_id=item.id,
+                rank=1,
+                captured_at=snap.captured_at,
+                snapshot_id=snap.id,
+            )
+        )
+        session.commit()
+
+        block = PageBlock(
+            source_type="game_specials",
+            display_count=4,
+            source_config={"sources": [{"source_type": "game_wegame_discounts"}]},
+        )
+        res = resolve_block_data(session, block)
+
+        assert len(res) == 1
+        assert res[0]["title"] == "Muse Dash 喵斯快跑"
+        assert res[0]["source"] == "WeGame"
+        assert res[0]["provider"] == "wegame"
+        assert res[0]["source_type"] == "game_wegame_discounts"
+        assert res[0]["current_price"] is None
+        assert res[0]["discount_label"] == "促销"

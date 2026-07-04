@@ -16,7 +16,7 @@ from app.models.entities import CrawlJob, GameDeal, GameItem, GameRanking, GameR
 from app.services.adapters.game_steam import (
     build_steam_appdetails_url,
     build_steam_url,
-    parse_steam_most_played_response,
+    parse_steam_charts_concurrent_response,
     parse_steam_results_html,
 )
 from app.services.adapters.game_wegame import (
@@ -53,8 +53,8 @@ def map_entry_url_to_endpoint(entry_url: str) -> str:
         return "specials"
     elif entry_url == "steam://new_releases":
         return "new_releases"
-    elif entry_url == "steam://most_played":
-        return "most_played"
+    elif entry_url == "steam://charts_concurrent":
+        return "charts_concurrent"
     elif entry_url.startswith("wegame://"):
         return map_wegame_entry_url(entry_url)
     else:
@@ -151,7 +151,7 @@ def run_game_source_sync(session: Session, source: Source, job: CrawlJob) -> dic
                 if not isinstance(result, dict) or int(result.get("error_code", -1)) != 0:
                     raise ValueError(f"WeGame API error: {resp_json}")
                 items = parse_wegame_rank_response(resp_json, endpoint_key, limit=50)
-            elif endpoint_key == "most_played":
+            elif endpoint_key == "charts_concurrent":
                 ranks = (resp_json.get("response") or {}).get("ranks") if isinstance(resp_json, dict) else None
                 appids = [
                     str(row.get("appid"))
@@ -159,7 +159,7 @@ def run_game_source_sync(session: Session, source: Source, job: CrawlJob) -> dic
                     if isinstance(row, dict) and row.get("appid") is not None
                 ]
                 details_by_appid = _fetch_steam_app_details(client, appids, headers)
-                items = parse_steam_most_played_response(resp_json, details_by_appid=details_by_appid, limit=50)
+                items = parse_steam_charts_concurrent_response(resp_json, details_by_appid=details_by_appid, limit=50)
                 items = merge_steam_details_into_items(items, details_by_appid)
             else:
                 if not resp_json or resp_json.get("success") != 1:
@@ -278,7 +278,7 @@ def run_game_source_sync(session: Session, source: Source, job: CrawlJob) -> dic
             synced_items.append(item_db)
             
             # B. 按照板块类型插入排行或打折特惠数据
-            if endpoint_key in ["top_sellers", "new_releases", "most_played"] or provider == "wegame":
+            if endpoint_key in ["top_sellers", "new_releases", "charts_concurrent"] or provider == "wegame":
                 # 排行数据入库
                 ranking = GameRanking(
                     provider=provider,
@@ -294,7 +294,7 @@ def run_game_source_sync(session: Session, source: Source, job: CrawlJob) -> dic
             # 只要包含有效价格数据，无论是排行还是促销，一并往 game_deals 插入价格快照以供直读
             if parsed["current_price"] is not None:
                 deal = GameDeal(
-                    provider="steam",
+                    provider=provider,
                     game_item_id=item_db.id,
                     currency="CNY",
                     current_price=parsed["current_price"],

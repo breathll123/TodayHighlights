@@ -147,6 +147,8 @@ def test_reconcile_system_catalog_seeds_sources_idempotently(db_session):
     assert ("dongqiudi", "dongqiudi://matches") in source_keys
     assert ("qiumiwu", "qiumiwu://matches") in source_keys
     assert ("aihot", "aihot://news") in source_keys
+    assert ("steam", "steam://charts_concurrent") in source_keys
+    assert ("steam", "steam://most_played") not in source_keys
     assert ("wegame", "wegame://popular_this_week") in source_keys
     assert ("wegame", "wegame://this_week_most_purchase") in source_keys
     assert ("wegame", "wegame://discounts") in source_keys
@@ -158,15 +160,15 @@ def test_reconcile_system_catalog_seeds_game_page_blocks_idempotently(db_session
     blocks = db_session.scalars(
         select(PageBlock).where(PageBlock.page_route == "/topics/games")
     ).all()
-    assert len(blocks) == 14
+    assert len(blocks) == 12
     assert {
         (block.title, block.source_type, block.status)
         for block in blocks
     } == {
         ("热门游戏榜", "game_top_sellers", "draft"),
         ("热门游戏榜", "game_top_sellers", "published"),
-        ("在线热玩榜", "game_most_played", "draft"),
-        ("在线热玩榜", "game_most_played", "published"),
+        ("实时热玩榜", "game_charts_concurrent", "draft"),
+        ("实时热玩榜", "game_charts_concurrent", "published"),
         ("打折促销", "game_specials", "draft"),
         ("打折促销", "game_specials", "published"),
         ("新游动态", "game_new_releases", "draft"),
@@ -175,12 +177,134 @@ def test_reconcile_system_catalog_seeds_game_page_blocks_idempotently(db_session
         ("WeGame 最高热度", "game_wegame_popular", "published"),
         ("WeGame 本周热销", "game_wegame_weekly_sales", "draft"),
         ("WeGame 本周热销", "game_wegame_weekly_sales", "published"),
-        ("WeGame 折扣促销", "game_wegame_discounts", "draft"),
-        ("WeGame 折扣促销", "game_wegame_discounts", "published"),
     }
+    deal_blocks = [block for block in blocks if block.title == "打折促销"]
+    assert len(deal_blocks) == 2
+    assert all(block.source_config["sources"] == [
+        {"source_type": "game_specials", "label": "Steam"},
+        {"source_type": "game_wegame_discounts", "label": "WeGame"},
+    ] for block in deal_blocks)
 
     reconcile_system_catalog(db_session)
 
     assert db_session.scalar(
         select(func.count()).select_from(PageBlock).where(PageBlock.page_route == "/topics/games")
-    ) == 14
+    ) == 12
+
+
+def test_reconcile_system_catalog_deprecates_steam_most_played(db_session):
+    game_topic = Topic(name="游戏", slug="games", sort_order=40, enabled=True)
+    db_session.add(game_topic)
+    db_session.flush()
+    db_session.add(
+        Source(
+            topic_id=game_topic.id,
+            site="steam",
+            name="Steam-在线热玩榜",
+            entry_url="steam://most_played",
+            cookie_encrypted="",
+            enabled=True,
+            crawl_interval_minutes=30,
+        )
+    )
+    db_session.add_all([
+        PageBlock(
+            page_route="/topics/games",
+            title="在线热玩榜",
+            source_type="game_most_played",
+            display_style="game-ranking",
+            display_count=10,
+            sort_by="rank",
+            enabled=True,
+            col_span=2,
+            row_span=2,
+            grid_x=0,
+            grid_y=0,
+            status="draft",
+        ),
+        PageBlock(
+            page_route="/topics/games",
+            title="在线热玩榜",
+            source_type="game_most_played",
+            display_style="game-ranking",
+            display_count=10,
+            sort_by="rank",
+            enabled=True,
+            col_span=2,
+            row_span=2,
+            grid_x=0,
+            grid_y=0,
+            status="published",
+        ),
+    ])
+    db_session.flush()
+
+    reconcile_system_catalog(db_session)
+
+    source = db_session.scalar(select(Source).where(Source.entry_url == "steam://most_played"))
+    assert source is not None
+    assert source.enabled is False
+    assert db_session.scalar(
+        select(func.count()).select_from(PageBlock).where(PageBlock.source_type == "game_most_played")
+    ) == 0
+
+
+def test_reconcile_system_catalog_migrates_legacy_game_discount_blocks(db_session):
+    db_session.add(Topic(name="游戏", slug="games", sort_order=40, enabled=True))
+    db_session.add_all([
+        PageBlock(
+            page_route="/topics/games",
+            title="打折促销",
+            source_type="game_specials",
+            source_config={},
+            display_style="game-deal",
+            display_count=9,
+            sort_by="rank",
+            enabled=True,
+            col_span=4,
+            row_span=2,
+            grid_x=0,
+            grid_y=2,
+            status="draft",
+        ),
+        PageBlock(
+            page_route="/topics/games",
+            title="WeGame 折扣促销",
+            source_type="game_wegame_discounts",
+            source_config={},
+            display_style="game-ranking",
+            display_count=10,
+            sort_by="rank",
+            enabled=True,
+            col_span=2,
+            row_span=2,
+            grid_x=0,
+            grid_y=6,
+            status="draft",
+        ),
+    ])
+    db_session.flush()
+
+    reconcile_system_catalog(db_session)
+
+    migrated = db_session.scalar(
+        select(PageBlock).where(
+            PageBlock.page_route == "/topics/games",
+            PageBlock.title == "打折促销",
+            PageBlock.status == "draft",
+        )
+    )
+    assert migrated is not None
+    assert migrated.source_type == "game_specials"
+    assert migrated.display_style == "game-deal"
+    assert migrated.source_config["sources"][0]["source_type"] == "game_specials"
+    assert migrated.source_config["sources"][1]["source_type"] == "game_wegame_discounts"
+
+    legacy_wegame = db_session.scalar(
+        select(PageBlock).where(
+            PageBlock.page_route == "/topics/games",
+            PageBlock.title == "WeGame 折扣促销",
+            PageBlock.status == "draft",
+        )
+    )
+    assert legacy_wegame is None
