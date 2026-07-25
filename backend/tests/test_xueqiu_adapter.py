@@ -1,7 +1,51 @@
 import json
 from pathlib import Path
 
-from app.sources.xueqiu import XueqiuAdapter, build_non_json_error, normalize_timeline_url
+from app.sources import xueqiu
+from app.sources.xueqiu import XueqiuAdapter, build_non_json_error, build_browser_headers, normalize_timeline_url
+
+
+class _FakeResponse:
+    def __init__(self, status_code: int, *, headers: dict[str, str], text: str, payload: dict | None = None):
+        self.status_code = status_code
+        self.headers = headers
+        self.text = text
+        self.content = text.encode()
+        self._payload = payload or {}
+
+    def raise_for_status(self) -> None:
+        if self.status_code >= 400:
+            raise RuntimeError(f"HTTP {self.status_code}")
+
+    def json(self) -> dict:
+        return self._payload
+
+
+class _FakeClient:
+    urls: list[str] = []
+
+    def __init__(self, *args, **kwargs):
+        self.headers = kwargs.get("headers", {})
+        self._responses = [
+            _FakeResponse(200, headers={"content-type": "text/html; charset=utf-8"}, text="<html>login</html>"),
+            _FakeResponse(200, headers={"content-type": "text/html; charset=utf-8"}, text="<html>home</html>"),
+            _FakeResponse(
+                200,
+                headers={"content-type": "application/json; charset=utf-8"},
+                text='{"list":[]}',
+                payload={"list": []},
+            ),
+        ]
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        return False
+
+    def get(self, url: str, **kwargs):
+        self.urls.append(url)
+        return self._responses.pop(0)
 
 
 def test_parse_timeline_fixture() -> None:
@@ -38,6 +82,28 @@ def test_normalize_timeline_url_keeps_custom_params() -> None:
         "https://xueqiu.com/v4/statuses/public_timeline_by_category.json"
         "?category=6&count=10&max_id=-1"
     )
+
+
+def test_build_browser_headers_uses_ajax_browser_headers() -> None:
+    headers = build_browser_headers("xq_a_token=token")
+
+    assert "Chrome/" in headers["User-Agent"]
+    assert headers["X-Requested-With"] == "XMLHttpRequest"
+    assert headers["Cookie"] == "xq_a_token=token"
+
+
+def test_fetch_retries_after_html_response(monkeypatch) -> None:
+    _FakeClient.urls = []
+    monkeypatch.setattr(xueqiu.httpx, "Client", _FakeClient)
+
+    items = XueqiuAdapter().fetch("https://xueqiu.com/v4/statuses/public_timeline_by_category.json", "cookie=1")
+
+    assert items == []
+    assert _FakeClient.urls == [
+        "https://xueqiu.com/v4/statuses/public_timeline_by_category.json?category=-1&count=20&max_id=-1",
+        "https://xueqiu.com",
+        "https://xueqiu.com/v4/statuses/public_timeline_by_category.json?category=-1&count=20&max_id=-1",
+    ]
 
 
 def test_build_non_json_error_includes_safe_preview() -> None:

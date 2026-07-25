@@ -17,21 +17,13 @@ class XueqiuAdapter:
 
     def fetch(self, entry_url: str, cookie: str) -> list[RawItemDraft]:
         request_url = normalize_timeline_url(entry_url)
-        headers = {
-            "Cookie": cookie,
-            "User-Agent": "Mozilla/5.0 TodayHighlights/0.1",
-            "Accept": "application/json,text/plain,*/*",
-            "Referer": "https://xueqiu.com/",
-        }
+        headers = build_browser_headers(cookie)
         with httpx.Client(timeout=15, follow_redirects=True, headers=headers) as client:
-            response = observed_http_get(
-                client.get,
-                request_url,
-                provider="xueqiu",
-                operation="timeline",
-                host="xueqiu.com",
-                path=urlparse(request_url).path,
-            )
+            response = fetch_timeline_response(client, request_url, attempt=1)
+            if is_non_json_response(response):
+                warm_up_session(client)
+                response = fetch_timeline_response(client, request_url, attempt=2)
+
             if response.status_code in {400, 401, 403}:
                 raise RuntimeError(f"Xueqiu request rejected with HTTP {response.status_code}")
             response.raise_for_status()
@@ -99,6 +91,53 @@ def normalize_timeline_url(entry_url: str) -> str:
     query.setdefault("count", "20")
     query.setdefault("max_id", "-1")
     return urlunparse(parsed._replace(query=urlencode(query)))
+
+
+def build_browser_headers(cookie: str) -> dict[str, str]:
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/126.0.0.0 Safari/537.36"
+        ),
+        "Accept": "application/json, text/plain, */*",
+        "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+        "Referer": "https://xueqiu.com/",
+        "X-Requested-With": "XMLHttpRequest",
+        "Sec-Fetch-Site": "same-origin",
+        "Sec-Fetch-Mode": "cors",
+        "Sec-Fetch-Dest": "empty",
+    }
+    if cookie:
+        headers["Cookie"] = cookie
+    return headers
+
+
+def fetch_timeline_response(client: httpx.Client, request_url: str, *, attempt: int) -> httpx.Response:
+    return observed_http_get(
+        client.get,
+        request_url,
+        provider="xueqiu",
+        operation="timeline",
+        host="xueqiu.com",
+        path=urlparse(request_url).path,
+        attempt=attempt,
+    )
+
+
+def warm_up_session(client: httpx.Client) -> None:
+    observed_http_get(
+        client.get,
+        XueqiuAdapter.base_url,
+        provider="xueqiu",
+        operation="warmup",
+        host="xueqiu.com",
+        path="/",
+    )
+
+
+def is_non_json_response(response: httpx.Response) -> bool:
+    return response.status_code == 200 and "json" not in response.headers.get("content-type", "")
 
 
 def build_non_json_error(content_type: str, text: str) -> str:
