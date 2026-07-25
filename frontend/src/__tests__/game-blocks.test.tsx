@@ -1,5 +1,5 @@
 // -*- coding: utf-8 -*-
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { vi } from "vitest";
 import { GameRankingList, GameDealGrid, GameReleaseList, GameItem } from "../components/layout/GameBlocks";
 import "@testing-library/jest-dom";
@@ -205,11 +205,14 @@ describe("GameBlocks Components", () => {
     const mockCallback = vi.fn();
     render(<GameDealGrid data={mockGames} onAnalysisDataChange={mockCallback} />);
 
+    expect(screen.getByTestId("deal-mobile-carousel")).toBeInTheDocument();
+    expect(screen.getByTestId("deal-mobile-progress-line")).toBeInTheDocument();
+
     // n=2 时占据前两个旅程槽位：谢幕位（下）+ hero（左一），两者都承载完整信息
-    expect(screen.getByText("Terraria")).toBeInTheDocument();
-    expect(screen.getByText("The Witcher 3")).toBeInTheDocument();
-    expect(screen.getByText("¥36.00")).toBeInTheDocument();
-    expect(screen.getByText("¥25.60")).toBeInTheDocument();
+    expect(screen.getAllByText("Terraria").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("The Witcher 3").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("¥36.00").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("¥25.60").length).toBeGreaterThan(0);
     expect(screen.getAllByText("-80%").length).toBeGreaterThan(0);       // 封面折扣角标（所有卡片保留）
 
     expect(mockCallback).toHaveBeenCalledWith(mockGames, "全部优惠");
@@ -218,27 +221,29 @@ describe("GameBlocks Components", () => {
   it("GameDealGrid 菱形轮播：外侧进场、向内推进、上下谢幕后归一到中心", () => {
     render(<GameDealGrid data={mockDealOrbitGames} />);
     const orbit = screen.getByTestId("deal-orbit");
+    const desktopOrbit = within(orbit);
     expect(orbit.className).toContain("overflow-hidden");
+    expect(screen.getByTestId("deal-mobile-carousel")).toHaveTextContent("Deal Deck");
     // 旅程槽位：下/上（谢幕）→ 左一/右一（hero）→ 左二三四（预告，越靠外越淡）
-    expect(screen.getByLabelText("Steam 下侧折扣：Terraria")).toBeInTheDocument();
-    expect(screen.getByLabelText("Steam 左一侧折扣：The Witcher 3")).toBeInTheDocument();
-    expect(screen.getByLabelText("Steam 左四侧折扣：Stardew Valley")).toBeInTheDocument();
-    expect(screen.getByLabelText("上侧折扣：Celeste")).toBeInTheDocument();
-    expect(screen.getByLabelText("右四侧折扣：Hollow Knight")).toBeInTheDocument();
-    expect(screen.getAllByText("Steam").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("WeGame").length).toBeGreaterThan(0);
-    expect(screen.getByTestId("deal-orbit-progress-line")).toBeInTheDocument();
+    expect(desktopOrbit.getByLabelText("Steam 下侧折扣：Terraria")).toBeInTheDocument();
+    expect(desktopOrbit.getByLabelText("Steam 左一侧折扣：The Witcher 3")).toBeInTheDocument();
+    expect(desktopOrbit.getByLabelText("Steam 左四侧折扣：Stardew Valley")).toBeInTheDocument();
+    expect(desktopOrbit.getByLabelText("上侧折扣：Celeste")).toBeInTheDocument();
+    expect(desktopOrbit.getByLabelText("右四侧折扣：Hollow Knight")).toBeInTheDocument();
+    expect(desktopOrbit.getAllByText("Steam").length).toBeGreaterThan(0);
+    expect(desktopOrbit.getAllByText("WeGame").length).toBeGreaterThan(0);
+    expect(desktopOrbit.getByTestId("deal-orbit-progress-line")).toBeInTheDocument();
     expect(screen.queryByText("折扣轮播")).not.toBeInTheDocument();
     expect(screen.queryByText("下一组")).not.toBeInTheDocument();
     expect(screen.queryByText("上一组")).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "前进切换折扣游戏" }));
+    fireEvent.click(desktopOrbit.getByRole("button", { name: "前进切换折扣游戏" }));
 
     // 前进一步：hero 移入谢幕位，后排各进一站，新卡从最外侧（左四/右四）进场
-    expect(screen.getByLabelText("Steam 下侧折扣：The Witcher 3")).toBeInTheDocument();
-    expect(screen.getByLabelText("Steam 左一侧折扣：Hades")).toBeInTheDocument();
-    expect(screen.getByLabelText("Steam 左四侧折扣：Terraria")).toBeInTheDocument();
-    expect(screen.getByLabelText("上侧折扣：Balatro")).toBeInTheDocument();
+    expect(desktopOrbit.getByLabelText("Steam 下侧折扣：The Witcher 3")).toBeInTheDocument();
+    expect(desktopOrbit.getByLabelText("Steam 左一侧折扣：Hades")).toBeInTheDocument();
+    expect(desktopOrbit.getByLabelText("Steam 左四侧折扣：Terraria")).toBeInTheDocument();
+    expect(desktopOrbit.getByLabelText("上侧折扣：Balatro")).toBeInTheDocument();
   });
 
   it("悬停空白区域不暂停自动轮播，悬停游戏卡片才暂停", () => {

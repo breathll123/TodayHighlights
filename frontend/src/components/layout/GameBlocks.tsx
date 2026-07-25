@@ -374,6 +374,18 @@ export function GameDealGrid({
     setCursor((value) => value - 1);
   };
 
+  const { mobileDeal, mobilePreviewDeals } = useMemo(() => {
+    if (data.length === 0) return { mobileDeal: undefined, mobilePreviewDeals: [] as GameItem[] };
+    const normalized = ((cursor % data.length) + data.length) % data.length;
+    return {
+      mobileDeal: data[normalized],
+      mobilePreviewDeals: Array.from({ length: Math.min(4, data.length) }, (_, index) => (
+        data[(normalized + index) % data.length]
+      )),
+    };
+  }, [cursor, data]);
+  const mobileDealCover = resolveCoverUrl(mobileDeal?.cover_local, mobileDeal?.cover_url);
+
   if (data.length === 0) {
     return (
       <div className="rounded-lg border border-dashed border-border/80 bg-card/60 p-6 text-center text-sm text-muted-foreground">
@@ -383,9 +395,140 @@ export function GameDealGrid({
   }
 
   return (
+    <>
+      {mobileDeal ? (
+        <div
+          data-testid="deal-mobile-carousel"
+          className="relative overflow-hidden rounded-xl border border-border/55 bg-card/45 p-2.5 shadow-[0_0_0_1px_var(--block-accent-soft,transparent)] md:hidden"
+        >
+          <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(135deg,var(--block-accent-soft,rgba(255,197,61,0.12)),transparent_44%),radial-gradient(circle_at_82%_12%,rgba(255,197,61,0.18),transparent_28%)]" />
+          <div className="relative flex items-center justify-between gap-2 pb-2">
+            <div className="min-w-0">
+              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[color:var(--block-accent,#FFC53D)]">
+                Deal Deck
+              </p>
+              <h3 className="truncate text-sm font-semibold text-foreground">打折促销</h3>
+            </div>
+            <div className="flex shrink-0 items-center gap-1.5">
+              <button
+                type="button"
+                onClick={rotateDealsBack}
+                className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-border/60 bg-background/80 text-muted-foreground shadow-sm backdrop-blur transition active:scale-95"
+                aria-label="后退切换折扣游戏"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                onClick={rotateDeals}
+                className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-[color:var(--block-accent,hsl(var(--primary)))] bg-background/90 text-[color:var(--block-accent,hsl(var(--primary)))] shadow-sm backdrop-blur transition active:scale-95"
+                aria-label="前进切换折扣游戏"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+
+          <motion.a
+            key={`mobile-${cursor}-${mobileDeal.id}`}
+            href={mobileDeal.url || "#"}
+            target="_blank"
+            rel="noopener noreferrer"
+            title={mobileDeal.summary ? `${mobileDeal.title}\n${mobileDeal.summary}` : mobileDeal.title}
+            initial={{ opacity: 0, y: 8, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            transition={{ duration: 0.28, ease: easeOutQuint }}
+            onTouchStart={() => setPaused(true)}
+            onTouchEnd={() => setPaused(false)}
+            onFocus={() => setPaused(true)}
+            onBlur={() => setPaused(false)}
+            className="relative block overflow-hidden rounded-lg border border-border/50 bg-background/80 shadow-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--block-accent,hsl(var(--ring)))]"
+          >
+            <div className="relative aspect-[16/9] w-full overflow-hidden bg-muted">
+              {mobileDealCover ? (
+                <img
+                  src={mobileDealCover}
+                  alt={mobileDeal.title}
+                  loading="lazy"
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                <div className="flex h-full w-full items-center justify-center text-xs text-muted-foreground">
+                  No Image
+                </div>
+              )}
+              <span className="absolute left-2 top-2 rounded bg-background/85 px-2 py-1 text-[10px] font-bold text-foreground shadow-sm backdrop-blur">
+                {isWeGameDeal(mobileDeal) ? "WeGame" : "Steam"}
+              </span>
+              {formatDiscountMetric(mobileDeal) ? (
+                <span className="absolute right-2 top-2 rounded-md bg-[color:var(--block-accent,#FF4D8D)] px-2 py-1 text-xs font-black text-white shadow-sm">
+                  {formatDiscountMetric(mobileDeal)}
+                </span>
+              ) : null}
+            </div>
+            <div className="p-3">
+              <h4 className="line-clamp-2 text-base font-bold leading-snug text-foreground">
+                {mobileDeal.title}
+              </h4>
+              <div className="mt-2 flex items-end justify-between gap-2">
+                <div className="min-w-0">
+                  {formatDiscount(mobileDeal) ? (
+                    <div className="flex items-center gap-1.5">
+                      <span className="rounded bg-[color:var(--block-accent-soft,rgba(255,77,141,0.14))] px-1.5 py-0.5 text-xs font-bold text-[color:var(--block-accent,#FF4D8D)]">
+                        {formatDiscount(mobileDeal)}
+                      </span>
+                      <span className="truncate text-xs text-muted-foreground line-through">
+                        {formatPrice(mobileDeal.original_price)}
+                      </span>
+                    </div>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">限时优惠</span>
+                  )}
+                </div>
+                <span className="shrink-0 text-lg font-black text-emerald-400">
+                  {formatPrice(mobileDeal.current_price)}
+                </span>
+              </div>
+            </div>
+          </motion.a>
+
+          <div className="relative mt-2.5 grid grid-cols-4 gap-1.5">
+            {mobilePreviewDeals.map((item, index) => {
+              const cover = resolveCoverUrl(item.cover_local, item.cover_url);
+              return (
+                <button
+                  key={`${item.id}-${index}`}
+                  type="button"
+                  onClick={() => setCursor((value) => value + index)}
+                  className={cn(
+                    "relative aspect-[16/10] overflow-hidden rounded-md border bg-muted text-left transition active:scale-95",
+                    index === 0 ? "border-[color:var(--block-accent,hsl(var(--primary)))]" : "border-border/50 opacity-70",
+                  )}
+                  aria-label={`切换到折扣游戏：${item.title}`}
+                >
+                  {cover ? <img src={cover} alt="" loading="lazy" className="h-full w-full object-cover" /> : null}
+                  <span className="absolute bottom-1 right-1 rounded bg-background/85 px-1 text-[9px] font-bold text-foreground">
+                    {formatDiscountMetric(item)}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          <div
+            key={`mobile-progress-${cursor}`}
+            className="relative mx-auto mt-2.5 h-1 w-28 overflow-hidden rounded-none border border-amber-300/35 bg-amber-950/45"
+            data-testid="deal-mobile-progress-line"
+            aria-label="10秒后自动切换"
+          >
+            <div className="deal-orbit-progress-line h-full origin-left" aria-hidden="true" />
+          </div>
+        </div>
+      ) : null}
+
     <div
       data-testid="deal-orbit"
-      className="relative overflow-hidden rounded-xl border border-border/50 bg-card/35 px-3 py-3 pb-4"
+      className="relative hidden overflow-hidden rounded-xl border border-border/50 bg-card/35 px-3 py-3 pb-4 md:block"
     >
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_center,var(--block-accent-soft,rgba(52,229,160,0.14)),transparent_48%)] opacity-70" />
       <button
@@ -517,6 +660,7 @@ export function GameDealGrid({
         <div className="deal-orbit-progress-line h-full origin-left" aria-hidden="true" />
       </div>
     </div>
+    </>
   );
 }
 
